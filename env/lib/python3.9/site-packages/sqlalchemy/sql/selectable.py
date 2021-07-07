@@ -18,7 +18,9 @@ from operator import attrgetter
 from . import coercions
 from . import operators
 from . import roles
+from . import traversals
 from . import type_api
+from . import visitors
 from .annotation import Annotated
 from .annotation import SupportsCloneAnnotations
 from .base import _clone
@@ -107,23 +109,19 @@ class ReturnsRows(roles.ReturnsRowsRole, ClauseElement):
 
     @property
     def selectable(self):
-        raise NotImplementedError()
+        return self
 
-    def _exported_columns_iterator(self):
-        """An iterator of column objects that represents the "exported"
-        columns of this :class:`_expression.ReturnsRows`.
+    @property
+    def _all_selected_columns(self):
+        """A sequence of column expression objects that represents the
+        "selected" columns of this :class:`_expression.ReturnsRows`.
 
-        This is the same set of columns as are returned by
-        :meth:`_expression.ReturnsRows.exported_columns`
-        except they are returned
-        as a simple iterator or sequence, rather than as a
-        :class:`_expression.ColumnCollection` namespace.
-
-        Subclasses should re-implement this method to bypass the interim
-        creation of the :class:`_expression.ColumnCollection` if appropriate.
+        This is typically equivalent to .exported_columns except it is
+        delivered in the form of a straight sequence and not  keyed
+        :class:`_expression.ColumnCollection`.
 
         """
-        return iter(self.exported_columns)
+        raise NotImplementedError()
 
     @property
     def exported_columns(self):
@@ -158,10 +156,6 @@ class Selectable(ReturnsRows):
     __visit_name__ = "selectable"
 
     is_selectable = True
-
-    @property
-    def selectable(self):
-        return self
 
     def _refresh_for_new_column(self, column):
         raise NotImplementedError()
@@ -3111,9 +3105,6 @@ class SelectStatementGrouping(GroupedElement, SelectBase):
     def _generate_proxy_for_new_column(self, column, subquery):
         return self.element._generate_proxy_for_new_column(subquery)
 
-    def _exported_columns_iterator(self):
-        return self.element._exported_columns_iterator()
-
     @property
     def _all_selected_columns(self):
         return self.element._all_selected_columns
@@ -3933,9 +3924,6 @@ class CompoundSelect(HasCompileState, GenerativeSelect):
         for select in self.selects:
             select._refresh_for_new_column(column)
 
-    def _exported_columns_iterator(self):
-        return self.selects[0]._exported_columns_iterator()
-
     @property
     def _all_selected_columns(self):
         return self.selects[0]._all_selected_columns
@@ -4131,8 +4119,13 @@ class SelectState(util.MemoizedSlots, CompileState):
         self.statement = statement
         self.from_clauses = statement._from_obj
 
+        for memoized_entities in statement._memoized_select_entities:
+            self._setup_joins(
+                memoized_entities._setup_joins, memoized_entities._raw_columns
+            )
+
         if statement._setup_joins:
-            self._setup_joins(statement._setup_joins)
+            self._setup_joins(statement._setup_joins, statement._raw_columns)
 
         self.froms = self._get_froms(statement)
 
@@ -4328,7 +4321,7 @@ class SelectState(util.MemoizedSlots, CompileState):
     def _memoized_attr__label_resolve_dict(self):
         with_cols = dict(
             (c._resolve_label or c._label or c.key, c)
-            for c in self.statement._exported_columns_iterator()
+            for c in self.statement._all_selected_columns
             if c._allow_label_resolve
         )
         only_froms = dict(
@@ -4350,18 +4343,10 @@ class SelectState(util.MemoizedSlots, CompileState):
             return None
 
     @classmethod
-    def exported_columns_iterator(cls, statement):
-        return [
-            c
-            for c in _select_iterables(statement._raw_columns)
-            if not c._is_text_clause
-        ]
-
-    @classmethod
     def all_selected_columns(cls, statement):
         return [c for c in _select_iterables(statement._raw_columns)]
 
-    def _setup_joins(self, args):
+    def _setup_joins(self, args, raw_columns):
         for (right, onclause, left, flags) in args:
             isouter = flags["isouter"]
             full = flags["full"]
@@ -4371,7 +4356,7 @@ class SelectState(util.MemoizedSlots, CompileState):
                     left,
                     replace_from_obj_index,
                 ) = self._join_determine_implicit_left_side(
-                    left, right, onclause
+                    raw_columns, left, right, onclause
                 )
             else:
                 (replace_from_obj_index) = self._join_place_explicit_left_side(
@@ -4403,7 +4388,9 @@ class SelectState(util.MemoizedSlots, CompileState):
                 )
 
     @util.preload_module("sqlalchemy.sql.util")
-    def _join_determine_implicit_left_side(self, left, right, onclause):
+    def _join_determine_implicit_left_side(
+        self, raw_columns, left, right, onclause
+    ):
         """When join conditions don't express the left side explicitly,
         determine if an existing FROM or entity in this query
         can serve as the left hand side.
@@ -4431,10 +4418,7 @@ class SelectState(util.MemoizedSlots, CompileState):
 
             for from_clause in itertools.chain(
                 itertools.chain.from_iterable(
-                    [
-                        element._from_objects
-                        for element in statement._raw_columns
-                    ]
+                    [element._from_objects for element in raw_columns]
                 ),
                 itertools.chain.from_iterable(
                     [
@@ -4531,6 +4515,47 @@ class _SelectFromElements(object):
             yield element
 
 
+class _MemoizedSelectEntities(
+    traversals.HasCacheKey, traversals.HasCopyInternals, visitors.Traversible
+):
+    __visit_name__ = "memoized_select_entities"
+
+    _traverse_internals = [
+        ("_raw_columns", InternalTraversal.dp_clauseelement_list),
+        ("_setup_joins", InternalTraversal.dp_setup_join_tuple),
+        ("_legacy_setup_joins", InternalTraversal.dp_setup_join_tuple),
+        ("_with_options", InternalTraversal.dp_executable_options),
+    ]
+
+    _annotations = util.EMPTY_DICT
+
+    def _clone(self, **kw):
+        c = self.__class__.__new__(self.__class__)
+        c.__dict__ = {k: v for k, v in self.__dict__.items()}
+        c._is_clone_of = self
+        return c
+
+    @classmethod
+    def _generate_for_statement(cls, select_stmt):
+        if (
+            select_stmt._setup_joins
+            or select_stmt._legacy_setup_joins
+            or select_stmt._with_options
+        ):
+            self = _MemoizedSelectEntities()
+            self._raw_columns = select_stmt._raw_columns
+            self._setup_joins = select_stmt._setup_joins
+            self._legacy_setup_joins = select_stmt._legacy_setup_joins
+            self._with_options = select_stmt._with_options
+
+            select_stmt._memoized_select_entities += (self,)
+            select_stmt._raw_columns = (
+                select_stmt._setup_joins
+            ) = (
+                select_stmt._legacy_setup_joins
+            ) = select_stmt._with_options = ()
+
+
 class Select(
     HasPrefixes,
     HasSuffixes,
@@ -4559,6 +4584,7 @@ class Select(
 
     _setup_joins = ()
     _legacy_setup_joins = ()
+    _memoized_select_entities = ()
 
     _distinct = False
     _distinct_on = ()
@@ -4574,6 +4600,10 @@ class Select(
     _traverse_internals = (
         [
             ("_raw_columns", InternalTraversal.dp_clauseelement_list),
+            (
+                "_memoized_select_entities",
+                InternalTraversal.dp_memoized_select_entities,
+            ),
             ("_from_obj", InternalTraversal.dp_clauseelement_list),
             ("_where_criteria", InternalTraversal.dp_clauseelement_tuple),
             ("_having_criteria", InternalTraversal.dp_clauseelement_tuple),
@@ -5266,7 +5296,7 @@ class Select(
 
         """
 
-        return self._exported_columns_iterator()
+        return iter(self._all_selected_columns)
 
     def is_derived_from(self, fromclause):
         if self in fromclause._cloned_set:
@@ -5418,7 +5448,7 @@ class Select(
         """
         return self.with_only_columns(
             *util.preloaded.sql_util.reduce_columns(
-                self._exported_columns_iterator(),
+                self._all_selected_columns,
                 only_synonyms=only_synonyms,
                 *(self._where_criteria + self._from_obj)
             )
@@ -5461,16 +5491,14 @@ class Select(
         # is the case for now.
         self._assert_no_memoizations()
 
-        rc = []
-        for c in coercions._expression_collection_was_a_list(
-            "columns", "Select.with_only_columns", columns
-        ):
-            c = coercions.expect(roles.ColumnsClauseRole, c)
-            # TODO: why are we doing this here?
-            if isinstance(c, ScalarSelect):
-                c = c.self_group(against=operators.comma_op)
-            rc.append(c)
-        self._raw_columns = rc
+        _MemoizedSelectEntities._generate_for_statement(self)
+
+        self._raw_columns = [
+            coercions.expect(roles.ColumnsClauseRole, c)
+            for c in coercions._expression_collection_was_a_list(
+                "columns", "Select.with_only_columns", columns
+            )
+        ]
 
     @property
     def whereclause(self):
@@ -5729,17 +5757,17 @@ class Select(
         conv = SelectState._column_naming_convention(self._label_style)
 
         return ColumnCollection(
-            [(conv(c), c) for c in self._exported_columns_iterator()]
+            [
+                (conv(c), c)
+                for c in self._all_selected_columns
+                if not c._is_text_clause
+            ]
         ).as_immutable()
 
     @HasMemoized.memoized_attribute
     def _all_selected_columns(self):
         meth = SelectState.get_plugin_class(self).all_selected_columns
         return list(meth(self))
-
-    def _exported_columns_iterator(self):
-        meth = SelectState.get_plugin_class(self).exported_columns_iterator
-        return meth(self)
 
     def _ensure_disambiguated_names(self):
         if self._label_style is LABEL_STYLE_NONE:
@@ -5862,7 +5890,7 @@ class Select(
         disambiguate_only = self._label_style is LABEL_STYLE_DISAMBIGUATE_ONLY
 
         for name, c, repeated in self._generate_columns_plus_names(False):
-            if not hasattr(c, "_make_proxy"):
+            if c._is_text_clause:
                 continue
             elif tablename_plus_col:
                 key = c._key_label
@@ -6354,6 +6382,10 @@ class TextualSelect(SelectBase):
         return ColumnCollection(
             (c.key, c) for c in self.column_args
         ).as_immutable()
+
+    @property
+    def _all_selected_columns(self):
+        return self.column_args
 
     def _set_label_style(self, style):
         return self
