@@ -1,7 +1,8 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors
+import mysql.connector, pymysql.cursors, os, json
+from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 
 local = True
@@ -33,13 +34,31 @@ class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(10), unique=True)
 	password = db.Column(db.String(110), unique=True)
+	username = db.Column(db.String(20))
+	profile = db.Column(db.String(25))
 
-	def __init__(self, cellnumber, password):
+	def __init__(self, cellnumber, password, username, profile):
 		self.cellnumber = cellnumber
 		self.password = password
+		self.username = username
+		self.profile = profile
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
+
+class Owner(db.Model):
+	id = db.Column(db.Integer, primary_key=True)
+	cellnumber = db.Column(db.String(15), unique=True)
+	password = db.Column(db.String(110), unique=True)
+	locationId = db.Column(db.Text)
+
+	def __init__(self, cellnumber, password, locationId):
+		self.cellnumber = cellnumber
+		self.password = password
+		self.locationId = locationId
+
+	def __repr__(self):
+		return '<Owner %r>' % self.cellnumber
 
 class Location(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -49,22 +68,28 @@ class Location(db.Model):
 	city = db.Column(db.String(20))
 	province = db.Column(db.String(20))
 	postalcode = db.Column(db.String(7))
+	phonenumber = db.Column(db.String(10), unique=True)
 	logo = db.Column(db.String(20))
 	longitude = db.Column(db.String(15))
 	latitude = db.Column(db.String(15))
 	owners = db.Column(db.Text)
+	type = db.Column(db.String(20))
+	hours = db.Column(db.Text)
 
-	def __init__(self, name, addressOne, addressTwo, city, province, postalcode, logo, longitude, latitude, owners):
+	def __init__(self, name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, longitude, latitude, owners, type, hours):
 		self.name = name
 		self.addressOne = addressOne
 		self.addressTwo = addressTwo
 		self.city = city
 		self.province = province
 		self.postalcode = postalcode
+		self.phonenumber = phonenumber
 		self.logo = logo
 		self.longitude = longitude
 		self.latitude = latitude
 		self.owners = owners
+		self.type = type
+		self.hours = hours
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -72,14 +97,16 @@ class Location(db.Model):
 class Menu(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
-	categories = db.Column(db.Text)
+	parentMenuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
+	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 
-	def __init__(self, locationId, categories, name, image):
+	def __init__(self, locationId, parentMenuId, name, info, image):
 		self.locationId = locationId
-		self.categories = categories
+		self.parentMenuId = parentMenuId
 		self.name = name
+		self.info = info
 		self.image = image
 
 	def __repr__(self):
@@ -88,38 +115,108 @@ class Menu(db.Model):
 class Service(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
-	menuId = db.Column(db.Integer)
+	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
 	info = db.Column(db.Text)
 	image = db.Column(db.String(20))
+	price = db.Column(db.String(10))
+	duration = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image):
+	def __init__(self, locationId, menuId, name, info, image, price, duration):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
 		self.info = info
 		self.image = image
+		self.price = price
+		self.duration = duration
 
 	def __repr__(self):
 		return '<Service %r>' % self.name
+		
+class Appointment(db.Model):
+	id = db.Column(db.Integer, primary_key=True)
+	userId = db.Column(db.Integer)
+	locationId = db.Column(db.Integer)
+	menuId = db.Column(db.Text)
+	serviceId = db.Column(db.Text)
+	time = db.Column(db.String(15))
+	status = db.Column(db.String(10))
+	cancelReason = db.Column(db.String(200))
+	nextTime = db.Column(db.String(15))
+
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime):
+		self.userId = userId
+		self.locationId = locationId
+		self.menuId = menuId
+		self.serviceId = serviceId
+		self.time = time
+		self.status = status
+		self.cancelReason = cancelReason
+		self.nextTime = nextTime
+
+	def __repr__(self):
+		return '<Appointment %r>' % self.time
 
 class Product(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
-	menuId = db.Column(db.Integer)
+	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
+	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 	options = db.Column(db.Text)
+	price = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, image, options):
+	def __init__(self, locationId, menuId, name, info, image, options, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
+		self.info = info
 		self.image = image
 		self.options = options
+		self.price = price
 
 	def __repr__(self):
 		return '<Product %r>' % self.name
+
+class Cart(db.Model):
+	id = db.Column(db.Integer, primary_key=True)
+	productId = db.Column(db.Integer)
+	quantity = db.Column(db.Integer)
+	adder = db.Column(db.String(20))
+	callfor = db.Column(db.Text)
+	options = db.Column(db.Text)
+
+	def __init__(self, productId, quantity, adder, callfor, options):
+		self.productId = productId
+		self.quantity = quantity
+		self.adder = adder
+		self.callfor = callfor
+		self.options = options
+
+	def __repr__(self):
+		return '<Cart %r>' % self.productId
+
+class Transaction(db.Model):
+	id = db.Column(db.Integer, primary_key=True)
+	groupId = db.Column(db.String(20)) # same for each cart
+	productId = db.Column(db.Integer)
+	adder = db.Column(db.Integer)
+	callfor = db.Column(db.Text)
+	options = db.Column(db.Text)
+	time = db.Column(db.String(15))
+
+	def __init__(self, groupId, productId, adder, callfor, options, time):
+		self.groupId = groupId
+		self.productId = productId
+		self.adder = adder
+		self.callfor = callfor
+		self.options = options
+		self.time = time
+
+	def __repr__(self):
+		return '<Transaction %r>' % self.groupId
 
 def query(sql, output):
 	dbconn = pymysql.connect(
@@ -155,14 +252,10 @@ def login():
 			if check_password_hash(user.password, password):
 				userid = user.id
 
-				data = query("select * from location where owners like '%\"" + str(userid) + "\"%'", True)
-
-				if len(data) == 0:
-					return { "userid": userid, "locationid": "", "msg": "setup" }
+				if user.username == '':
+					return { "userid": userid, "msg": "setup" }
 				else:
-					data = data[0]
-
-					return { "userid": userid, "locationid": data['id'], "msg": "main" }
+					return { "userid": userid, "msg": "main" }
 			else:
 				msg = "Password is incorrect"
 		else:
@@ -191,7 +284,7 @@ def register():
 				if user == None:
 					password = generate_password_hash(password)
 
-					user = User(cellnumber, password)
+					user = User(cellnumber, password, '', '')
 					db.session.add(user)
 					db.session.commit()
 
@@ -212,16 +305,196 @@ def register():
 
 	return { "msg": msg }, 400
 
-@app.route("/add_bankaccount", methods=["POST"])
-def add_bankaccount():
-	bankaccountid = "d9d0f0d0d0-sidfidsif"
+@app.route("/setup", methods=["POST"])
+def setup():
+	userid = request.form['userid']
+	username = request.form['username']
+	profile = request.files['profile']
 
-	return { "bankaccountid": bankaccountid, "action": "add bank account" }
+	user = User.query.filter_by(id=userid).first()
 
-@app.route("/get_account/<accountid>", methods=["GET"])
-def get_account(accountid):
-	return { "accountid": accountid, "action": "get account" }
+	if user != None:
+		user.username = username
+		user.profile = profile.filename
 
-@app.route("/get_bankaccount/<bankaccountid>", methods=["GET"])
-def get_bankaccount(bankaccountid):
-	return { "bankaccountid": bankaccountid, "action": "get bank account" }
+		profile.save(os.path.join('static', profile.filename))
+
+		db.session.commit()
+
+		return { "msg": "" }
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/update", methods=["POST"])
+def update():
+	userid = request.form['userid']
+	username = request.form['username']
+	cellnumber = request.form['cellnumber']
+	profile = request.files['profile']
+
+	user = User.query.filter_by(id=userid).first()
+
+	if user != None:
+		if user.profile != None:
+			oldprofile = user.profile
+
+			if os.path.exists("static/" + oldprofile):
+				os.remove("static/" + oldprofile)
+
+		user.username = username
+		user.cellnumber = cellnumber
+		user.profile = profile.filename
+
+		profile.save(os.path.join('static', profile.filename))
+
+		db.session.commit()
+
+		return { "msg": "" }
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/get_user_info/<id>")
+def get_user_info(id):
+	user = User.query.filter_by(id=id).first()
+
+	info = {
+		"username": user.username,
+		"cellnumber": user.cellnumber,
+		"profile": user.profile
+	}
+
+	return { "userInfo": info }
+
+@app.route("/get_notifications/<id>")
+def get_notifications(id):
+	user = User.query.filter_by(id=id).first()
+
+	if user != None:
+		notifications = []
+		
+		# get orders
+		sql = "select * from cart where callfor like '%\"userid\": " + str(id) + ", \"status\": \"waiting\"%'"
+		datas = query(sql, True)
+
+		for data in datas:
+			adder = User.query.filter_by(id=data['adder']).first()
+			product = Product.query.filter_by(id=data['productId']).first()
+			callfor = json.loads(data['callfor'])
+			friends = []
+
+			for info in callfor:
+				friend = User.query.filter_by(id=info['userid']).first()
+
+				friends.append({
+					"key": str(data['id']) + "-" + str(friend.id),
+					"username": friend.username,
+					"profile": friend.profile
+				})
+
+			notifications.append({
+				"key": "order-" + str(data['id']),
+				"type": "order",
+				"id": str(data['id']),
+				"name": product.name,
+				"image": product.image,
+				"options": json.loads(data['options']),
+				"quantity": int(data['quantity']),
+				"price": int(data['quantity']) * float(product.price),
+				"orderers": friends,
+				"adder": {
+					"username": adder.username,
+					"profile": adder.profile
+				}
+			})
+
+		sql = "select * from appointment where userId = " + str(id)
+		datas = query(sql, True)
+
+		for data in datas:
+			location = Location.query.filter_by(id=data['locationId']).first()
+			service = Service.query.filter_by(id=data['serviceId']).first()
+
+			notifications.append({
+				"key": "order-" + str(data['id']),
+				"type": "service",
+				"id": str(data['id']),
+				"locationid": data['locationId'],
+				"location": location.name,
+				"menuid": int(data['menuId']),
+				"serviceid": int(data['serviceId']),
+				"service": service.name,
+				"locationimage": location.logo,
+				"serviceimage": service.image,
+				"time": int(data['time']),
+				"action": data['status'],
+				"nextTime": int(data['nextTime']) if data['status'] == 'rebook' else 0,
+				"reason": data['cancelReason']
+			})
+
+		return { "notifications": notifications }
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/get_num_notifications/<id>")
+def get_num_notifications(id):
+	user = User.query.filter_by(id=id).first()
+
+	if user != None:
+		num = 0
+
+		sql = "select count(*) as num from cart where callfor like '%\"" + str(id) + "\"%'"
+		num += query(sql, True)[0]["num"]
+
+		sql = "select count(*) as num from appointment where userId = " + str(id)
+		num += query(sql, True)[0]["num"]
+
+		return { "numNotifications": num }
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/search_friends", methods=["POST"])
+def search_friends():
+	content = request.get_json()
+
+	userid = content['userid']
+	searchusername = content['username']
+
+	user = User.query.filter_by(id=userid).first()
+
+	if user != None:
+		row = []
+		column = []
+		rownum = 0
+		numSearchedFriends = 0
+
+		if searchusername != "":
+			datas = query("select id, profile, username from user where username like '%" + searchusername + "%' and not id = " + str(userid), True)
+
+			for k in range(len(datas)):
+				data = datas[k]
+
+				row.append({
+					"key": "friend-" + str(data['id']),
+					"id": data['id'],
+					"profile": data['profile'],
+					"username": data['username']
+				})
+				numSearchedFriends += 1
+
+				if len(row) == 4 or (len(datas) - 1 == k and len(row) > 0):
+					column.append({ "key": "friend-row-" + str(len(column)), "row": row })
+					row = []
+
+		return { "searchedFriends": column, "numSearchedFriends": numSearchedFriends }
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }
