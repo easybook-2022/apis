@@ -61,11 +61,11 @@ class Owner(db.Model):
 
 class Location(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
-	name = db.Column(db.String(20))
-	addressOne = db.Column(db.String(30))
-	addressTwo = db.Column(db.String(20))
-	city = db.Column(db.String(20))
-	province = db.Column(db.String(20))
+	name = db.Column(db.String(50))
+	addressOne = db.Column(db.String(50))
+	addressTwo = db.Column(db.String(50))
+	city = db.Column(db.String(50))
+	province = db.Column(db.String(50))
 	postalcode = db.Column(db.String(7))
 	phonenumber = db.Column(db.String(10), unique=True)
 	logo = db.Column(db.String(20))
@@ -132,8 +132,8 @@ class Service(db.Model):
 
 	def __repr__(self):
 		return '<Service %r>' % self.name
-		
-class Appointment(db.Model):
+
+class Schedule(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	userId = db.Column(db.Integer)
 	locationId = db.Column(db.Integer)
@@ -143,8 +143,10 @@ class Appointment(db.Model):
 	status = db.Column(db.String(10))
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
+	locationType = db.Column(db.String(15))
+	seaters = db.Column(db.Integer)
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, seaters):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -153,6 +155,8 @@ class Appointment(db.Model):
 		self.status = status
 		self.cancelReason = cancelReason
 		self.nextTime = nextTime
+		self.locationType = locationType
+		self.seaters = seaters
 
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
@@ -183,7 +187,7 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	productId = db.Column(db.Integer)
 	quantity = db.Column(db.Integer)
-	adder = db.Column(db.String(20))
+	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 
@@ -236,15 +240,6 @@ def query(sql, output):
 @app.route("/reset")
 def reset():
 	delete = False
-	owners = query("select * from owner", True)
-	for owner in owners:
-		delete = True
-		query("delete from owner where id = " + str(owner['id']), False)
-
-	if delete == True:
-		query("ALTER table owner auto_increment = 1", False)
-
-	delete = False
 	users = query("select * from user", True)
 	for user in users:
 		delete = True
@@ -252,6 +247,15 @@ def reset():
 
 	if delete == True:
 		query("ALTER table user auto_increment = 1", False)
+
+	delete = False
+	owners = query("select * from owner", True)
+	for owner in owners:
+		delete = True
+		query("delete from owner where id = " + str(owner['id']), False)
+
+	if delete == True:
+		query("ALTER table owner auto_increment = 1", False)
 
 	delete = False
 	locations = query("select * from location", True)
@@ -294,6 +298,16 @@ def reset():
 
 	if delete == True:
 		query("ALTER table service auto_increment = 1", False)
+
+	delete = False
+	schedules = query("select * from schedule", True)
+	for schedule in schedules:
+		delete = True
+
+		query("delete from schedule where id = " + str(schedule['id']), False)
+
+	if delete == True:
+		query("ALTER table schedule auto_increment = 1", False)
 
 	delete = False
 	products = query("select * from product", True)

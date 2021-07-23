@@ -62,11 +62,11 @@ class Owner(db.Model):
 
 class Location(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
-	name = db.Column(db.String(20))
-	addressOne = db.Column(db.String(30))
-	addressTwo = db.Column(db.String(20))
-	city = db.Column(db.String(20))
-	province = db.Column(db.String(20))
+	name = db.Column(db.String(50))
+	addressOne = db.Column(db.String(50))
+	addressTwo = db.Column(db.String(50))
+	city = db.Column(db.String(50))
+	province = db.Column(db.String(50))
 	postalcode = db.Column(db.String(7))
 	phonenumber = db.Column(db.String(10), unique=True)
 	logo = db.Column(db.String(20))
@@ -134,7 +134,7 @@ class Service(db.Model):
 	def __repr__(self):
 		return '<Service %r>' % self.name
 
-class Appointment(db.Model):
+class Schedule(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	userId = db.Column(db.Integer)
 	locationId = db.Column(db.Integer)
@@ -144,8 +144,10 @@ class Appointment(db.Model):
 	status = db.Column(db.String(10))
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
+	locationType = db.Column(db.String(15))
+	seaters = db.Column(db.Integer)
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, seaters):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -154,6 +156,8 @@ class Appointment(db.Model):
 		self.status = status
 		self.cancelReason = cancelReason
 		self.nextTime = nextTime
+		self.locationType = locationType
+		self.seaters = seaters
 
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
@@ -305,7 +309,7 @@ def get_product_info():
 		location = Location.query.filter_by(id=locationid).first()
 
 		if location != None:
-			menu = Menu.query.filter_by(id=menuid).first()
+			menu = Menu.query.filter_by(parentMenuId=menuid).first()
 
 			if menu != None:
 				product = Product.query.filter_by(id=productid).first()

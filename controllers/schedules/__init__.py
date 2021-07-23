@@ -62,11 +62,11 @@ class Owner(db.Model):
 
 class Location(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
-	name = db.Column(db.String(20))
-	addressOne = db.Column(db.String(30))
-	addressTwo = db.Column(db.String(20))
-	city = db.Column(db.String(20))
-	province = db.Column(db.String(20))
+	name = db.Column(db.String(50))
+	addressOne = db.Column(db.String(50))
+	addressTwo = db.Column(db.String(50))
+	city = db.Column(db.String(50))
+	province = db.Column(db.String(50))
 	postalcode = db.Column(db.String(7))
 	phonenumber = db.Column(db.String(10), unique=True)
 	logo = db.Column(db.String(20))
@@ -74,8 +74,9 @@ class Location(db.Model):
 	latitude = db.Column(db.String(15))
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
+	hours = db.Column(db.Text)
 
-	def __init__(self, name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, longitude, latitude, owners, type):
+	def __init__(self, name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, longitude, latitude, owners, type, hours):
 		self.name = name
 		self.addressOne = addressOne
 		self.addressTwo = addressTwo
@@ -88,6 +89,7 @@ class Location(db.Model):
 		self.latitude = latitude
 		self.owners = owners
 		self.type = type
+		self.hours = hours
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -132,7 +134,7 @@ class Service(db.Model):
 	def __repr__(self):
 		return '<Service %r>' % self.name
 
-class Appointment(db.Model):
+class Schedule(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	userId = db.Column(db.Integer)
 	locationId = db.Column(db.Integer)
@@ -142,8 +144,10 @@ class Appointment(db.Model):
 	status = db.Column(db.String(10))
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
+	locationType = db.Column(db.String(15))
+	seaters = db.Column(db.Integer)
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, seaters):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -152,6 +156,8 @@ class Appointment(db.Model):
 		self.status = status
 		self.cancelReason = cancelReason
 		self.nextTime = nextTime
+		self.locationType = locationType
+		self.seaters = seaters
 
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
@@ -233,8 +239,8 @@ def query(sql, output):
 		return results
 
 @app.route("/", methods=["GET"])
-def welcome_users():
-	return { "msg": "welcome to appointments of easygo" }
+def welcome_schedules():
+	return { "msg": "welcome to schedules of easygo" }
 
 @app.route("/get_requests", methods=["POST"])
 def get_requests():
@@ -249,11 +255,15 @@ def get_requests():
 		location = Location.query.filter_by(id=locationid).first()
 
 		if location != None:
-			datas = query("select * from appointment where status = 'requested'", True)
+			datas = query("select * from schedule where status = 'requested'", True)
 			requests = []
 
 			for data in datas:
-				service = Service.query.filter_by(id=data['serviceId']).first()
+				service = None
+
+				if data['serviceId'] != "":
+					service = Service.query.filter_by(id=data['serviceId']).first()
+
 				user = User.query.filter_by(id=data['userId']).first()
 
 				requests.append({
@@ -261,8 +271,8 @@ def get_requests():
 					"id": str(data['id']),
 					"username": user.username,
 					"time": int(data['time']),
-					"name": service.name,
-					"image": service.image,
+					"name": service.name if service != None else location.name,
+					"image": service.image if service != None else location.logo
 				})
 
 			return { "requests": requests }
@@ -273,13 +283,13 @@ def get_requests():
 
 	return { "errormsg": msg }
 
-@app.route("/get_request_info/<id>")
-def get_request_info(id):
-	appointment = Appointment.query.filter_by(id=id).first()
+@app.route("/get_appointment_info/<id>")
+def get_appointment_info(id):
+	schedule = Schedule.query.filter_by(id=id).first()
 
-	if appointment != None:
-		locationId = appointment.locationId
-		serviceId = appointment.serviceId
+	if schedule != None:
+		locationId = schedule.locationId
+		serviceId = schedule.serviceId
 
 		service = Service.query.filter_by(id=serviceId).first()
 
@@ -289,11 +299,35 @@ def get_request_info(id):
 				"name": service.name,
 			}
 
-			return { "serviceInfo": info }
+			return { "appointmentInfo": info }
 		else:
 			msg = "Service doesn't exist"
 	else:
 		msg = "Appointment doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/get_reservation_info/<id>")
+def get_reservation_info(id):
+	schedule = Schedule.query.filter_by(id=id).first()
+
+	if schedule != None:
+		locationId = schedule.locationId
+
+		location = Location.query.filter_by(id=locationId).first()
+
+		if location != None:
+			info = {
+				"locationId": locationId,
+				"name": location.name,
+				"seaters": schedule.seaters
+			}
+
+			return { "reservationInfo": info }
+		else:
+			msg = "Location doesn't exist"
+	else:
+		msg = "Reservation does't exist"
 
 	return { "errormsg": msg }
 
@@ -304,17 +338,38 @@ def reschedule_appointment():
 	appointmentid = content['appointmentid']
 	time = content['time']
 
-	appointment = Appointment.query.filter_by(id=appointmentid).first()
+	schedule = Schedule.query.filter_by(id=appointmentid).first()
 
-	if appointment != None:
-		appointment.status = "rebook"
-		appointment.nextTime = time
+	if schedule != None:
+		schedule.status = "rebook"
+		schedule.nextTime = time
 
 		db.session.commit()
 
 		return { "msg": "" }
 	else:
 		msg = "Appointment doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/reschedule_reservation", methods=["POST"])
+def reschedule_reservation():
+	content = request.get_json()
+
+	reservationid = content['reservationid']
+	time = content['time']
+
+	schedule = Schedule.query.filter_by(id=reservationid).first()
+
+	if schedule != None:
+		schedule.status = "rebook"
+		schedule.nextTime = time
+
+		db.session.commit()
+
+		return { "msg": "" }
+	else:
+		msg = "Reservation doesn't exist"
 
 	return { "errormsg": msg }
 
@@ -342,14 +397,14 @@ def request_appointment():
 				if service != None:
 					serviceName = service.name
 
-					requested_appointment = Appointment.query.filter_by(
+					requested_appointment = Schedule.query.filter_by(
 						locationId=locationid,
 						menuId=menuid,
 						serviceId=serviceid,
 						userId=userid,
 						status='requested'
 					).first()
-					rebooked_appointment = Appointment.query.filter_by(
+					rebooked_appointment = Schedule.query.filter_by(
 						locationId=locationid,
 						menuId=menuid,
 						serviceId=serviceid,
@@ -358,7 +413,7 @@ def request_appointment():
 					).first()
 
 					if requested_appointment == None and rebooked_appointment == None: # nothing created yet
-						appointment = Appointment(userid, locationid, menuid, serviceid, time, "requested", '', '')
+						appointment = Schedule(userid, locationid, menuid, serviceid, time, "requested", '', '', location.type, 1)
 
 						db.session.add(appointment)
 						db.session.commit()
@@ -373,7 +428,7 @@ def request_appointment():
 
 							msg = "appointment re-requested"
 						else:
-							msg = "Appointment already requested"							
+							msg = "Appointment already requested"
 
 					return { "msg": msg }
 				else:
@@ -389,7 +444,7 @@ def request_appointment():
 
 @app.route("/accept_request/<id>")
 def accept_request(id):
-	appointment = Appointment.query.filter_by(id=id).first()
+	appointment = Schedule.query.filter_by(id=id).first()
 
 	if appointment != None:
 		appointment.status = "accepted"
@@ -409,7 +464,7 @@ def cancel_request():
 	id = content['id']
 	reason = content['reason']
 
-	appointment = Appointment.query.filter_by(id=id).first()
+	appointment = Schedule.query.filter_by(id=id).first()
 
 	if appointment != None:
 		appointment.status = "cancel"
@@ -425,7 +480,7 @@ def cancel_request():
 
 @app.route("/close_request/<id>")
 def close_request(id):
-	appointment = Appointment.query.filter_by(id=id).first()
+	appointment = Schedule.query.filter_by(id=id).first()
 
 	if appointment != None:
 		db.session.delete(appointment)
@@ -436,3 +491,35 @@ def close_request(id):
 		msg = "Appointment doesn't exist"
 
 	return { "errormsg": msg }
+
+@app.route("/get_appointments/<id>")
+def get_appointments(id):
+	datas = Schedule.query.filter_by(locationId=id, status='accepted').all()
+	appointments = []
+
+	for data in datas:
+		user = User.query.filter_by(id=data.userId).first()
+		service = Service.query.filter_by(id=data.serviceId).first()
+
+		appointments.append({
+			"key": "appointment-" + str(data.id),
+			"id": str(data.id),
+			"username": user.username,
+			"time": int(data.time),
+			"name": service.name,
+			"image": service.image
+		})
+
+	return { "appointments": appointments, "numappointments": len(appointments) }
+
+@app.route("/get_reservations/<id>")
+def get_reservations(id):
+	datas = Schedule.query.filter_by(locationId=id, status='accepted').all()
+	reservations = []
+
+	for data in datas:
+		reservations.append({
+			"key": data.id
+		})
+
+	return { "reservations": reservations, "numreservations": len(reservations) }
