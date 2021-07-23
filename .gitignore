@@ -1,5 +1,6 @@
 static/
 env/
+migrations/
 npm-debug.*
 *.jks
 *.p8
