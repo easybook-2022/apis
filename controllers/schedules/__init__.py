@@ -36,12 +36,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
+	customerid = db.Column(db.String(25))
 
-	def __init__(self, cellnumber, password, username, profile):
+	def __init__(self, cellnumber, password, username, profile, customerid):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
+		self.customerid = customerid
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
@@ -75,8 +77,13 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
+	accountid = db.Column(db.String(25))
 
-	def __init__(self, name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, longitude, latitude, owners, type, hours):
+	def __init__(
+		self, 
+		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
+		longitude, latitude, owners, type, hours, accountid
+	):
 		self.name = name
 		self.addressOne = addressOne
 		self.addressTwo = addressTwo
@@ -90,6 +97,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
+		self.accountid = accountid
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -269,6 +277,7 @@ def get_requests():
 				requests.append({
 					"key": "request-" + str(data['id']),
 					"id": str(data['id']),
+					"userId": user.id,
 					"username": user.username,
 					"time": int(data['time']),
 					"name": service.name if service != None else location.name,
@@ -327,7 +336,7 @@ def get_reservation_info(id):
 		else:
 			msg = "Location doesn't exist"
 	else:
-		msg = "Reservation does't exist"
+		msg = "Reservation doesn't exist"
 
 	return { "errormsg": msg }
 
@@ -419,6 +428,8 @@ def request_appointment():
 						db.session.commit()
 
 						msg = "appointment added"
+
+						return { "msg": msg }
 					else:
 						if rebooked_appointment != None:
 							rebooked_appointment.status = 'requested'
@@ -427,10 +438,10 @@ def request_appointment():
 							db.session.commit()
 
 							msg = "appointment re-requested"
+
+							return { "msg": msg }
 						else:
 							msg = "Appointment already requested"
-
-					return { "msg": msg }
 				else:
 					msg = "Service doesn't exist"
 			else:
@@ -451,7 +462,7 @@ def accept_request(id):
 
 		db.session.commit()
 
-		return { "msg": "" }
+		return { "msg": "Appointment accepted" }
 	else:
 		msg = "Appointment doesn't exist"
 
@@ -518,8 +529,17 @@ def get_reservations(id):
 	reservations = []
 
 	for data in datas:
+		user = User.query.filter_by(id=data.userId).first()
+		location = Location.query.filter_by(id=data.locationId).first()
+
 		reservations.append({
-			"key": data.id
+			"key": "reservation-" + str(data.id),
+			"id": str(data.id),
+			"username": user.username,
+			"time": int(data.time),
+			"name": location.name,
+			"image": location.logo,
+			"seaters": data.seaters
 		})
 
 	return { "reservations": reservations, "numreservations": len(reservations) }

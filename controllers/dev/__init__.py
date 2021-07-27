@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, os
+import mysql.connector, pymysql.cursors, os, stripe
 from werkzeug.security import generate_password_hash, check_password_hash
 
 local = True
@@ -28,6 +28,7 @@ mydb = mysql.connector.connect(
 )
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
+stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -35,12 +36,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
+	customerid = db.Column(db.String(25))
 
-	def __init__(self, cellnumber, password, username, profile):
+	def __init__(self, cellnumber, password, username, profile, customerid):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
+		self.customerid = customerid
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
@@ -74,8 +77,13 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
+	accountid = db.Column(db.String(25))
 
-	def __init__(self, name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, longitude, latitude, owners, type, hours):
+	def __init__(
+		self, 
+		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
+		longitude, latitude, owners, type, hours, accountid
+	):
 		self.name = name
 		self.addressOne = addressOne
 		self.addressTwo = addressTwo
@@ -89,6 +97,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
+		self.accountid = accountid
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -350,13 +359,61 @@ def reset():
 			if os.path.exists("static/" + file):
 				os.remove("static/" + file)
 
+	accounts = stripe.Account.list(limit=3)
+
+	for data in accounts.data:
+		stripe.Account.delete(data.id)
+
+	customers = stripe.Customer.list(limit=3)
+
+	for data in customers.data:
+		stripe.Customer.delete(data.id)
+
 	return { "reset": True }
 
-@app.route("/insert")
-def insert():
-	owner = Owner('["6479263868"]', 'pbkdf2:sha256:260000$BzgxZLKtKboLRanr$23dfb9509c7b66274be23a027845cf77cea26fbcaa92ce0a5ad0d39dca17d829')
+@app.route("/charge/<id>")
+def charge(id):
+	user = User.query.filter_by(id=id).first()
 
-	db.session.add(owner)
-	db.session.commit()
+	if user != None:
+		customerid = user.customerid
+		amount = 2.00
 
-	return { "msg": "" }
+		stripe.Charge.create(
+			amount=int(amount * 100),
+			currency="cad",
+			customer=customerid,
+			description="this is a test charge for user: " + user.username
+		)
+
+		return { "msg": "charge of $ 2.00 works on " + user.username }
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/payout/<id>")
+def payout(id):
+	location = Location.query.filter_by(id=id).first()
+
+	if location != None:
+		data = stripe.Balance.retrieve()
+		balance = data.available[0].amount
+		amount = 2.00
+
+		if balance > amount:
+			accountid = location.accountid
+
+			stripe.Transfer.create(
+				amount=int(amount * 100),
+				currency="cad",
+				destination=accountid
+			)
+
+			return { "msg": "transfer of $ 2.00 to " + location.name + " works" }
+		else:
+			msg = "Balance is " + str(balance) + " which isn't enough"
+	else:
+		msg = "Location doesn't exist"
+
+	return { "errormsg": msg }

@@ -36,12 +36,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
+	customerid = db.Column(db.String(25))
 
-	def __init__(self, cellnumber, password, username, profile):
+	def __init__(self, cellnumber, password, username, profile, customerid):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
+		self.customerid = customerid
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber

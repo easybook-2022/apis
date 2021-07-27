@@ -36,12 +36,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
+	customerid = db.Column(db.String(25))
 
-	def __init__(self, cellnumber, password, username, profile):
+	def __init__(self, cellnumber, password, username, profile, customerid):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
+		self.customerid = customerid
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
@@ -75,8 +77,13 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
+	accountid = db.Column(db.String(25))
 
-	def __init__(self, name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, longitude, latitude, owners, type, hours):
+	def __init__(
+		self, 
+		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
+		longitude, latitude, owners, type, hours, accountid
+	):
 		self.name = name
 		self.addressOne = addressOne
 		self.addressTwo = addressTwo
@@ -90,6 +97,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
+		self.accountid = accountid
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -294,72 +302,52 @@ def get_products():
 
 	return { "errormsg": msg }
 
-@app.route("/get_product_info", methods=["POST"])
-def get_product_info():
+@app.route("/get_product_info/<id>")
+def get_product_info(id):
 	content = request.get_json()
 
-	userid = content['userid']
-	locationid = content['locationid']
-	menuid = content['menuid']
-	productid = content['productid']
+	product = Product.query.filter_by(id=id).first()
 
-	user = User.query.filter_by(id=userid).first()
+	if product != None:
+		datas = json.loads(product.options)
+		options = []
 
-	if user != None:
-		location = Location.query.filter_by(id=locationid).first()
+		for k in range(len(datas)):
+			data = datas[k]
 
-		if location != None:
-			menu = Menu.query.filter_by(parentMenuId=menuid).first()
+			option = { "key": "info-" + str(k + 1), "header": data['text'], "type": data['option'] }
 
-			if menu != None:
-				product = Product.query.filter_by(id=productid).first()
+			if data['option'] == 'size':
+				option["options"] = [
+					{ "key": "info-opt-0", "header": "small" },
+					{ "key": "info-opt-1", "header": "medium" },
+					{ "key": "info-opt-2", "header": "large" },
+					{ "key": "info-opt-3", "header": "extra large" }
+				]
+				option["selected"] = ""
+			elif data['option'] == 'percentage':
+				option["selected"] = 0
+			elif data['option'] == 'quantity':
+				option["selected"] = 0
 
-				if product != None:
-					datas = json.loads(product.options)
-					options = []
+			options.append(option)
 
-					for k in range(len(datas)):
-						data = datas[k]
+		info = {
+			"name": product.name,
+			"info": product.info,
+			"image": product.image,
+			"options": options,
+			"price": float(product.price)
+		}
 
-						option = { "key": "info-" + str(k + 1), "header": data['text'], "type": data['option'] }
-
-						if data['option'] == 'size':
-							option["options"] = [
-								{ "key": "info-opt-0", "header": "small" },
-								{ "key": "info-opt-1", "header": "medium" },
-								{ "key": "info-opt-2", "header": "large" },
-								{ "key": "info-opt-3", "header": "extra large" }
-							]
-							option["selected"] = ""
-						elif data['option'] == 'percentage':
-							option["selected"] = 0
-						elif data['option'] == 'quantity':
-							option["selected"] = 0
-
-						options.append(option)
-
-					info = {
-						"name": product.name,
-						"info": product.info,
-						"image": product.image,
-						"options": options,
-						"price": float(product.price)
-					}
-
-					return { "productInfo": info }
-				else:
-					msg = "Product doesn't exist"
-			else:
-				msg = "Menu doesn't exist"
-		else:
-			msg = "Location doesn't exist"
+		return { "productInfo": info }
 	else:
-		msg = "User doesn't exist"
+		msg = "Product doesn't exist"
 
 	return { "errormsg": msg }
 
-@app.route("/cancel_purchase/<id>")
-def cancel_purchase(id):
+@app.route("/cancel_order/<id>")
+def cancel_order(id):
 	cartitem = Cart.query.filter_by(id=id).first()
 
 	if cartitem != None:
@@ -372,8 +360,8 @@ def cancel_purchase(id):
 
 	return { "errormsg": msg }
 
-@app.route("/confirm_purchase", methods=["POST"])
-def confirm_purchase():
+@app.route("/confirm_order", methods=["POST"])
+def confirm_order():
 	content = request.get_json()
 
 	userid = content['userid']

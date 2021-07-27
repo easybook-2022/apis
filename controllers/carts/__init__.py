@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, os, json
+import mysql.connector, pymysql.cursors, os, json, stripe
 from random import randint
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -29,6 +29,7 @@ mydb = mysql.connector.connect(
 )
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
+stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -36,12 +37,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
+	customerid = db.Column(db.String(25))
 
-	def __init__(self, cellnumber, password, username, profile):
+	def __init__(self, cellnumber, password, username, profile, customerid):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
+		self.customerid = customerid
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
@@ -350,6 +353,7 @@ def checkout():
 	time = content['time']
 
 	user = User.query.filter_by(id=adder).first()
+	username = user.username
 
 	if user != None:
 		datas = query("select * from cart where adder = " + str(adder), True)
@@ -361,13 +365,31 @@ def checkout():
 				groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
 
 			product = Product.query.filter_by(id=data['productId']).first()
+			price = float(product.price)
 			quantity = int(data['quantity'])
 			callfor = json.loads(data['callfor'])
 			options = data['options']
 			friends = []
 
-			for info in callfor:
-				friends.append(str(info['userid']))
+			if len(callfor) > 0:
+				for info in callfor:
+					friends.append(str(info['userid']))
+					friend = User.query.filter_by(id=info['userid']).first()
+					customerid = friend.customerid
+
+					stripe.Charge.create(
+						amount=int(price * 100),
+						currency="cad",
+						customer=customerid,
+						description=username + " called " + product.name + " for " + friend.username
+					)
+			else:
+				stripe.Charge.create(
+					amount=int(price * 100),
+					currency="cad",
+					customer=user.customerid,
+					description=username + " purchased " + product.name
+				)
 
 			for k in range(quantity):
 				transaction = Transaction(groupId, product.id, adder, json.dumps(friends), options, time)

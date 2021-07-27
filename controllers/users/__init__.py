@@ -1,8 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, os, json
-from datetime import datetime
+import mysql.connector, pymysql.cursors, os, json, stripe
 from werkzeug.security import generate_password_hash, check_password_hash
 
 local = True
@@ -29,6 +28,7 @@ mydb = mysql.connector.connect(
 )
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
+stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -36,12 +36,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
+	customerid = db.Column(db.String(25))
 
-	def __init__(self, cellnumber, password, username, profile):
+	def __init__(self, cellnumber, password, username, profile, customerid):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
+		self.customerid = customerid
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
@@ -75,8 +77,13 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
+	accountid = db.Column(db.String(25))
 
-	def __init__(self, name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, longitude, latitude, owners, type, hours):
+	def __init__(
+		self, 
+		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
+		longitude, latitude, owners, type, hours, accountid
+	):
 		self.name = name
 		self.addressOne = addressOne
 		self.addressTwo = addressTwo
@@ -90,6 +97,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
+		self.accountid = accountid
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -288,7 +296,11 @@ def register():
 				if user == None:
 					password = generate_password_hash(password)
 
-					user = User(cellnumber, password, '', '')
+					customer = stripe.Customer.create(
+						phone=cellnumber
+					)
+
+					user = User(cellnumber, password, '', '', customer.id)
 					db.session.add(user)
 					db.session.commit()
 
@@ -318,8 +330,15 @@ def setup():
 	user = User.query.filter_by(id=userid).first()
 
 	if user != None:
+		customerid = user.customerid
+
 		user.username = username
 		user.profile = profile.filename
+
+		stripe.Customer.modify(
+			customerid,
+			name=username
+		)
 
 		profile.save(os.path.join('static', profile.filename))
 
@@ -336,22 +355,36 @@ def update():
 	userid = request.form['userid']
 	username = request.form['username']
 	cellnumber = request.form['cellnumber']
-	profile = request.files['profile']
+	filepath = request.files.get('profile', False)
+	fileexist = False if filepath == False else True
+
+	if fileexist == True:
+		profile = request.files['profile']
 
 	user = User.query.filter_by(id=userid).first()
 
 	if user != None:
-		if user.profile != None:
-			oldprofile = user.profile
+		if fileexist == True:
+			if user.profile != None:
+				oldprofile = user.profile
 
-			if os.path.exists("static/" + oldprofile):
-				os.remove("static/" + oldprofile)
+				if os.path.exists("static/" + oldprofile):
+					os.remove("static/" + oldprofile)
+
+			profile.save(os.path.join('static', profile.filename))
+
+			user.profile = profile.filename
 
 		user.username = username
 		user.cellnumber = cellnumber
-		user.profile = profile.filename
 
-		profile.save(os.path.join('static', profile.filename))
+		customerid = user.customerid
+
+		stripe.Customer.modify(
+			customerid,
+			phone=cellnumber,
+			name=username
+		)
 
 		db.session.commit()
 
@@ -372,6 +405,158 @@ def get_user_info(id):
 	}
 
 	return { "userInfo": info }
+
+@app.route("/add_paymentmethod", methods=["POST"])
+def add_paymentmethod():
+	content = request.get_json()
+
+	userid = content['userid']
+	cardtoken = content['cardtoken']
+
+	user = User.query.filter_by(id=userid).first()
+
+	if user != None:
+		customerid = user.customerid
+
+		stripe.Customer.create_source(
+			customerid,
+			source=cardtoken
+		)
+
+		return { "msg": "Added a payment method" }
+	else:
+		msg = ""
+
+@app.route("/update_paymentmethod", methods=["POST"])
+def update_paymentmethod():
+	content = request.get_json()
+
+	userid = content['userid']
+	cardid = content['cardid']
+
+	user = User.query.filter_by(id=userid).first()
+
+	if user != None:
+		customerid = user.customerid
+
+		stripe.Customer.modify_source(
+			customerid,
+			cardid
+		)
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/get_payment_methods/<id>")
+def get_payment_methods(id):
+	user = User.query.filter_by(id=id).first()
+
+	if user != None:
+		customerid = user.customerid
+
+		customer = stripe.Customer.retrieve(customerid)
+		default_card = customer.default_source
+
+		cards = stripe.Customer.list_sources(
+			customerid,
+			object="card"
+		)
+		datas = cards.data
+		cards = []
+
+		for k in range(len(datas)):
+			data = datas[k]
+
+			cards.append({
+				"key": "card-" + str(k),
+				"id": str(k),
+				"cardid": data.id,
+				"cardname": data.brand,
+				"default": data.id == default_card,
+				"number": "****" + str(data.last4)
+			})
+
+		return { "cards": cards }
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/set_paymentmethoddefault", methods=["POST"])
+def set_paymentmethoddefault():
+	content = request.get_json()
+
+	userid = content['userid']
+	cardid = content['cardid']
+
+	user = User.query.filter_by(id=userid).first()
+
+	if user != None:
+		customerid = user.customerid
+
+		stripe.Customer.modify(
+			customerid,
+			default_source=cardid
+		)
+
+		return { "msg": "Payment method set as default" }
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/get_paymentmethod_info", methods=["POST"])
+def get_paymentmethod_info():
+	content = request.get_json()
+
+	userid = content['userid']
+	cardid = content['cardid']
+
+	user = User.query.filter_by(id=userid).first()
+
+	if user != None:
+		customerid = user.customerid
+
+		card = stripe.Customer.retrieve_source(
+			customerid,
+			cardid
+		)
+
+		info = {
+			"exp_month": card.exp_month,
+			"exp_year": card.exp_year,
+			"last4": card.last4
+		}
+
+		return { "paymentmethodInfo": info }
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/delete_paymentmethod", methods=["POST"])
+def delete_paymentmethod():
+	content = request.get_json()
+
+	userid = content['userid']
+	cardid = content['cardid']
+
+	user = User.query.filter_by(id=userid).first()
+
+	if user != None:
+		customerid = user.customerid
+
+		stripe.Customer.delete_source(
+			customerid,
+			cardid
+		)
+
+		return { "msg": "Payment method deleted"}
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }
 
 @app.route("/get_notifications/<id>")
 def get_notifications(id):
@@ -415,7 +600,7 @@ def get_notifications(id):
 				}
 			})
 
-		sql = "select * from schedule where userId = " + str(id) + " and (status = 'accepted' or status = 'rebook')"
+		sql = "select * from schedule where userId = " + str(id) + " and (status = 'accepted' or status = 'rebook' or status = 'cancel')"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -452,17 +637,28 @@ def get_notifications(id):
 
 	return { "errormsg": msg }
 
-@app.route("/get_num_notifications/<id>")
-def get_num_notifications(id):
-	user = User.query.filter_by(id=id).first()
+@app.route("/get_updates", methods=["POST"])
+def get_updates():
+	content = request.get_json()
+
+	userid = content['userid']
+	time = content['time']
+
+	user = User.query.filter_by(id=userid).first()
 
 	if user != None:
 		num = 0
 
-		sql = "select count(*) as num from cart where callfor like '%\"" + str(id) + "\"%'"
+		# delete passed schedules
+		schedules = query("select id from schedule where userId = " + str(userid) + " and status = 'accepted' and " + str(time) + " > time", True)
+
+		for data in schedules:
+			query("delete from schedule where id = " + str(data['id']), False)
+
+		sql = "select count(*) as num from cart where callfor like '%\"userid\": " + str(userid) + ",%'"
 		num += query(sql, True)[0]["num"]
 
-		sql = "select count(*) as num from schedule where userId = " + str(id) + " and (status = 'accepted' or status = 'rebook')"
+		sql = "select count(*) as num from schedule where userId = " + str(userid) + " and (status = 'accepted' or status = 'rebook')"
 		num += query(sql, True)[0]["num"]
 
 		return { "numNotifications": num }

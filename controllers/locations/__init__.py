@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, os, math, json
+import mysql.connector, pymysql.cursors, os, math, json, stripe, socket
 from haversine import haversine, Unit
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -36,12 +36,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
+	customerid = db.Column(db.String(25))
 
-	def __init__(self, cellnumber, password, username, profile):
+	def __init__(self, cellnumber, password, username, profile, customerid):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
+		self.customerid = customerid
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
@@ -75,8 +77,13 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
+	accountid = db.Column(db.String(25))
 
-	def __init__(self, name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, longitude, latitude, owners, type, hours):
+	def __init__(
+		self, 
+		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
+		longitude, latitude, owners, type, hours, accountid
+	):
 		self.name = name
 		self.addressOne = addressOne
 		self.addressTwo = addressTwo
@@ -90,6 +97,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
+		self.accountid = accountid
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -255,15 +263,65 @@ def setup_location():
 	longitude = request.form['longitude']
 	latitude = request.form['latitude']
 	ownerid = request.form['ownerid']
+	time = request.form['time']
+	ipAddress = request.form['ipAddress']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
 
 	if owner != None:
+		# create a connected account
+		connectedaccount = stripe.Account.create(
+			type="custom",
+			country="CA",
+			business_type="company",
+			business_profile={
+				"name": name
+			},
+			company={
+				"address": {
+					"city": city,
+					"line1": addressOne,
+					"line2": addressTwo,
+					"postal_code": postalcode,
+					"state": province 
+				},
+				"name": name,
+				"phone": phonenumber,
+			},
+			capabilities={
+				"transfers": {"requested": True}
+			},
+			tos_acceptance={
+				"date": time,
+				"ip": str(ipAddress)
+			}
+		)
+		stripe.Account.create_person(
+			connectedaccount.id,
+			first_name=name,
+			last_name=" ",
+			address={
+				"city": city,
+				"line1": addressOne,
+				"line2": addressTwo,
+				"postal_code": postalcode,
+				"state": province 
+			},
+			dob={
+				"day": 30,
+				"month": 7,
+				"year": 1996
+			},
+			relationship={
+				"representative": True
+			}
+		)
+
 		location = Location(
 			name, addressOne, addressTwo, 
 			city, province, postalcode, phonenumber, logo.filename,
 			longitude, latitude, '["' + str(ownerid) + '"]',
-			'', ''
+			'', '', connectedaccount.id
 		)
 		db.session.add(location)
 		db.session.commit()
@@ -284,15 +342,37 @@ def fetch_num_requests(id):
 
 	return { "numRequests": numRequests }
 
-@app.route("/fetch_num_appointments/<id>")
-def fetch_num_appointments(id):
-	numAppointments = query("select count(*) as num from schedule where locationId = " + str(id) + " and status = 'accepted'", True)[0]["num"]
+@app.route("/fetch_num_appointments", methods=["POST"])
+def fetch_num_appointments():
+	content = request.get_json()
+
+	locationid = content['locationid']
+	time = content['time']
+
+	# delete time passed appointments
+	passedAppointments = query("select id from schedule where locationId = " + str(locationid) + " and status = 'accepted' and " + str(time) + " > time", True)
+
+	for data in passedAppointments:
+		query("delete from schedule where id = " + str(data['id']), False)
+
+	numAppointments = query("select count(*) as num from schedule where locationId = " + str(locationid) + " and status = 'accepted'", True)[0]["num"]
 
 	return { "numAppointments": numAppointments }
 
-@app.route("/fetch_num_reservations/<id>")
-def fetch_num_reservations(id):
-	numReservations = query("select count(*) as num from schedule where locationId = " + str(id) + " and status = 'accepted' and not seaters = 0", True)[0]["num"]
+@app.route("/fetch_num_reservations", methods=["POST"])
+def fetch_num_reservations():
+	content = request.get_json()
+
+	locationid = content['locationid']
+	time = content['time']
+
+	# delete time passed reservations
+	passedReservations = query("select id from schedule where locationId = " + str(locationid) + " and status = 'accepted' and " + str(time) + " > time", True)
+
+	for data in passedReservations:
+		query("delete from schedule where id = " + str(data['id']), False)
+
+	numReservations = query("select count(*) as num from schedule where locationId = " + str(locationid) + " and status = 'accepted' and not seaters = 0", True)[0]["num"]
 
 	return { "numReservations": numReservations }
 
@@ -353,8 +433,8 @@ def get_locations():
 	content = request.get_json()
 
 	userid = content['userid']
-	longitude = content['longitude']
-	latitude = content['latitude']
+	longitude = float(content['longitude'])
+	latitude = float(content['latitude'])
 	name = content['locationName']
 
 	if longitude != None and latitude != None:
@@ -373,7 +453,6 @@ def get_locations():
 			orderQuery += "order by ST_Distance_Sphere(point(" + str(longitude) + ", " + str(latitude) + "), point(longitude, latitude))"
 
 			point1 = (longitude, latitude)
-			rad = 6371
 
 			# get restaurants
 			sql = "select * from location where type = 'restaurant' " + orderQuery + " limit 0, 10"
@@ -385,6 +464,13 @@ def get_locations():
 				lat2 = float(data['latitude'])
 
 				point2 = (lon2, lat2)
+				distance = haversine(point1, point2)
+
+				if distance < 1:
+					distance *= 1000
+					distance = str(round(distance, 1)) + " m"
+				else:
+					distance = str(round(distance, 1)) + " km"
 
 				locations[0]["locations"].append({
 					"key": "l-" + str(data['id']),
@@ -392,32 +478,10 @@ def get_locations():
 					"logo": data['logo'],
 					"nav": "restaurantprofile",
 					"name": data['name'],
-					"radiusKm": haversine(point1, point2)
+					"distance": distance
 				})
 
 			locations[0]["index"] += len(datas)
-
-			# get nail salons
-			sql = "select * from location where type = 'nail' " + orderQuery + " limit 0, 10"
-			maxsql = "select count(*) as num from location where type = 'nail' " + orderQuery
-			datas = query(sql, True)
-			maxdatas = query(maxsql, True)[0]["num"]
-			for data in datas:
-				lon2 = float(data['longitude'])
-				lat2 = float(data['latitude'])
-
-				point2 = (lon2, lat2)
-
-				locations[1]["locations"].append({
-					"key": "l-" + str(data['id']),
-					"id": data['id'],
-					"logo": data['logo'],
-					"nav": "salonprofile",
-					"name": data['name'],
-					"radiusKm": haversine(point1, point2)
-				})
-
-			locations[1]["index"] += len(datas)
 
 			# get hair salons
 			sql = "select * from location where type = 'hair' " + orderQuery + " limit 0, 10"
@@ -429,6 +493,42 @@ def get_locations():
 				lat2 = float(data['latitude'])
 
 				point2 = (lon2, lat2)
+				distance = haversine(point1, point2)
+
+				if distance < 1:
+					distance *= 1000
+					distance = str(round(distance, 1)) + " m"
+				else:
+					distance = str(round(distance, 1)) + " km"
+
+				locations[1]["locations"].append({
+					"key": "l-" + str(data['id']),
+					"id": data['id'],
+					"logo": data['logo'],
+					"nav": "salonprofile",
+					"name": data['name'],
+					"distance": distance
+				})
+
+			locations[1]["index"] += len(datas)
+
+			# get nail salons
+			sql = "select * from location where type = 'nail' " + orderQuery + " limit 0, 10"
+			maxsql = "select count(*) as num from location where type = 'nail' " + orderQuery
+			datas = query(sql, True)
+			maxdatas = query(maxsql, True)[0]["num"]
+			for data in datas:
+				lon2 = float(data['longitude'])
+				lat2 = float(data['latitude'])
+
+				point2 = (lon2, lat2)
+				distance = haversine(point1, point2)
+
+				if distance < 1:
+					distance *= 1000
+					distance = str(round(distance, 1)) + " m"
+				else:
+					distance = str(round(distance, 1)) + " km"
 
 				locations[2]["locations"].append({
 					"key": "l-" + str(data['id']),
@@ -436,11 +536,11 @@ def get_locations():
 					"logo": data['logo'],
 					"nav": "salonprofile",
 					"name": data['name'],
-					"radiusKm": haversine(point1, point2)
+					"distance": distance
 				})
 
 			locations[2]["index"] += len(datas)
-
+			
 			return { "locations": locations }
 		else:
 			msg = "User doesn't exist"
@@ -468,7 +568,6 @@ def get_more_locations():
 		orderQuery += "order by st_distance_sphere(point(" + str(longitude) + ", " + str(latitude) + "), point(longitude, latitude))"
 		lon1 = longitude
 		lat1 = latitude
-		rad = 6371
 
 		# get locations
 		sql = "select * from location where type = '" + type + "' " + orderQuery + " limit " + index + ", 10"
@@ -481,6 +580,13 @@ def get_more_locations():
 
 			point1 = (lon1, lat1)
 			point2 = (lon2, lat2)
+			distance = haversine(point1, point2)
+
+			if distance < 1:
+				distance *= 1000
+				distance = str(round(distance, 1)) + " m"
+			else:
+				distance = str(round(distance, 1)) + " km"
 
 			locations.append({
 				"key": "l-" + str(data['id']),
@@ -488,7 +594,7 @@ def get_more_locations():
 				"logo": data['logo'],
 				"nav": ("restaurant" if type == "restaurant" else "salon") + "profile",
 				"name": data['name'],
-				"radiusKm": haversine(point1, point2)
+				"distance": distance
 			})
 
 		return { "newlocations": locations, "index": len(datas), "max": maxdatas }
@@ -499,6 +605,8 @@ def get_location_profile():
 
 	userid = content['userid']
 	locationid = content['locationid']
+	longitude = float(content['longitude'])
+	latitude = float(content['latitude'])
 
 	user = User.query.filter_by(id=userid).first()
 
@@ -518,6 +626,16 @@ def get_location_profile():
 			elif num_products > 0:
 				msg = "products"
 
+			point1 = (longitude, latitude)
+			point2 = (float(location.longitude), float(location.latitude))
+			distance = haversine(point1, point2)
+
+			if distance < 1:
+				distance *= 1000
+				distance = str(round(distance, 1)) + " m away"
+			else:
+				distance = str(round(distance, 1)) + " km away"
+
 			info = {
 				"id": location.id,
 				"name": location.name,
@@ -527,9 +645,10 @@ def get_location_profile():
 				"province": location.province,
 				"postalcode": location.postalcode,
 				"phonenumber": location.phonenumber,
+				"distance": distance,
 				"logo": location.logo,
 				"longitude": float(location.longitude),
-				"latitude": float(location.latitude),
+				"latitude": float(location.latitude)
 			}
 
 			return { "locationInfo": info, "msg": msg }
@@ -577,6 +696,8 @@ def make_reservation():
 				db.session.commit()
 
 				msg = "reservation added"
+
+				return { "msg": msg }
 			else:
 				if rebooked_reservation != None:
 					rebooked_reservation.status = 'requested'
@@ -586,10 +707,10 @@ def make_reservation():
 					db.session.commit()
 
 					msg = "reservation re-requested"
+
+					return { "msg": msg }
 				else:
 					msg = "reservation already requested"
-
-			return { "msg": msg }
 		else:
 			msg = "Location doesn't exist"
 	else:
@@ -623,19 +744,21 @@ def get_info():
 		num_products = Product.query.filter_by(locationId=locationid, menuId=menuid).count()
 
 		menu = Menu.query.filter_by(id=menuid).first()
-		menuname = ""
+		menuName = ""
+		menuInfo = ""
 
 		if menu != None:
-			menuname = menu.name
+			menuName = menu.name
+			menuInfo = menu.info
 
 		if num_menus > 0:
-			return { "msg": "menus", "menuName": menuname, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType }
+			return { "msg": "menus", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType }
 		elif num_services > 0:
-			return { "msg": "services", "menuName": menuname, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType }
+			return { "msg": "services", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType }
 		elif num_products > 0:
-			return { "msg": "products", "menuName": menuname, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType }
+			return { "msg": "products", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType }
 		else:
-			return { "msg": "", "menuName": "", "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType }
+			return { "msg": "", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType }
 	else:
 		msg = "Location doesn't exist"
 
@@ -650,7 +773,9 @@ def get_hours():
 
 	days = { "Sun": "Sunday", "Mon": "Monday", "Tue": "Tuesday", "Wed": "Wednesday", "Thu": "Thursday", "Fri": "Friday", "Sat": "Saturday" }
 
+	scheduled = Schedule.query.filter_by(locationId=locationid).all()
 	location = Location.query.filter_by(id=locationid).first()
+	times = []
 
 	if location != None:
 		hours = json.loads(location.hours)
@@ -658,7 +783,10 @@ def get_hours():
 		openTime = hours[days[day]]["opentime"]
 		closeTime = hours[days[day]]["closetime"]
 
-		return { "openTime": openTime, "closeTime": closeTime }
+		for data in scheduled:
+			times.append(int(data.time))
+
+		return { "openTime": openTime, "closeTime": closeTime, "scheduled": times }
 	else:
 		msg = "Location doesn't exist"
 

@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, json, pymysql.cursors, os
+import mysql.connector, json, pymysql.cursors, os, stripe
 from werkzeug.security import generate_password_hash, check_password_hash
 
 local = True
@@ -28,6 +28,7 @@ mydb = mysql.connector.connect(
 )
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
+stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -35,12 +36,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
+	customerid = db.Column(db.String(25))
 
-	def __init__(self, cellnumber, password, username, profile):
+	def __init__(self, cellnumber, password, username, profile, customerid):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
+		self.customerid = customerid
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
@@ -74,8 +77,13 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
+	accountid = db.Column(db.String(25))
 
-	def __init__(self, name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, longitude, latitude, owners, type, hours):
+	def __init__(
+		self, 
+		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
+		longitude, latitude, owners, type, hours, accountid
+	):
 		self.name = name
 		self.addressOne = addressOne
 		self.addressTwo = addressTwo
@@ -89,6 +97,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
+		self.accountid = accountid
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -248,7 +257,7 @@ def login():
 	cellnumber = content['cellnumber']
 	password = content['password']
 
-	if cellnumber != '' and password != '':
+	if cellnumber != "" and password != "":
 		data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
 
 		if len(data) > 0:
@@ -264,8 +273,8 @@ def login():
 				else:
 					data = data[0]
 
-					if data['type'] != '':
-						if data['hours'] != '':
+					if data['type'] != "":
+						if data['hours'] != "":
 							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": data['id'], "locationtype": data['type'], "msg": "main" }
 						else:
 							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": data['id'], "locationtype": data['type'], "msg": "setuphours" }
@@ -276,7 +285,7 @@ def login():
 		else:
 			msg = "Owner doesn't exist"
 	else:
-		if cellnumber == '':
+		if cellnumber == "":
 			msg = "Phone number is blank"
 		else:
 			msg = "Password is blank"
@@ -291,7 +300,7 @@ def register():
 	password = content['password']
 	confirmPassword = content['confirmPassword']
 
-	if cellnumber != '' and password != '' and confirmPassword != '':
+	if cellnumber != "" and password != "" and confirmPassword != "":
 		if len(password) >= 6:
 			if password == confirmPassword:
 				data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
@@ -311,25 +320,278 @@ def register():
 		else:
 			msg = "Password needs to be atleast 6 characters long"
 	else:
-		if cellnumber == '':
+		if cellnumber == "":
 			msg = "Phone number is blank"
-		elif password == '':
+		elif password == "":
 			msg = "Passwod is blank"
 		else:
 			msg = "Please confirm your password"
 
 	return { "errormsg": msg }
 
+@app.route("/add_owner", methods=["POST"])
+def add_owner():
+	content = request.get_json()
+
+	ownerid = content['ownerid']
+	cellnumber = content['cellnumber']
+	password = content['password']
+	confirmPassword = content['confirmPassword']
+
+	if cellnumber != "" and password != "" and confirmPassword != "":
+		if len(password) >= 6:
+			if password == confirmPassword:
+				data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
+
+				if len(data) == 0:
+					password = generate_password_hash(password)
+
+					owner = Owner.query.filter_by(id=ownerid).first()
+
+					if owner != None:
+						locationId = owner.locationId
+
+						owner = Owner(cellnumber, password, owner.locationId)
+						db.session.add(owner)
+						db.session.commit()
+
+						location = Location.query.filter_by(id=locationId).first()
+						owners = json.loads(location.owners)
+						owners.append(str(owner.id))
+
+						location.owners = json.dumps(owners)
+
+						db.session.commit()
+
+						return { "id": owner.id, "msg": "New owner added by an owner" }
+					else:
+						msg = "Owner doesn't exist"
+				else:
+					msg = "Owner already exist"
+			else:
+				msg = "Password is mismatch"
+		else:
+			msg = "Password needs to be atleast 6 characters long"
+	else:
+		if cellnumber == "":
+			msg = "Phone number is blank"
+		elif password == "":
+			msg = "Please confirm your password"
+		else:
+			msg = "Please confirm your password"
+
+	return { "errormsg": msg }
+
+@app.route("/update_owner", methods=["POST"])
+def update_owner():
+	content = request.get_json()
+
+	ownerid = content['ownerid']
+	cellnumber = content['cellnumber']
+	password = content['password']
+	confirmPassword = content['confirmPassword']
+	errormsg = ""
+
+	owner = Owner.query.filter_by(id=ownerid).first()
+
+	if owner != None:
+		if cellnumber != "":
+			owner.cellnumber = cellnumber
+
+		if password != "" or confirmPassword != "":
+			if password != "" and confirmPassword != "":
+				if len(password) >= 6:
+					if password == confirmPassword:
+						password = generate_password_hash(password)
+
+						owner.password = password
+					else:
+						errormsg = "Password is mismatch"
+				else:
+					errormsg = "Password needs to be atleast 6 characters long"
+			else:
+				if password == "":
+					errormsg = "Please confirm your password"
+				else:
+					errormsg = "Please confirm your password"
+
+		db.session.commit()
+	else:
+		errormsg = "Owner doesn't exist"
+
+	if errormsg != "":
+		return { "errormsg": errormsg }
+	else:
+		return { "id": owner.id, "msg": "Owner's info updated" }
+
 @app.route("/add_bankaccount", methods=["POST"])
 def add_bankaccount():
-	bankaccountid = "d9d0f0d0d0-sidfidsif"
+	content = request.get_json()
 
-	return { "bankaccountid": bankaccountid, "action": "add bank account" }
+	locationid = content['locationid']
+	banktoken = content['banktoken']
 
-@app.route("/get_account/<accountid>", methods=["GET"])
-def get_account(accountid):
-	return { "accountid": accountid, "action": "get account" }
+	location = Location.query.filter_by(id=locationid).first()
 
-@app.route("/get_bankaccount/<bankaccountid>", methods=["GET"])
-def get_bankaccount(bankaccountid):
-	return { "bankaccountid": bankaccountid, "action": "get bank account" }
+	if location != None:
+		accountid = location.accountid
+
+		stripe.Account.create_external_account(
+			accountid,
+			external_account=banktoken
+		)
+
+		return { "msg": "Added a bank account" }
+	else:
+		msg = "Owner doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/update_bankaccount", methods=["POST"])
+def update_bankaccount():
+	content = request.get_json()
+
+	locationid = content['locationid']
+	bankid = content['bankid']
+
+	location = Location.query.filter_by(id=locationid).first()
+
+	if location != None:
+		accountid = location.accountid
+
+		stripe.Account.modify_external_account(
+			accountid,
+			bankid
+		)
+
+		return { "msg": "Added a bank account" }
+	else:
+		msg = "Owner doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/get_accounts/<id>")
+def get_accounts(id):
+	content = request.get_json()
+
+	location = Location.query.filter_by(id=id).first()
+	owners = json.loads(location.owners)
+	accounts = []
+
+	for owner in owners:
+		info = Owner.query.filter_by(id=owner).first()
+
+		accounts.append({
+			"key": "account-" + str(owner), 
+			"id": owner, 
+			"cellnumber": info.cellnumber
+		})
+
+	return { "accounts": accounts }
+
+@app.route("/get_bankaccounts/<id>")
+def get_bankaccounts(id):
+	content = request.get_json()
+
+	location = Location.query.filter_by(id=id).first()
+	accountid = location.accountid
+
+	accounts = stripe.Account.list()
+	datas = accounts.data[0].external_accounts.data
+	bankaccounts = []
+
+	for k in range(len(datas)):
+		data = datas[k]
+
+		bankaccounts.append({
+			"key": "bankaccount-" + str(k),
+			"id": str(k),
+			"bankid": data.id,
+			"bankname": data.bank_name,
+			"number": "****" + str(data.last4),
+			"default": data.default_for_currency
+		})
+
+	return { "bankaccounts": bankaccounts, "msg": "get bank accounts" }
+
+@app.route("/set_bankaccountdefault", methods=["POST"])
+def set_bankaccountdefault():
+	content = request.get_json()
+
+	locationid = content['locationid']
+	bankid = content['bankid']
+
+	location = Location.query.filter_by(id=locationid).first()
+
+	if location != None:
+		accountid = location.accountid
+
+		stripe.Account.modify_external_account(
+			accountid,
+			bankid,
+			default_for_currency=True
+		)
+
+		return { "msg": "Bank account set as default" }
+	else:
+		msg = "Location doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/get_bankaccount_info", methods=["POST"])
+def get_bankaccount_info():
+	content = request.get_json()
+
+	locationid = content['locationid']
+	bankid = content['bankid']
+
+	location = Location.query.filter_by(id=locationid).first()
+
+	if location != None:
+		accountid = location.accountid
+
+		accounts = stripe.Account.retrieve(accountid)
+		datas = accounts.external_accounts.data
+
+		for data in datas:
+			if data.id == bankid:
+				routing_number = data.routing_number
+
+				transit = routing_number[1:4]
+				institution = routing_number[4:]
+
+				info = {
+					"account_holder_name": data.account_holder_name,
+					"last4": data.last4,
+					"transit_number": transit,
+					"institution_number": institution
+				}
+
+				return { "bankaccountInfo": info }
+	else:
+		msg = "Location doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/delete_bankaccount", methods=["POST"])
+def delete_bankaccount():
+	content = request.get_json()
+
+	locationid = content['locationid']
+	bankid = content['bankid']
+
+	location = Location.query.filter_by(id=locationid).first()
+
+	if location != None:
+		accountid = location.accountid
+
+		stripe.Account.delete_external_account(
+			accountid,
+			bankid
+		)
+
+		return { "msg": "Bank account deleted" }
+	else:
+		msg = "Location doesn't exist"
+
+	return { "errormsg": msg }
