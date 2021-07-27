@@ -637,8 +637,8 @@ def get_notifications(id):
 
 	return { "errormsg": msg }
 
-@app.route("/get_updates", methods=["POST"])
-def get_updates():
+@app.route("/get_num_updates", methods=["POST"])
+def get_num_updates():
 	content = request.get_json()
 
 	userid = content['userid']
@@ -697,6 +697,15 @@ def search_friends():
 				numSearchedFriends += 1
 
 				if len(row) == 4 or (len(datas) - 1 == k and len(row) > 0):
+					if len(datas) - 1 == k and len(row) > 0:
+						key = data['id'] + 1
+
+						leftover = 4 - len(row)
+
+						for k in range(leftover):
+							row.append({ "key": "friend-" + str(key) })
+							key += 1
+					
 					column.append({ "key": "friend-row-" + str(len(column)), "row": row })
 					row = []
 

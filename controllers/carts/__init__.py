@@ -264,16 +264,34 @@ def get_cart_items(id):
 			product = Product.query.filter_by(id=data['productId']).first()
 			callfor = json.loads(data['callfor'])
 			friends = []
+			row = []
 
-			for info in callfor:
+			for k in range(len(callfor)):
+				info = callfor[k]
+
 				friend = User.query.filter_by(id=info['userid']).first()
 
-				friends.append({
+				row.append({
+					"id": friend.id,
 					"key": str(data['id']) + "-" + str(friend.id),
 					"username": friend.username,
 					"profile": friend.profile,
 					"status": info['status']
 				})
+
+				if len(row) == 4 or (len(callfor) - 1 == k and len(row) > 0):
+					if len(callfor) - 1 == k and len(row) > 0:
+						leftover = 4 - len(row)
+						id = data['id'] + 1
+						key = friend.id + 1
+
+						for m in range(leftover):
+							row.append({ "key": str(id) + "-" + str(key) })
+							id += 1
+							key += 1
+					
+					friends.append({ "key": len(friends), "row": row })
+					row = []
 
 				if info['status'] == 'waiting':
 					active = False
