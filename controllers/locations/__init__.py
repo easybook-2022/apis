@@ -77,12 +77,12 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	accountid = db.Column(db.String(25))
+	accountId = db.Column(db.String(25))
 
 	def __init__(
 		self, 
 		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
-		longitude, latitude, owners, type, hours, accountid
+		longitude, latitude, owners, type, hours, accountId
 	):
 		self.name = name
 		self.addressOne = addressOne
@@ -97,7 +97,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
-		self.accountid = accountid
+		self.accountId = accountId
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -153,9 +153,12 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	seaters = db.Column(db.Integer)
+	customers = db.Column(db.String(255))
+	note = db.Column(db.String(225))
+	orders = db.Column(db.Text)
+	table = db.Column(db.String(20))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, seaters):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -165,7 +168,10 @@ class Schedule(db.Model):
 		self.cancelReason = cancelReason
 		self.nextTime = nextTime
 		self.locationType = locationType
-		self.seaters = seaters
+		self.customers = customers
+		self.note = note
+		self.orders = orders
+		self.table = table
 
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
@@ -178,15 +184,19 @@ class Product(db.Model):
 	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 	options = db.Column(db.Text)
+	others = db.Column(db.Text)
+	sizes = db.Column(db.String(150))
 	price = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image, options, price):
+	def __init__(self, locationId, menuId, name, info, image, options, others, sizes, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
 		self.info = info
 		self.image = image
 		self.options = options
+		self.others = others
+		self.sizes = sizes
 		self.price = price
 
 	def __repr__(self):
@@ -196,16 +206,22 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	productId = db.Column(db.Integer)
 	quantity = db.Column(db.Integer)
-	adder = db.Column(db.String(20))
+	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
+	others = db.Column(db.Text)
+	sizes = db.Column(db.String(150))
+	note = db.Column(db.String(100))
 
-	def __init__(self, productId, quantity, adder, callfor, options):
+	def __init__(self, productId, quantity, adder, callfor, options, others, sizes, note):
 		self.productId = productId
 		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
+		self.others = others
+		self.sizes = sizes
+		self.note = note
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
@@ -217,14 +233,18 @@ class Transaction(db.Model):
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
+	others = db.Column(db.Text)
+	sizes = db.Column(db.String(150))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, productId, adder, callfor, options, time):
+	def __init__(self, groupId, productId, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.productId = productId
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
+		self.others = others
+		self.sizes = sizes
 		self.time = time
 
 	def __repr__(self):
@@ -289,7 +309,8 @@ def setup_location():
 				"phone": phonenumber,
 			},
 			capabilities={
-				"transfers": {"requested": True}
+				"transfers": {"requested": True},
+				"card_payments": {"requested": True}
 			},
 			tos_acceptance={
 				"date": time,
@@ -336,43 +357,121 @@ def setup_location():
 	else:
 		return { "errormsg": "Owner doesn't exist" }
 
+@app.route("/update_location", methods=["POST"])
+def update_location():
+	name = request.form['storeName']
+	phonenumber = request.form['phonenumber']
+	addressOne = request.form['addressOne']
+	addressTwo = request.form['addressTwo']
+	city = request.form['city']
+	province = request.form['province']
+	postalcode = request.form['postalcode']
+	longitude = request.form['longitude']
+	latitude = request.form['latitude']
+	ownerid = request.form['ownerid']
+	time = request.form['time']
+	ipAddress = request.form['ipAddress']
+
+	filepath = request.files.get('logo', False)
+	fileexist = False if filepath == False else True
+
+	owner = Owner.query.filter_by(id=ownerid).first()
+
+	if owner != None:
+		locationid = owner.locationId
+
+		location = Location.query.filter_by(id=locationid).first()
+
+		if location != None:
+			accountid = location.accountId
+
+			if fileexist == True:
+				logo = request.files['logo']
+
+			person = stripe.Account.list_persons(accountid)
+			personid = person.data[0].id
+
+			stripe.Account.modify(
+				accountid,
+				business_profile={
+					"name": name
+				},
+				company={
+					"address": {
+						"city": city,
+						"line1": addressOne,
+						"line2": addressTwo,
+						"postal_code": postalcode,
+						"state": province 
+					},
+					"name": name,
+					"phone": phonenumber,
+				},
+				tos_acceptance={
+					"date": time,
+					"ip": str(ipAddress)
+				}
+			)
+			stripe.Account.modify_person(
+				accountid,
+				personid,
+				first_name=name,
+				address={
+					"city": city,
+					"line1": addressOne,
+					"line2": addressTwo,
+					"postal_code": postalcode,
+					"state": province 
+				}
+			)
+
+			location.name = name
+			location.addressOne = addressOne
+			location.addressTwo = addressTwo
+			location.city = city
+			location.province = province
+			location.postalcode = postalcode
+			location.phonenumber = phonenumber
+			location.longitude = longitude
+			location.latitude = latitude
+
+			if fileexist == True:
+				logo = request.files['logo']
+				oldlogo = location.logo
+
+				if logo.filename != oldlogo:
+					location.logo = logo.filename
+
+					if os.path.exists("static/" + oldlogo):
+						os.remove("static/" + oldlogo)
+
+					logo.save(os.path.join('static', logo.filename))
+
+			db.session.commit()
+
+			return { "msg": "location updated", "id": location.id }
+		else:
+			msg = "Location doesn't exist"
+	else:
+		msg = "Owner doesn't exist"
+
+	return { "errormsg": msg }
+
 @app.route("/fetch_num_requests/<id>")
 def fetch_num_requests(id):
 	numRequests = query("select count(*) as num from schedule where locationId = " + str(id) + " and status = 'requested'", True)[0]["num"]
 
 	return { "numRequests": numRequests }
 
-@app.route("/fetch_num_appointments", methods=["POST"])
-def fetch_num_appointments():
-	content = request.get_json()
-
-	locationid = content['locationid']
-	time = content['time']
-
-	# delete time passed appointments
-	passedAppointments = query("select id from schedule where locationId = " + str(locationid) + " and status = 'accepted' and " + str(time) + " > time", True)
-
-	for data in passedAppointments:
-		query("delete from schedule where id = " + str(data['id']), False)
-
-	numAppointments = query("select count(*) as num from schedule where locationId = " + str(locationid) + " and status = 'accepted'", True)[0]["num"]
+@app.route("/fetch_num_appointments/<id>")
+def fetch_num_appointments(id):
+	numAppointments = query("select count(*) as num from schedule where locationId = " + str(id) + " and status = 'accepted'", True)[0]["num"]
 
 	return { "numAppointments": numAppointments }
 
-@app.route("/fetch_num_reservations", methods=["POST"])
-def fetch_num_reservations():
-	content = request.get_json()
-
-	locationid = content['locationid']
-	time = content['time']
-
-	# delete time passed reservations
-	passedReservations = query("select id from schedule where locationId = " + str(locationid) + " and status = 'accepted' and " + str(time) + " > time", True)
-
-	for data in passedReservations:
-		query("delete from schedule where id = " + str(data['id']), False)
-
-	numReservations = query("select count(*) as num from schedule where locationId = " + str(locationid) + " and status = 'accepted' and not seaters = 0", True)[0]["num"]
+@app.route("/fetch_num_reservations/<id>")
+def fetch_num_reservations(id):
+	numReservations = query("select count(*) as num from schedule where locationId = " + str(id) + " and status = 'accepted' and not customers = '[]'", True)[0]["num"]
 
 	return { "numReservations": numReservations }
 
@@ -420,7 +519,7 @@ def set_hours():
 
 			db.session.commit()
 
-			return { "msg": "" }
+			return { "msg": "hours updated" }
 		else:
 			msg = "Location doesn't exist"
 	else:
@@ -436,6 +535,7 @@ def get_locations():
 	longitude = float(content['longitude'])
 	latitude = float(content['latitude'])
 	name = content['locationName']
+	day = content['day']
 
 	if longitude != None and latitude != None:
 		longitude = float(longitude)
@@ -472,13 +572,17 @@ def get_locations():
 				else:
 					distance = str(round(distance, 1)) + " km"
 
+				hours = json.loads(data['hours'])
+
 				locations[0]["locations"].append({
 					"key": "l-" + str(data['id']),
 					"id": data['id'],
 					"logo": data['logo'],
 					"nav": "restaurantprofile",
 					"name": data['name'],
-					"distance": distance
+					"distance": distance,
+					"opentime": hours[day]["opentime"],
+					"closetime": hours[day]["closetime"]
 				})
 
 			locations[0]["index"] += len(datas)
@@ -501,13 +605,17 @@ def get_locations():
 				else:
 					distance = str(round(distance, 1)) + " km"
 
+				hours = json.loads(data['hours'])
+
 				locations[1]["locations"].append({
 					"key": "l-" + str(data['id']),
 					"id": data['id'],
 					"logo": data['logo'],
 					"nav": "salonprofile",
 					"name": data['name'],
-					"distance": distance
+					"distance": distance,
+					"opentime": hours[day]["opentime"],
+					"closetime": hours[day]["closetime"]
 				})
 
 			locations[1]["index"] += len(datas)
@@ -530,13 +638,17 @@ def get_locations():
 				else:
 					distance = str(round(distance, 1)) + " km"
 
+				hours = json.loads(data['hours'])
+
 				locations[2]["locations"].append({
 					"key": "l-" + str(data['id']),
 					"id": data['id'],
 					"logo": data['logo'],
 					"nav": "salonprofile",
 					"name": data['name'],
-					"distance": distance
+					"distance": distance,
+					"opentime": hours[day]["opentime"],
+					"closetime": hours[day]["closetime"]
 				})
 
 			locations[2]["index"] += len(datas)
@@ -559,6 +671,7 @@ def get_more_locations():
 	name = content['locationName']
 	type = content['type']
 	index = str(content['index'])
+	day = content['day']
 
 	user = User.query.filter_by(id=userid).first()
 
@@ -588,13 +701,17 @@ def get_more_locations():
 			else:
 				distance = str(round(distance, 1)) + " km"
 
+			hours = json.loads(data['hours'])
+
 			locations.append({
 				"key": "l-" + str(data['id']),
 				"id": data['id'],
 				"logo": data['logo'],
 				"nav": ("restaurant" if type == "restaurant" else "salon") + "profile",
 				"name": data['name'],
-				"distance": distance
+				"distance": distance,
+				"opentime": hours[day]["opentime"],
+				"closetime": hours[day]["closetime"]
 			})
 
 		return { "newlocations": locations, "index": len(datas), "max": maxdatas }
@@ -603,29 +720,31 @@ def get_more_locations():
 def get_location_profile():
 	content = request.get_json()
 
-	userid = content['userid']
 	locationid = content['locationid']
-	longitude = float(content['longitude'])
-	latitude = float(content['latitude'])
 
-	user = User.query.filter_by(id=userid).first()
+	if content['longitude'] != None:
+		longitude = float(content['longitude'])
+		latitude = float(content['latitude'])
+	else:
+		longitude = content['longitude']
+		latitude = content['latitude']
 
-	if user != None:
-		location = Location.query.filter_by(id=locationid).first()
+	location = Location.query.filter_by(id=locationid).first()
 
-		if location != None:
-			num_menus = Menu.query.filter_by(locationId=locationid, parentMenuId="").count()
-			num_services = Service.query.filter_by(locationId=locationid, menuId="").count()
-			num_products = Product.query.filter_by(locationId=locationid, menuId="").count()
+	if location != None:
+		num_menus = Menu.query.filter_by(locationId=locationid, parentMenuId="").count()
+		num_services = Service.query.filter_by(locationId=locationid, menuId="").count()
+		num_products = Product.query.filter_by(locationId=locationid, menuId="").count()
 
-			msg = ""
-			if num_menus > 0:
-				msg = "menus"
-			elif num_services > 0:
-				msg = "services"
-			elif num_products > 0:
-				msg = "products"
+		msg = ""
+		if num_menus > 0:
+			msg = "menus"
+		elif num_services > 0:
+			msg = "services"
+		elif num_products > 0:
+			msg = "products"
 
+		if longitude != None:
 			point1 = (longitude, latitude)
 			point2 = (float(location.longitude), float(location.latitude))
 			distance = haversine(point1, point2)
@@ -635,27 +754,55 @@ def get_location_profile():
 				distance = str(round(distance, 1)) + " m away"
 			else:
 				distance = str(round(distance, 1)) + " km away"
-
-			info = {
-				"id": location.id,
-				"name": location.name,
-				"addressOne": location.addressOne,
-				"addressTwo": location.addressTwo,
-				"city": location.city,
-				"province": location.province,
-				"postalcode": location.postalcode,
-				"phonenumber": location.phonenumber,
-				"distance": distance,
-				"logo": location.logo,
-				"longitude": float(location.longitude),
-				"latitude": float(location.latitude)
-			}
-
-			return { "locationInfo": info, "msg": msg }
 		else:
-			msg = "Location doesn't exist"
+			distance = None
+
+		hours = [
+			{ "key": "0", "header": "Sunday", "opentime": { "hour": "00", "minute": "00", "period": "AM" }, "closetime": { "hour": "00", "minute": "00", "period": "AM" }},
+			{ "key": "1", "header": "Monday", "opentime": { "hour": "00", "minute": "00", "period": "AM" }, "closetime": { "hour": "00", "minute": "00", "period": "AM" }},
+			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "00", "minute": "00", "period": "AM" }, "closetime": { "hour": "00", "minute": "00", "period": "AM" }},
+			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "00", "minute": "00", "period": "AM" }, "closetime": { "hour": "00", "minute": "00", "period": "AM" }},
+			{ "key": "4", "header": "Thursday", "opentime": { "hour": "00", "minute": "00", "period": "AM" }, "closetime": { "hour": "00", "minute": "00", "period": "AM" }},
+			{ "key": "5", "header": "Friday", "opentime": { "hour": "00", "minute": "00", "period": "AM" }, "closetime": { "hour": "00", "minute": "00", "period": "AM" }},
+			{ "key": "6", "header": "Saturday", "opentime": { "hour": "00", "minute": "00", "period": "AM" }, "closetime": { "hour": "00", "minute": "00", "period": "AM" }}
+		]
+
+		if location.hours != '':
+			data = json.loads(location.hours)
+			day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+			for k in range(len(hours)):
+				info = hours[k]
+
+				info["opentime"]["hour"] = data[day[k][:3]]["opentime"]["hour"]
+				info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
+				info["opentime"]["period"] = data[day[k][:3]]["opentime"]["period"]
+
+				info["closetime"]["hour"] = data[day[k][:3]]["closetime"]["hour"]
+				info["closetime"]["minute"] = data[day[k][:3]]["closetime"]["minute"]
+				info["closetime"]["period"] = data[day[k][:3]]["closetime"]["period"]
+
+				hours[k] = info
+
+		info = {
+			"id": location.id,
+			"name": location.name,
+			"addressOne": location.addressOne,
+			"addressTwo": location.addressTwo,
+			"city": location.city,
+			"province": location.province,
+			"postalcode": location.postalcode,
+			"phonenumber": location.phonenumber,
+			"distance": distance,
+			"logo": location.logo,
+			"longitude": float(location.longitude),
+			"latitude": float(location.latitude),
+			"hours": hours
+		}
+
+		return { "locationInfo": info, "msg": msg }
 	else:
-		msg = "User doesn't exist"
+		msg = "Location doesn't exist"
 
 	return { "errormsg": msg }
 
@@ -666,7 +813,8 @@ def make_reservation():
 	userid = content['userid']
 	locationid = content['locationid']
 	time = content['time']
-	seaters = content['seaters']
+	customers = json.dumps(content['diners'])
+	note = content['note']
 
 	user = User.query.filter_by(id=userid).first()
 
@@ -690,7 +838,7 @@ def make_reservation():
 			).first()
 
 			if requested_reservation == None and rebooked_reservation == None: # nothing created yet
-				schedule = Schedule(userid, locationid, "", "", time, "requested", '', '', location.type, seaters)
+				schedule = Schedule(userid, locationid, "", "", time, "requested", '', '', location.type, customers, note, '{"groups":[],"donedining":false}', '')
 
 				db.session.add(schedule)
 				db.session.commit()
@@ -702,7 +850,7 @@ def make_reservation():
 				if rebooked_reservation != None:
 					rebooked_reservation.status = 'requested'
 					rebooked_reservation.time = time
-					rebooked_reservation.seaters = seaters
+					rebooked_reservation.customers = customers
 
 					db.session.commit()
 
@@ -771,8 +919,6 @@ def get_hours():
 	locationid = content['locationid']
 	day = content['day']
 
-	days = { "Sun": "Sunday", "Mon": "Monday", "Tue": "Tuesday", "Wed": "Wednesday", "Thu": "Thursday", "Fri": "Friday", "Sat": "Saturday" }
-
 	scheduled = Schedule.query.filter_by(locationId=locationid).all()
 	location = Location.query.filter_by(id=locationid).first()
 	times = []
@@ -780,8 +926,8 @@ def get_hours():
 	if location != None:
 		hours = json.loads(location.hours)
 
-		openTime = hours[days[day]]["opentime"]
-		closeTime = hours[days[day]]["closetime"]
+		openTime = hours[day]["opentime"]
+		closeTime = hours[day]["closetime"]
 
 		for data in scheduled:
 			times.append(int(data.time))

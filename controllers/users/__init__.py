@@ -77,12 +77,12 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	accountid = db.Column(db.String(25))
+	accountId = db.Column(db.String(25))
 
 	def __init__(
 		self, 
 		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
-		longitude, latitude, owners, type, hours, accountid
+		longitude, latitude, owners, type, hours, accountId
 	):
 		self.name = name
 		self.addressOne = addressOne
@@ -97,7 +97,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
-		self.accountid = accountid
+		self.accountId = accountId
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -153,9 +153,12 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	seaters = db.Column(db.Integer)
+	customers = db.Column(db.String(255))
+	note = db.Column(db.String(225))
+	orders = db.Column(db.Text)
+	table = db.Column(db.String(20))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, seaters):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -165,7 +168,10 @@ class Schedule(db.Model):
 		self.cancelReason = cancelReason
 		self.nextTime = nextTime
 		self.locationType = locationType
-		self.seaters = seaters
+		self.customers = customers
+		self.note = note
+		self.orders = orders
+		self.table = table
 
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
@@ -178,15 +184,19 @@ class Product(db.Model):
 	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 	options = db.Column(db.Text)
+	others = db.Column(db.Text)
+	sizes = db.Column(db.String(150))
 	price = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image, options, price):
+	def __init__(self, locationId, menuId, name, info, image, options, others, sizes, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
 		self.info = info
 		self.image = image
 		self.options = options
+		self.others = others
+		self.sizes = sizes
 		self.price = price
 
 	def __repr__(self):
@@ -196,16 +206,22 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	productId = db.Column(db.Integer)
 	quantity = db.Column(db.Integer)
-	adder = db.Column(db.String(20))
+	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
+	others = db.Column(db.Text)
+	sizes = db.Column(db.String(150))
+	note = db.Column(db.String(100))
 
-	def __init__(self, productId, quantity, adder, callfor, options):
+	def __init__(self, productId, quantity, adder, callfor, options, others, sizes, note):
 		self.productId = productId
 		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
+		self.others = others
+		self.sizes = sizes
+		self.note = note
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
@@ -217,14 +233,18 @@ class Transaction(db.Model):
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
+	others = db.Column(db.Text)
+	sizes = db.Column(db.String(150))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, productId, adder, callfor, options, time):
+	def __init__(self, groupId, productId, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.productId = productId
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
+		self.others = others
+		self.sizes = sizes
 		self.time = time
 
 	def __repr__(self):
@@ -263,6 +283,12 @@ def login():
 		if user != None:
 			if check_password_hash(user.password, password):
 				userid = user.id
+
+				password = generate_password_hash(password)
+
+				user.password = password
+
+				db.session.commit()
 
 				if user.username == '':
 					return { "userid": userid, "msg": "setup" }
@@ -563,16 +589,20 @@ def get_notifications(id):
 	user = User.query.filter_by(id=id).first()
 
 	if user != None:
+		userId = user.id
 		notifications = []
 		
 		# get orders
-		sql = "select * from cart where callfor like '%\"userid\": " + str(id) + ", \"status\": \"waiting\"%'"
+		sql = "select * from cart where callfor like '%\"userid\": " + str(id) + ",%'"
 		datas = query(sql, True)
 
 		for data in datas:
 			adder = User.query.filter_by(id=data['adder']).first()
 			product = Product.query.filter_by(id=data['productId']).first()
 			callfor = json.loads(data['callfor'])
+			options = json.loads(data['options'])
+			others = json.loads(data['others'])
+			sizes = json.loads(data['sizes'])
 			friends = []
 
 			for info in callfor:
@@ -584,15 +614,25 @@ def get_notifications(id):
 					"profile": friend.profile
 				})
 
+			for k in range(len(options)):
+				options[k]["key"] = "option-" + str(k)
+
+			for k in range(len(others)):
+				others[k]["key"] = "other-" + str(k)
+
+			for k in range(len(sizes)):
+				sizes[k]["key"] = "size-" + str(k)
+
 			notifications.append({
 				"key": "order-" + str(data['id']),
 				"type": "order",
 				"id": str(data['id']),
 				"name": product.name,
 				"image": product.image,
-				"options": json.loads(data['options']),
+				"options": options,
+				"others": others,
+				"sizes": sizes,
 				"quantity": int(data['quantity']),
-				"price": int(data['quantity']) * float(product.price),
 				"orderers": friends,
 				"adder": {
 					"username": adder.username,
@@ -600,7 +640,10 @@ def get_notifications(id):
 				}
 			})
 
-		sql = "select * from schedule where userId = " + str(id) + " and (status = 'accepted' or status = 'rebook' or status = 'cancel')"
+			notifications[-1]['price'] = int(data['quantity']) * float(product.price) if product.price != "" else ""
+
+		# get reservation requests
+		sql = "select * from schedule where (userId = " + str(id) + " and status = 'requested') or customers like '%{\"userid\": \"" + str(id) + "\", \"status\": \"waiting\"}%'"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -612,6 +655,21 @@ def get_notifications(id):
 
 			if data['serviceId'] != "":
 				service = Service.query.filter_by(id=data['serviceId']).first()
+
+			booker = User.query.filter_by(id=data['userId']).first()
+			confirm = False
+
+			if "userid" in data['customers']:
+				customers = json.loads(data['customers'])
+				
+				for customer in customers:
+					if customer['userid'] == id:
+						confirm = customer['status'] == 'confirm'
+
+				if str(data['userId']) == id:
+					confirm = data["status"] == 'accepted'
+			else:
+				customers = int(data['customers'])
 
 			notifications.append({
 				"key": "order-" + str(data['id']),
@@ -628,7 +686,12 @@ def get_notifications(id):
 				"time": int(data['time']),
 				"action": data['status'],
 				"nextTime": int(data['nextTime']) if data['status'] == 'rebook' else 0,
-				"reason": data['cancelReason']
+				"reason": data['cancelReason'],
+				"table": data['table'],
+				"booker": userId == data['userId'],
+				"bookerName": booker.username,
+				"customers": customers,
+				"confirm": confirm
 			})
 
 		return { "notifications": notifications }
@@ -649,16 +712,12 @@ def get_num_updates():
 	if user != None:
 		num = 0
 
-		# delete passed schedules
-		schedules = query("select id from schedule where userId = " + str(userid) + " and status = 'accepted' and " + str(time) + " > time", True)
-
-		for data in schedules:
-			query("delete from schedule where id = " + str(data['id']), False)
-
+		# orders called for user
 		sql = "select count(*) as num from cart where callfor like '%\"userid\": " + str(userid) + ",%'"
 		num += query(sql, True)[0]["num"]
 
-		sql = "select count(*) as num from schedule where userId = " + str(userid) + " and (status = 'accepted' or status = 'rebook')"
+		# get reservation requests
+		sql = "select count(*) as num from schedule where (userId = " + str(userid) + " or customers like '%\"" + str(userid) + "\"%')"
 		num += query(sql, True)[0]["num"]
 
 		return { "numNotifications": num }
@@ -677,13 +736,13 @@ def search_friends():
 	user = User.query.filter_by(id=userid).first()
 
 	if user != None:
-		row = []
-		column = []
-		rownum = 0
+		searchedfriends = []
 		numSearchedFriends = 0
 
 		if searchusername != "":
 			datas = query("select id, profile, username from user where username like '%" + searchusername + "%' and not id = " + str(userid), True)
+			row = []
+			rownum = 0
 
 			for k in range(len(datas)):
 				data = datas[k]
@@ -706,11 +765,63 @@ def search_friends():
 							row.append({ "key": "friend-" + str(key) })
 							key += 1
 					
-					column.append({ "key": "friend-row-" + str(len(column)), "row": row })
+					searchedfriends.append({ "key": "friend-row-" + str(len(searchedfriends)), "row": row })
 					row = []
 
-		return { "searchedFriends": column, "numSearchedFriends": numSearchedFriends }
+		return { "searchedFriends": searchedfriends, "numSearchedFriends": numSearchedFriends }
 	else:
 		msg = "User doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/search_diners", methods=["POST"])
+def search_diners():
+	content = request.get_json()
+
+	scheduleid = content['scheduleid']
+	searchusername = content['username']
+
+	schedule = Schedule.query.filter_by(id=scheduleid).first()
+
+	if schedule != None:
+		datas = json.loads(schedule.customers)
+		customers = [str(schedule.userId)]
+
+		for data in datas:
+			customers.append(data['userid'])
+
+		datas = query("select id, profile, username from user where username like '%" + searchusername + "%' and id in (" + json.dumps(customers)[1:-1] + ")", True)
+		row = []
+		searcheddiners = []
+		rownum = 0
+		numSearchedDiners = 0
+
+		for k in range(len(datas)):
+			data = datas[k]
+
+			row.append({
+				"key": "friend-" + str(data['id']),
+				"id": data['id'],
+				"profile": data['profile'],
+				"username": data['username']
+			})
+			numSearchedDiners += 1
+
+			if len(row) == 4 or (len(datas) - 1 == k and len(row) > 0):
+				if len(datas) - 1 == k and len(row) > 0:
+					key = data['id'] + 1
+
+					leftover = 4 - len(row)
+
+					for k in range(leftover):
+						row.append({ "key": "diner-" + str(key) })
+						key += 1
+
+				searcheddiners.append({ "key": "diner-row-" + str(len(searcheddiners)), "row": row })
+				row = []
+
+		return { "searchedDiners": searcheddiners, "numSearchedDiners": numSearchedDiners }
+	else:
+		msg = "Schedule doesn't exist"
 
 	return { "errormsg": msg }

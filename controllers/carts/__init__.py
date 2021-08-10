@@ -78,8 +78,13 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
+	accountId = db.Column(db.String(25))
 
-	def __init__(self, name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, longitude, latitude, owners, type, hours):
+	def __init__(
+		self, 
+		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
+		longitude, latitude, owners, type, hours, accountId
+	):
 		self.name = name
 		self.addressOne = addressOne
 		self.addressTwo = addressTwo
@@ -93,6 +98,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
+		self.accountId = accountId
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -148,9 +154,12 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	seaters = db.Column(db.Integer)
+	customers = db.Column(db.String(255))
+	note = db.Column(db.String(225))
+	orders = db.Column(db.Text)
+	table = db.Column(db.String(20))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, seaters):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -160,7 +169,10 @@ class Schedule(db.Model):
 		self.cancelReason = cancelReason
 		self.nextTime = nextTime
 		self.locationType = locationType
-		self.seaters = seaters
+		self.customers = customers
+		self.note = note
+		self.orders = orders
+		self.table = table
 
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
@@ -173,15 +185,19 @@ class Product(db.Model):
 	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 	options = db.Column(db.Text)
+	others = db.Column(db.Text)
+	sizes = db.Column(db.String(150))
 	price = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image, options, price):
+	def __init__(self, locationId, menuId, name, info, image, options, others, sizes, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
 		self.info = info
 		self.image = image
 		self.options = options
+		self.others = others
+		self.sizes = sizes
 		self.price = price
 
 	def __repr__(self):
@@ -191,16 +207,22 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	productId = db.Column(db.Integer)
 	quantity = db.Column(db.Integer)
-	adder = db.Column(db.String(20))
+	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
+	others = db.Column(db.Text)
+	sizes = db.Column(db.String(150))
+	note = db.Column(db.String(100))
 
-	def __init__(self, productId, quantity, adder, callfor, options):
+	def __init__(self, productId, quantity, adder, callfor, options, others, sizes, note):
 		self.productId = productId
 		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
+		self.others = others
+		self.sizes = sizes
+		self.note = note
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
@@ -212,14 +234,18 @@ class Transaction(db.Model):
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
+	others = db.Column(db.Text)
+	sizes = db.Column(db.String(150))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, productId, adder, callfor, options, time):
+	def __init__(self, groupId, productId, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.productId = productId
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
+		self.others = others
+		self.sizes = sizes
 		self.time = time
 
 	def __repr__(self):
@@ -263,8 +289,12 @@ def get_cart_items(id):
 		for data in datas:
 			product = Product.query.filter_by(id=data['productId']).first()
 			callfor = json.loads(data['callfor'])
+			options = json.loads(data['options'])
+			others = json.loads(data['others'])
+			sizes = json.loads(data['sizes'])
 			friends = []
 			row = []
+			price = 0
 
 			for k in range(len(callfor)):
 				info = callfor[k]
@@ -296,14 +326,37 @@ def get_cart_items(id):
 				if info['status'] == 'waiting':
 					active = False
 
+			for k in range(len(options)):
+				options[k]["key"] = "option-" + str(k)
+
+			for k in range(len(others)):
+				others[k]["key"] = "other-" + str(k)
+
+			for k in range(len(sizes)):
+				size = sizes[k]
+
+				size["key"] = "size-" + str(k)
+
+				if size["selected"] == True:
+					price += int(data['quantity']) * float(size["price"])
+
+				sizes[k] = size
+
+			if len(sizes) == 0:
+				price += float(int(data['quantity']) * float(product.price))
+
 			items.append({
-				"key": "cart-item" + str(data['id']),
+				"key": "cart-item-" + str(data['id']),
 				"id": str(data['id']),
 				"name": product.name,
+				"productId": product.id,
+				"note": data['note'],
 				"image": product.image,
-				"options": json.loads(data['options']),
+				"options": options,
+				"others": others,
+				"sizes": sizes,
 				"quantity": data['quantity'],
-				"price": float(int(data['quantity']) * float(product.price)),
+				"price": price,
 				"orderers": friends
 			})
 
@@ -322,6 +375,9 @@ def add_item_to_cart():
 	quantity = content['quantity']
 	callfor = json.dumps(content['callfor'])
 	options = content['options']
+	others = content['others']
+	sizes = content['sizes']
+	note = content['note']
 
 	user = User.query.filter_by(id=userid).first()
 	msg = ""
@@ -330,13 +386,16 @@ def add_item_to_cart():
 		product = Product.query.filter_by(id=productid).first()
 
 		if product != None:
-			for option in options:
-				if option['type'] == 'size' and option['selected'] == '':
+			if "true" not in json.dumps(sizes):
+				if size == '':
 					msg = "Please choose a size"
 
 			if msg == "":
 				options = json.dumps(options)
-				cartitem = Cart(productid, quantity, userid, callfor, options)
+				others = json.dumps(others)
+				sizes = json.dumps(sizes)
+
+				cartitem = Cart(productid, quantity, userid, callfor, options, others, sizes, note)
 
 				db.session.add(cartitem)
 				db.session.commit()
@@ -383,11 +442,24 @@ def checkout():
 				groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
 
 			product = Product.query.filter_by(id=data['productId']).first()
-			price = float(product.price)
+			location = Location.query.filter_by(id=product.locationId).first()
+			sizes = json.loads(data['sizes'])
+
+			if len(sizes) > 0:
+				for info in sizes:
+					if info["selected"] == True:
+						price = float(info["price"])
+			else:
+				price = float(product.price)
+
 			quantity = int(data['quantity'])
 			callfor = json.loads(data['callfor'])
 			options = data['options']
+			others = data['others']
+			sizes = data['sizes']
 			friends = []
+
+			totalprice = int((price * quantity) * 100)
 
 			if len(callfor) > 0:
 				for info in callfor:
@@ -396,21 +468,27 @@ def checkout():
 					customerid = friend.customerid
 
 					stripe.Charge.create(
-						amount=int(price * 100),
+						amount=totalprice,
 						currency="cad",
 						customer=customerid,
-						description=username + " called " + product.name + " for " + friend.username
+						description=username + " called " + str(quantity) + " of " + product.name + " for " + friend.username,
+						transfer_data={
+							"destination": location.accountId
+						}
 					)
 			else:
 				stripe.Charge.create(
-					amount=int(price * 100),
+					amount=totalprice,
 					currency="cad",
 					customer=user.customerid,
-					description=username + " purchased " + product.name
+					description=username + " purchased " + str(quantity) + " of " + product.name,
+					transfer_data={
+						"destination": location.accountId
+					}
 				)
 
 			for k in range(quantity):
-				transaction = Transaction(groupId, product.id, adder, json.dumps(friends), options, time)
+				transaction = Transaction(groupId, product.id, adder, json.dumps(friends), options, others, sizes, time)
 
 				db.session.add(transaction)
 				db.session.commit()
@@ -420,5 +498,236 @@ def checkout():
 		return { "msg": "checkout completed" }
 	else:
 		msg = "User doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/edit_cart_item/<id>")
+def edit_cart_item(id):
+	cartitem = Cart.query.filter_by(id=id).first()
+
+	if cartitem != None:
+		product = Product.query.filter_by(id=cartitem.productId).first()
+		sizes = json.loads(product.sizes)
+
+		if len(sizes) > 0:
+			sizes = json.loads(cartitem.sizes)
+
+			for info in sizes:
+				if info["selected"] == True:
+					price = cartitem.quantity * float(info["price"])
+		else:
+			price = cartitem.quantity * float(product.price)
+
+		datas = json.loads(cartitem.options)
+		options = []
+		for k in range(len(datas)):
+			data = datas[k]
+
+			options.append({
+				"key": "option-" + str(k), 
+				"header": data['header'], 
+				"type": data['type'],
+				"selected": data['selected']
+			})
+
+		datas = json.loads(cartitem.others)
+		others = []
+		for k in range(len(datas)):
+			data = datas[k]
+
+			others.append({
+				"key": "other-" + str(k), 
+				"name": data['name'], 
+				"input": data['input'], 
+				"price": data['price'],
+				"selected": data['selected']
+			})
+
+		datas = json.loads(cartitem.sizes)
+		sizes = []
+		for k in range(len(datas)):
+			data = datas[k]
+
+			sizes.append({
+				"key": "size-" + str(k),
+				"name": data["name"],
+				"price": data["price"],
+				"selected": data["selected"]
+			})
+
+		info = {
+			"name": product.name,
+			"info": product.info,
+			"image": product.image,
+			"quantity": cartitem.quantity,
+			"options": options,
+			"others": others,
+			"sizes": sizes,
+			"note": cartitem.note,
+			"price": price
+		}
+
+		return { "cartItem": info, "msg": "cart item fetched" }
+	else:
+		msg = "Cart item doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/update_cart_item", methods=["POST"])
+def update_cart_item():
+	content = request.get_json()
+
+	cartid = content['cartid']
+	quantity = content['quantity']
+	options = content['options']
+	others = content['others']
+	sizes = content['sizes']
+	note = content['note']
+
+	cartitem = Cart.query.filter_by(id=cartid).first()
+
+	if cartitem != None:
+		cartitem.quantity = quantity
+		cartitem.options = json.dumps(options)
+		cartitem.others = json.dumps(others)
+		cartitem.sizes = json.dumps(sizes)
+		cartitem.note = note
+
+		db.session.commit()
+
+		return { "msg": "cart item is updated" }
+	else:
+		msg = "Cart item doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/edit_call_for/<id>")
+def edit_call_for(id):
+	cartitem = Cart.query.filter_by(id=id).first()
+
+	if cartitem != None:
+		callfor = json.loads(cartitem.callfor)
+		product = Product.query.filter_by(id=cartitem.productId).first()
+		searchedfriends = []
+		row = []
+		numsearchedfriends = 0
+
+		if product.price == "":
+			sizes = json.loads(cartitem.sizes)
+
+			for info in sizes:
+				if info["selected"] == True:
+					cost = cartitem.quantity * float(info["price"])
+		else:
+			cost = cartitem.quantity * float(product.price)
+
+		for k in range(len(callfor)):
+			info = callfor[k]
+
+			user = User.query.filter_by(id=info['userid']).first()
+
+			row.append({
+				"key": "selected-friend-" + str(user.id),
+				"id": user.id,
+				"profile": user.profile,
+				"username": user.username
+			})
+			numsearchedfriends += 1
+
+			if len(row) == 4 or (len(callfor) - 1 == k and len(row) > 0):
+				if len(callfor) - 1 == k and len(row) > 0:
+					key = user.id + 1
+
+					leftover = 4 - len(row)
+
+					for k in range(leftover):
+						row.append({ "key": "selected-friend-" + str(key) })
+						key += 1
+				
+				searchedfriends.append({ "key": "selected-friend-row-" + str(len(searchedfriends)), "row": row })
+				row = []
+
+		datas = json.loads(cartitem.options)
+		options = []
+		for k in range(len(datas)):
+			options.append(datas[k])
+			options[-1]["key"] = "option-" + str(k)
+
+		datas = json.loads(cartitem.others)
+		others = []
+		for k in range(len(datas)):
+			others.append(datas[k])
+			others[-1]["key"] = "other-" + str(k)
+
+		datas = json.loads(cartitem.sizes)
+		sizes = []
+		for k in range(len(datas)):
+			sizes.append(datas[k])
+			sizes[-1]["key"] = "size-" + str(k)
+
+		orderingItem = {
+			"name": product.name,
+			"image": product.image,
+			"options": options,
+			"others": others,
+			"sizes": sizes,
+			"quantity": cartitem.quantity,
+			"cost": cost
+		}
+
+		return { "searchedFriends": searchedfriends, "numSearchedFriends": numsearchedfriends, "orderingItem": orderingItem }
+	else:
+		msg = "Cart item doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/update_call_for", methods=["POST"])
+def update_call_for():
+	content = request.get_json()
+
+	cartid = content['cartid']
+	callfor = json.dumps(content['callfor'])
+
+	cartitem = Cart.query.filter_by(id=cartid).first()
+
+	if cartitem != None:
+		cartitem.callfor = callfor
+
+		db.session.commit()
+
+		return { "msg": "Call for updated" }
+	else:
+		msg = "Cart item doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/remove_call_for", methods=["POST"])
+def remove_call_for():
+	content = request.get_json()
+
+	cartid = content['cartid']
+	callforid = content['callforid']
+
+	cartitem = Cart.query.filter_by(id=cartid).first()
+
+	if cartitem != None:
+		callfor = json.loads(cartitem.callfor)
+		deleteindex = 0
+
+		for k in range(len(callfor)):
+			info = callfor[k]
+
+			if info['userid'] == callforid:
+				deleteindex = k
+
+		del callfor[deleteindex]
+
+		cartitem.callfor = json.dumps(callfor)
+
+		db.session.commit()
+
+		return { "msg": "callfor is removed" }
+	else:
+		msg = "Cart item doesn't exist"
 
 	return { "errormsg": msg }

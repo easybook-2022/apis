@@ -77,12 +77,12 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	accountid = db.Column(db.String(25))
+	accountId = db.Column(db.String(25))
 
 	def __init__(
 		self, 
 		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
-		longitude, latitude, owners, type, hours, accountid
+		longitude, latitude, owners, type, hours, accountId
 	):
 		self.name = name
 		self.addressOne = addressOne
@@ -97,7 +97,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
-		self.accountid = accountid
+		self.accountId = accountId
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -153,9 +153,12 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	seaters = db.Column(db.Integer)
+	customers = db.Column(db.String(255))
+	note = db.Column(db.String(225))
+	orders = db.Column(db.Text)
+	table = db.Column(db.String(20))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, seaters):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -165,7 +168,10 @@ class Schedule(db.Model):
 		self.cancelReason = cancelReason
 		self.nextTime = nextTime
 		self.locationType = locationType
-		self.seaters = seaters
+		self.customers = customers
+		self.note = note
+		self.orders = orders
+		self.table = table
 
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
@@ -178,15 +184,19 @@ class Product(db.Model):
 	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 	options = db.Column(db.Text)
+	others = db.Column(db.Text)
+	sizes = db.Column(db.String(150))
 	price = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image, options, price):
+	def __init__(self, locationId, menuId, name, info, image, options, others, sizes, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
 		self.info = info
 		self.image = image
 		self.options = options
+		self.others = others
+		self.sizes = sizes
 		self.price = price
 
 	def __repr__(self):
@@ -196,16 +206,22 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	productId = db.Column(db.Integer)
 	quantity = db.Column(db.Integer)
-	adder = db.Column(db.String(20))
+	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
+	others = db.Column(db.Text)
+	sizes = db.Column(db.String(150))
+	note = db.Column(db.String(100))
 
-	def __init__(self, productId, quantity, adder, callfor, options):
+	def __init__(self, productId, quantity, adder, callfor, options, others, sizes, note):
 		self.productId = productId
 		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
+		self.others = others
+		self.sizes = sizes
+		self.note = note
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
@@ -217,14 +233,18 @@ class Transaction(db.Model):
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
+	others = db.Column(db.Text)
+	sizes = db.Column(db.String(150))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, productId, adder, callfor, options, time):
+	def __init__(self, groupId, productId, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.productId = productId
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
+		self.others = others
+		self.sizes = sizes
 		self.time = time
 
 	def __repr__(self):
@@ -434,7 +454,7 @@ def add_bankaccount():
 	location = Location.query.filter_by(id=locationid).first()
 
 	if location != None:
-		accountid = location.accountid
+		accountid = location.accountId
 
 		stripe.Account.create_external_account(
 			accountid,
@@ -452,16 +472,22 @@ def update_bankaccount():
 	content = request.get_json()
 
 	locationid = content['locationid']
-	bankid = content['bankid']
+	oldbanktoken = content['oldbanktoken']
+	banktoken = content['banktoken']
 
 	location = Location.query.filter_by(id=locationid).first()
 
 	if location != None:
-		accountid = location.accountid
+		accountid = location.accountId
 
-		stripe.Account.modify_external_account(
+		stripe.Account.delete_external_account(
 			accountid,
-			bankid
+			oldbanktoken
+		)
+
+		stripe.Account.create_external_account(
+			accountid,
+			external_account=banktoken
 		)
 
 		return { "msg": "Added a bank account" }
@@ -494,7 +520,7 @@ def get_bankaccounts(id):
 	content = request.get_json()
 
 	location = Location.query.filter_by(id=id).first()
-	accountid = location.accountid
+	accountid = location.accountId
 
 	accounts = stripe.Account.list()
 	datas = accounts.data[0].external_accounts.data
@@ -524,7 +550,7 @@ def set_bankaccountdefault():
 	location = Location.query.filter_by(id=locationid).first()
 
 	if location != None:
-		accountid = location.accountid
+		accountid = location.accountId
 
 		stripe.Account.modify_external_account(
 			accountid,
@@ -548,7 +574,7 @@ def get_bankaccount_info():
 	location = Location.query.filter_by(id=locationid).first()
 
 	if location != None:
-		accountid = location.accountid
+		accountid = location.accountId
 
 		accounts = stripe.Account.retrieve(accountid)
 		datas = accounts.external_accounts.data
@@ -557,8 +583,8 @@ def get_bankaccount_info():
 			if data.id == bankid:
 				routing_number = data.routing_number
 
-				transit = routing_number[1:4]
-				institution = routing_number[4:]
+				transit = routing_number[4:]
+				institution = routing_number[1:4]
 
 				info = {
 					"account_holder_name": data.account_holder_name,
@@ -583,7 +609,7 @@ def delete_bankaccount():
 	location = Location.query.filter_by(id=locationid).first()
 
 	if location != None:
-		accountid = location.accountid
+		accountid = location.accountId
 
 		stripe.Account.delete_external_account(
 			accountid,

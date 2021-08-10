@@ -77,12 +77,12 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	accountid = db.Column(db.String(25))
+	accountId = db.Column(db.String(25))
 
 	def __init__(
 		self, 
 		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
-		longitude, latitude, owners, type, hours, accountid
+		longitude, latitude, owners, type, hours, accountId
 	):
 		self.name = name
 		self.addressOne = addressOne
@@ -97,7 +97,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
-		self.accountid = accountid
+		self.accountId = accountId
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -153,9 +153,12 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	seaters = db.Column(db.Integer)
+	customers = db.Column(db.String(255))
+	note = db.Column(db.String(225))
+	orders = db.Column(db.Text)
+	table = db.Column(db.String(20))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, seaters):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -165,7 +168,10 @@ class Schedule(db.Model):
 		self.cancelReason = cancelReason
 		self.nextTime = nextTime
 		self.locationType = locationType
-		self.seaters = seaters
+		self.customers = customers
+		self.note = note
+		self.orders = orders
+		self.table = table
 
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
@@ -178,15 +184,19 @@ class Product(db.Model):
 	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 	options = db.Column(db.Text)
+	others = db.Column(db.Text)
+	sizes = db.Column(db.String(150))
 	price = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image, options, price):
+	def __init__(self, locationId, menuId, name, info, image, options, others, sizes, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
 		self.info = info
 		self.image = image
 		self.options = options
+		self.others = others
+		self.sizes = sizes
 		self.price = price
 
 	def __repr__(self):
@@ -196,16 +206,22 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	productId = db.Column(db.Integer)
 	quantity = db.Column(db.Integer)
-	adder = db.Column(db.String(20))
+	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
+	others = db.Column(db.Text)
+	sizes = db.Column(db.String(150))
+	note = db.Column(db.String(100))
 
-	def __init__(self, productId, quantity, adder, callfor, options):
+	def __init__(self, productId, quantity, adder, callfor, options, others, sizes, note):
 		self.productId = productId
 		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
+		self.others = others
+		self.sizes = sizes
+		self.note = note
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
@@ -217,14 +233,18 @@ class Transaction(db.Model):
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
+	others = db.Column(db.Text)
+	sizes = db.Column(db.String(150))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, productId, adder, callfor, options, time):
+	def __init__(self, groupId, productId, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.productId = productId
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
+		self.others = others
+		self.sizes = sizes
 		self.time = time
 
 	def __repr__(self):
@@ -273,7 +293,8 @@ def get_products():
 					"id": data['id'],
 					"name": data['name'],
 					"image": data['image'],
-					"price": data['price']
+					"price": data['price'],
+					"options": json.loads(data['options'])
 				})
 				numproducts += 1
 
@@ -315,29 +336,50 @@ def get_product_info(id):
 		for k in range(len(datas)):
 			data = datas[k]
 
-			option = { "key": "info-" + str(k + 1), "header": data['text'], "type": data['option'] }
+			option = { "key": "option-" + str(k), "header": data['text'], "type": data['option'] }
 
-			if data['option'] == 'size':
-				option["options"] = [
-					{ "key": "info-opt-0", "header": "small" },
-					{ "key": "info-opt-1", "header": "medium" },
-					{ "key": "info-opt-2", "header": "large" },
-					{ "key": "info-opt-3", "header": "extra large" }
-				]
-				option["selected"] = ""
-			elif data['option'] == 'percentage':
+			if data['option'] == 'percentage':
 				option["selected"] = 0
-			elif data['option'] == 'quantity':
+			elif data['option'] == 'amount':
 				option["selected"] = 0
 
 			options.append(option)
+
+		datas = json.loads(product.others)
+		others = []
+
+		for k in range(len(datas)):
+			data = datas[k]
+
+			others.append({
+				"key": "other-" + str(k), 
+				"name": data['name'], 
+				"input": data['input'], 
+				"price": data['price'],
+				"selected": False
+			})
+
+		datas = json.loads(product.sizes)
+		sizes = []
+
+		for k in range(len(datas)):
+			data = datas[k]
+
+			sizes.append({
+				"key": "size-" + str(k),
+				"name": data["name"],
+				"price": data["price"],
+				"selected": False
+			})
 
 		info = {
 			"name": product.name,
 			"info": product.info,
 			"image": product.image,
 			"options": options,
-			"price": float(product.price)
+			"others": others,
+			"sizes": sizes,
+			"price": float(product.price) if product.price != "" else ""
 		}
 
 		return { "productInfo": info }
@@ -397,6 +439,8 @@ def add_product():
 	info = request.form['info']
 	image = request.files['image']
 	options = request.form['options']
+	others = request.form['others']
+	sizes = request.form['sizes']
 	price = request.form['price']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
@@ -408,7 +452,9 @@ def add_product():
 			data = query("select * from product where locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "' and name = '" + name + "'", True)
 
 			if len(data) == 0:
-				product = Product(locationid, menuid, name, info, image.filename, options, price)
+				price = price if len(sizes) > 0 else ""
+
+				product = Product(locationid, menuid, name, info, image.filename, options, others, sizes, price)
 
 				image.save(os.path.join('static', image.filename))
 
@@ -418,6 +464,57 @@ def add_product():
 				return { "id": product.id }
 			else:
 				msg = "Product already exist"
+		else:
+			msg = "Location doesn't exist"
+	else:
+		msg = "Owner doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/update_product", methods=["POST"])
+def update_product():
+	ownerid = request.form['ownerid']
+	locationid = request.form['locationid']
+	menuid = request.form['menuid']
+	name = request.form['name']
+	info = request.form['info']
+	image = request.files['image']
+	options = request.form['options']
+	others = request.form['others']
+	sizes = request.form['sizes']
+	price = request.form['price']
+
+	owner = Owner.query.filter_by(id=ownerid).first()
+
+	if owner != None:
+		location = Location.query.filter_by(id=locationid).first()
+
+		if location != None:
+			product = Product.query.filter_by(locationId=locationid, menuId=menuid).first()
+
+			if product != None:
+				product.name = name
+				product.info = info
+				product.price = price
+				product.options = options
+				product.others = others
+				product.sizes = sizes
+
+				oldimage = product.image
+
+				if oldimage != image.filename:
+					if os.path.exists("static/" + oldimage):
+						os.remove("static/" + oldimage)
+
+					image.save(os.path.join('static', image.filename))
+
+					product.image = image.filename
+
+				db.session.commit()
+
+				return { "msg": "product updated", "id": product.id }
+			else:
+				msg = "Product doesn't exist"
 		else:
 			msg = "Location doesn't exist"
 	else:
