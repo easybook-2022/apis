@@ -321,7 +321,6 @@ def get_service_info(id):
 
 @app.route("/add_service", methods=["POST"])
 def add_service():
-	ownerid = request.form['ownerid']
 	locationid = request.form['locationid']
 	menuid = request.form['menuid']
 	name = request.form['name']
@@ -330,77 +329,66 @@ def add_service():
 	price = request.form['price']
 	duration = request.form['duration']
 
-	owner = Owner.query.filter_by(id=ownerid).first()
+	location = Location.query.filter_by(id=locationid).first()
 
-	if owner != None:
-		location = Location.query.filter_by(id=locationid).first()
+	if location != None:
+		data = query("select * from service where locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "' and name = '" + name + "'", True)
 
-		if location != None:
-			data = query("select * from service where locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "' and name = '" + name + "'", True)
+		if len(data) == 0:
+			service = Service(locationid, menuid, name, info, image.filename, price, duration)
 
-			if len(data) == 0:
-				service = Service(locationid, menuid, name, info, image.filename, price, duration)
+			image.save(os.path.join("static", image.filename))
 
-				image.save(os.path.join("static", image.filename))
+			db.session.add(service)
+			db.session.commit()
 
-				db.session.add(service)
-				db.session.commit()
-
-				return { "id": service.id }
-			else:
-				msg = "Service already exist"
+			return { "id": service.id }
 		else:
-			msg = "Location doesn't exist"
+			msg = "Service already exist"
 	else:
-		msg = "Owner doesn't exist"
+		msg = "Location doesn't exist"
 
 	return { "errormsg": msg }
 
 @app.route("/update_service", methods=["POST"])
 def update_service():
-	ownerid = request.form['ownerid']
 	locationid = request.form['locationid']
-	serviceid = request.form['serviceid']
 	menuid = request.form['menuid']
+	serviceid = request.form['serviceid']
 	name = request.form['name']
 	info = request.form['info']
 	image = request.files['image']
 	price = request.form['price']
 	duration = request.form['duration']
 
-	owner = Owner.query.filter_by(id=ownerid).first()
+	location = Location.query.filter_by(id=locationid).first()
 
-	if owner != None:
-		location = Location.query.filter_by(id=locationid).first()
+	if location != None:
+		service = Service.query.filter_by(id=serviceid, locationId=locationid, menuId=menuid).first()
 
-		if location != None:
-			service = Service.query.filter_by(locationId=locationid, menuId=menuid).first()
+		if service != None:
+			service.name = name
+			service.info = info
+			service.price = price
+			service.duration = duration
 
-			if service != None:
-				service.name = name
-				service.info = info
-				service.price = price
-				service.duration = duration
+			oldimage = service.image
 
-				oldimage = service.image
+			if oldimage != image.filename:
+				if os.path.exists("static/" + oldimage):
+					os.remove("static/" + oldimage)
 
-				if oldimage != image.filename:
-					if os.path.exists("static/" + oldimage):
-						os.remove("static/" + oldimage)
+				image.save(os.path.join('static', image.filename))
 
-					image.save(os.path.join('static', image.filename))
+				service.image = image.filename
 
-					service.image = image.filename
+			db.session.commit()
 
-				db.session.commit()
-
-				return { "msg": "service updated", "id": service.id }
-			else:
-				msg = "Service already exist"
+			return { "msg": "service updated", "id": service.id }
 		else:
-			msg = "Location doesn't exist"
+			msg = "Service already exist"
 	else:
-		msg = "Owner doesn't exist"
+		msg = "Location doesn't exist"
 
 	return { "errormsg": msg }
 

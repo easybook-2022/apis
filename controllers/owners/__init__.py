@@ -490,7 +490,7 @@ def update_bankaccount():
 			external_account=banktoken
 		)
 
-		return { "msg": "Added a bank account" }
+		return { "msg": "Updated a bank account" }
 	else:
 		msg = "Owner doesn't exist"
 

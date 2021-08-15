@@ -432,7 +432,6 @@ def confirm_order():
 
 @app.route("/add_product", methods=["POST"])
 def add_product():
-	ownerid = request.form['ownerid']
 	locationid = request.form['locationid']
 	menuid = request.form['menuid']
 	name = request.form['name']
@@ -443,39 +442,34 @@ def add_product():
 	sizes = request.form['sizes']
 	price = request.form['price']
 
-	owner = Owner.query.filter_by(id=ownerid).first()
+	location = Location.query.filter_by(id=locationid).first()
 
-	if owner != None:
-		location = Location.query.filter_by(id=locationid).first()
+	if location != None:
+		data = query("select * from product where locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "' and name = '" + name + "'", True)
 
-		if location != None:
-			data = query("select * from product where locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "' and name = '" + name + "'", True)
+		if len(data) == 0:
+			price = price if len(sizes) > 0 else ""
 
-			if len(data) == 0:
-				price = price if len(sizes) > 0 else ""
+			product = Product(locationid, menuid, name, info, image.filename, options, others, sizes, price)
 
-				product = Product(locationid, menuid, name, info, image.filename, options, others, sizes, price)
+			image.save(os.path.join('static', image.filename))
 
-				image.save(os.path.join('static', image.filename))
+			db.session.add(product)
+			db.session.commit()
 
-				db.session.add(product)
-				db.session.commit()
-
-				return { "id": product.id }
-			else:
-				msg = "Product already exist"
+			return { "id": product.id }
 		else:
-			msg = "Location doesn't exist"
+			msg = "Product already exist"
 	else:
-		msg = "Owner doesn't exist"
+		msg = "Location doesn't exist"
 
 	return { "errormsg": msg }
 
 @app.route("/update_product", methods=["POST"])
 def update_product():
-	ownerid = request.form['ownerid']
 	locationid = request.form['locationid']
 	menuid = request.form['menuid']
+	productid = request.form['productid']
 	name = request.form['name']
 	info = request.form['info']
 	image = request.files['image']
@@ -484,41 +478,36 @@ def update_product():
 	sizes = request.form['sizes']
 	price = request.form['price']
 
-	owner = Owner.query.filter_by(id=ownerid).first()
+	location = Location.query.filter_by(id=locationid).first()
 
-	if owner != None:
-		location = Location.query.filter_by(id=locationid).first()
+	if location != None:
+		product = Product.query.filter_by(id=productid, locationId=locationid, menuId=menuid).first()
 
-		if location != None:
-			product = Product.query.filter_by(locationId=locationid, menuId=menuid).first()
+		if product != None:
+			product.name = name
+			product.info = info
+			product.price = price
+			product.options = options
+			product.others = others
+			product.sizes = sizes
 
-			if product != None:
-				product.name = name
-				product.info = info
-				product.price = price
-				product.options = options
-				product.others = others
-				product.sizes = sizes
+			oldimage = product.image
 
-				oldimage = product.image
+			if oldimage != image.filename:
+				if os.path.exists("static/" + oldimage):
+					os.remove("static/" + oldimage)
 
-				if oldimage != image.filename:
-					if os.path.exists("static/" + oldimage):
-						os.remove("static/" + oldimage)
+				image.save(os.path.join('static', image.filename))
 
-					image.save(os.path.join('static', image.filename))
+				product.image = image.filename
 
-					product.image = image.filename
+			db.session.commit()
 
-				db.session.commit()
-
-				return { "msg": "product updated", "id": product.id }
-			else:
-				msg = "Product doesn't exist"
+			return { "msg": "product updated", "id": product.id }
 		else:
-			msg = "Location doesn't exist"
+			msg = "Product doesn't exist"
 	else:
-		msg = "Owner doesn't exist"
+		msg = "Location doesn't exist"
 
 	return { "errormsg": msg }
 

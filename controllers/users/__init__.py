@@ -458,17 +458,25 @@ def update_paymentmethod():
 	content = request.get_json()
 
 	userid = content['userid']
-	cardid = content['cardid']
+	oldcardtoken = content['oldcardtoken']
+	cardtoken = content['cardtoken']
 
 	user = User.query.filter_by(id=userid).first()
 
 	if user != None:
 		customerid = user.customerid
 
-		stripe.Customer.modify_source(
+		stripe.Customer.delete_source(
 			customerid,
-			cardid
+			oldcardtoken
 		)
+
+		stripe.Customer.create_source(
+			customerid,
+			source=cardtoken
+		)
+
+		return { "msg": "Updated a payment method" }
 	else:
 		msg = "User doesn't exist"
 
@@ -643,7 +651,7 @@ def get_notifications(id):
 			notifications[-1]['price'] = int(data['quantity']) * float(product.price) if product.price != "" else ""
 
 		# get reservation requests
-		sql = "select * from schedule where (userId = " + str(id) + " and status = 'requested') or customers like '%{\"userid\": \"" + str(id) + "\", \"status\": \"waiting\"}%'"
+		sql = "select * from schedule where (userId = " + str(id) + " and (status = 'requested' or status = 'rebook' or status = 'cancel')) or customers like '%{\"userid\": \"" + str(id) + "\", \"status\": \"waiting\"}%'"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -717,7 +725,7 @@ def get_num_updates():
 		num += query(sql, True)[0]["num"]
 
 		# get reservation requests
-		sql = "select count(*) as num from schedule where (userId = " + str(userid) + " or customers like '%\"" + str(userid) + "\"%')"
+		sql = "select count(*) as num from schedule where (userId = " + str(userid) + " and (status = 'requested' or status = 'rebook' or status = 'cancel')) or customers like '%(\"userid\": \"" + str(userid) + "\", \"status\": \"waiting\"}%'"
 		num += query(sql, True)[0]["num"]
 
 		return { "numNotifications": num }

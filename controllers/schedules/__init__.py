@@ -284,7 +284,7 @@ def get_requests():
 		location = Location.query.filter_by(id=locationid).first()
 
 		if location != None:
-			datas = query("select * from schedule where status = 'requested'", True)
+			datas = query("select * from schedule where locationId = " + str(locationid) + " and status = 'requested'", True)
 			requests = []
 
 			for data in datas:
@@ -298,12 +298,13 @@ def get_requests():
 				requests.append({
 					"key": "request-" + str(data['id']),
 					"id": str(data['id']),
+					"type": data['locationType'],
 					"userId": user.id,
 					"username": user.username,
 					"time": int(data['time']),
 					"name": service.name if service != None else location.name,
 					"image": service.image if service != None else location.logo,
-					"diners": len(json.loads(data['customers']))
+					"diners": len(json.loads(data['customers'])) if data['locationType'] != 'nail' else False
 				})
 
 			return { "requests": requests }
@@ -404,6 +405,15 @@ def reschedule_reservation():
 
 	return { "errormsg": msg }
 
+@app.route("/accept_appointment", methods=["POST"])
+def accept_appointment():
+	content = request.get_json()
+
+	requestid = content['requestid']
+	tablenum = content['tablenum']
+
+	return { "msg": "" }
+
 @app.route("/request_appointment", methods=["POST"])
 def request_appointment():
 	content = request.get_json()
@@ -476,8 +486,8 @@ def request_appointment():
 
 	return { "errormsg": msg }
 
-@app.route("/accept_reservation", methods=["POST"])
-def accept_reservation():
+@app.route("/accept_request", methods=["POST"])
+def accept_request():
 	content = request.get_json()
 
 	requestid = content['requestid']
