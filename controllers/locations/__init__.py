@@ -289,73 +289,83 @@ def setup_location():
 	owner = Owner.query.filter_by(id=ownerid).first()
 
 	if owner != None:
-		# create a connected account
-		connectedaccount = stripe.Account.create(
-			type="custom",
-			country="CA",
-			business_type="company",
-			business_profile={
-				"name": name
-			},
-			company={
-				"address": {
+		location = Location.query.filter_by(phonenumber=phonenumber).first()
+
+		if location == None:
+			# create a connected account
+			connectedaccount = stripe.Account.create(
+				type="custom",
+				country="CA",
+				business_type="company",
+				business_profile={
+					"name": name
+				},
+				company={
+					"address": {
+						"city": city,
+						"line1": addressOne,
+						"line2": addressTwo,
+						"postal_code": postalcode,
+						"state": province 
+					},
+					"name": name,
+					"phone": phonenumber,
+				},
+				capabilities={
+					"transfers": {"requested": True},
+					"card_payments": {"requested": True}
+				},
+				tos_acceptance={
+					"date": time,
+					"ip": str(ipAddress)
+				}
+			)
+			stripe.Account.create_person(
+				connectedaccount.id,
+				first_name=name,
+				last_name=" ",
+				address={
 					"city": city,
 					"line1": addressOne,
 					"line2": addressTwo,
 					"postal_code": postalcode,
 					"state": province 
 				},
-				"name": name,
-				"phone": phonenumber,
-			},
-			capabilities={
-				"transfers": {"requested": True},
-				"card_payments": {"requested": True}
-			},
-			tos_acceptance={
-				"date": time,
-				"ip": str(ipAddress)
-			}
-		)
-		stripe.Account.create_person(
-			connectedaccount.id,
-			first_name=name,
-			last_name=" ",
-			address={
-				"city": city,
-				"line1": addressOne,
-				"line2": addressTwo,
-				"postal_code": postalcode,
-				"state": province 
-			},
-			dob={
-				"day": 30,
-				"month": 7,
-				"year": 1996
-			},
-			relationship={
-				"representative": True
-			}
-		)
+				dob={
+					"day": 30,
+					"month": 7,
+					"year": 1996
+				},
+				relationship={
+					"representative": True
+				}
+			)
 
-		location = Location(
-			name, addressOne, addressTwo, 
-			city, province, postalcode, phonenumber, logo.filename,
-			longitude, latitude, '["' + str(ownerid) + '"]',
-			'', '', connectedaccount.id
-		)
-		db.session.add(location)
-		db.session.commit()
+			location = Location(
+				name, addressOne, addressTwo, 
+				city, province, postalcode, phonenumber, logo.filename,
+				longitude, latitude, '["' + str(ownerid) + '"]',
+				'', '', connectedaccount.id
+			)
+			db.session.add(location)
+			db.session.commit()
 
-		owner.locationId = location.id
+			owner.locationId = location.id
 
-		db.session.commit()
+			db.session.commit()
 
-		logo.save(os.path.join('static', logo.filename))
+			logo.save(os.path.join('static', logo.filename))
 
-		return { "msg": "location setup", "id": location.id }
+		if os.path.isfile('static/' + logo.filename):
+			return { "msg": "location setup", "id": location.id }
+		else:
+			logo.save(os.path.join('static', logo.filename))
+
+			msg = "Logo cannot be saved"
 	else:
-		return { "errormsg": "Owner doesn't exist" }
+		msg = "Owner doesn't exist"
+
+	return { "errormsg": msg }
 
 @app.route("/update_location", methods=["POST"])
 def update_location():

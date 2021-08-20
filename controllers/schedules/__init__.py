@@ -154,7 +154,7 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	customers = db.Column(db.String(255))
+	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
@@ -742,7 +742,8 @@ def get_schedule_info(id):
 			"name": location.name,
 			"locationId": schedule.locationId,
 			"time": schedule.time,
-			"table": schedule.table
+			"table": schedule.table,
+			"numdiners": len(json.loads(schedule.customers))
 		}
 
 		return { "scheduleInfo": info, "msg": "" }
@@ -774,6 +775,8 @@ def add_item_to_order():
 	quantity = content['quantity']
 	callfor = content['callfor']
 	options = content['options']
+	others = content['others']
+	sizes = content['sizes']
 	note = content['note']
 
 	user = User.query.filter_by(id=userid).first()
@@ -783,8 +786,8 @@ def add_item_to_order():
 		product = Product.query.filter_by(id=productid).first()
 
 		if product != None:
-			for option in options:
-				if option['type'] == 'size' and option['selected'] == '':
+			if product.price == '':
+				if "true" not in json.dumps(sizes):
 					msg = "Please choose a size"
 
 			if msg == "":
@@ -808,9 +811,9 @@ def add_item_to_order():
 						first_group = groups[0]
 
 					if userid in first_group:
-						first_group[userid].append({ "id": getRanStr(), "productid": productid, "options": options, "quantity": quantity, "note": note, "callfor": callfor })
+						first_group[userid].append({ "id": getRanStr(), "productid": productid, "options": options, "others": others, "sizes": sizes, "quantity": quantity, "note": note, "callfor": callfor })
 					else:
-						first_group[userid] = [{ "id": getRanStr(), "productid": productid, "options": options, "quantity": quantity, "note": note, "callfor": callfor }]
+						first_group[userid] = [{ "id": getRanStr(), "productid": productid, "options": options, "others": others, "sizes": sizes, "quantity": quantity, "note": note, "callfor": callfor }]
 
 					groups[0] = first_group
 					orders['groups'] = groups
@@ -849,7 +852,7 @@ def see_orders(id):
 
 		for rounds in groups:
 			for orderer in rounds:
-				if orderer != "status":
+				if orderer != "status" and orderer != "id":
 					ordererInfo = User.query.filter_by(id=orderer).first()
 					orders = rounds[orderer]
 
@@ -859,6 +862,7 @@ def see_orders(id):
 
 						orderers = []
 						row = []
+						numorderers = 0
 
 						for k in range(len(callfor)):
 							info = callfor[k]
@@ -872,19 +876,44 @@ def see_orders(id):
 								"profile": orderer.profile
 							})
 							each_callfor_num += 1
+							numorderers += 1
 
 							if len(row) == 4 or (len(callfor) - 1 == k and len(row) > 0):
 								if len(callfor) - 1 == k and len(row) > 0:
-									key = orderer.id + 1
-
 									leftover = 4 - len(row)
 
 									for k in range(leftover):
-										row.append({ "key": "orderer-" + str(key) })
-										key += 1
+										row.append({ "key": "orderer-" + str(each_callfor_num) })
+										each_callfor_num += 1
 
 								orderers.append({ "key": "orderer-row-" + str(len(orderers)), "row": row })
 								row = []
+
+						options = order['options']
+						others = order['others']
+						sizes = order['sizes']
+						quantity = int(order['quantity'])
+						cost = 0
+
+						for k in range(len(options)):
+							options[k]['key'] = "option-" + str(k)
+
+						for k in range(len(others)):
+							others[k]['key'] = "other-" + str(k)
+
+						for k in range(len(sizes)):
+							sizes[k]['key'] = "size-" + str(k)
+
+						for other in others:
+							if other['selected'] == True:
+								cost += float(other['price'])
+
+						if product.price == "":
+							for size in sizes:
+								if size['selected'] == True:
+									cost += quantity * float(size['price'])
+						else:
+							cost += quantity * float(product.price)
 
 						each_orders.append({
 							"id": order['id'],
@@ -892,11 +921,13 @@ def see_orders(id):
 							"key": "meal-" + order['id'],
 							"name": product.name,
 							"note": order['note'],
-							"options": order['options'],
-							"quantity": order['quantity'],
-							"price": float(product.price),
+							"options": options,
+							"others": others,
+							"sizes": sizes,
+							"quantity": quantity,
+							"cost": cost,
 							"orderers": orderers,
-							"numorderers": each_callfor_num
+							"numorderers": numorderers
 						})
 						each_callfor_num = 0
 						each_order_num += 1
@@ -918,6 +949,48 @@ def see_orders(id):
 			each_orderers = []
 
 		return { "rounds": each_rounds }
+	else:
+		msg = "Schedule doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/edit_diners/<id>")
+def edit_diners(id):
+	schedule = Schedule.query.filter_by(id=id).first()
+
+	if schedule != None:
+		customers = json.loads(schedule.customers)
+		customers.append({ "userid": str(schedule.userId), "status": "confirm" })
+		diners = []
+		row = []
+		numdiners = 0
+
+		for k, customer in enumerate(customers):
+			diner = User.query.filter_by(id=customer['userid']).first()
+
+			row.append({
+				"key": "diner-" + str(diner.id),
+				"id": diner.id,
+				"profile": diner.profile,
+				"username": diner.username,
+				"status": customer['status']
+			})
+			numdiners += 1
+
+			if len(row) == 4 or (len(customers) - 1 == k and len(row) > 0):
+				if len(customers) - 1 == k and len(row) > 0:
+					key = diner.id + 1
+
+					leftover = 4 - len(row)
+
+					for k in range(leftover):
+						row.append({ "key": "diner-" + str(key) })
+						key += 1
+
+				diners.append({ "key": "diner-row-" + str(len(diners)), "row": row })
+				row = []
+
+		return { "diners": diners, "numdiners": numdiners }
 	else:
 		msg = "Schedule doesn't exist"
 
@@ -952,6 +1025,21 @@ def get_orders(id):
 
 						for order in orders:
 							product = Product.query.filter_by(id=order['productid']).first()
+							others = order['others']
+							sizes = order['sizes']
+							quantity = int(order['quantity'])
+							price = 0
+
+							for other in others:
+								if other['selected'] == True:
+									price += float(other['price'])
+
+							if product.price == "":
+								for size in sizes:
+									if size['selected'] == True:
+										price += quantity * float(size['price'])
+							else:
+								price += quantity * float(product.price)
 
 							each_orders.append({
 								"id": order['id'],
@@ -961,7 +1049,7 @@ def get_orders(id):
 								"note": order['note'],
 								"options": order['options'],
 								"quantity": order['quantity'],
-								"price": float(product.price)
+								"price": round(price, 2)
 							})
 							each_callfor_num = 0
 							each_order_num += 1
@@ -1064,34 +1152,46 @@ def edit_order():
 
 		for rounds in groups:
 			for k in rounds:
-				if k != "status":
+				if k != "status" and k != "id":
 					for orderer in rounds[k]:
 						if orderer['id'] == orderid:
 							product = Product.query.filter_by(id=orderer['productid']).first()
 
 							options = orderer['options']
+							others = orderer['others']
+							sizes = orderer['sizes']
+							quantity = int(orderer['quantity'])
+							cost = 0
 
 							for k in range(len(options)):
-								option = options[k]
+								options[k]['key'] = "info-" + str(k)
 
-								if option['type'] == 'size':
-									option['options'] = [
-										{ "key": "info-opt-0", "header": "small" },
-										{ "key": "info-opt-1", "header": "medium" },
-										{ "key": "info-opt-2", "header": "large" },
-										{ "key": "info-opt-3", "header": "extra large" }
-									]
+							for k in range(len(others)):
+								others[k]['key'] = "other-" + str(k)
 
-								option['key'] = "info-" + str(k)
+							for k in range(len(sizes)):
+								sizes[k]['key'] = "size-" + str(k)
+
+							for other in others:
+								if other['selected'] == True:
+									cost += float(other['price'])
+
+							if product.price == "":
+								for size in sizes:
+									if size['selected'] == True:
+										cost += quantity * float(size['price'])
+							else:
+								cost += quantity * float(product.price)
 
 							info = {
 								"name": product.name,
 								"info": product.info,
 								"image": product.image,
-								"quantity": orderer['quantity'],
-								"options": options,
+								"quantity": quantity,
+								"options": options, "others": others, "sizes": sizes,
 								"note": orderer['note'],
-								"price": float(product.price)
+								"price": float(product.price) if product.price != "" else 0,
+								"cost": cost
 							}
 
 							return { "orderInfo": info, "msg": "order info fetched" }
@@ -1110,6 +1210,8 @@ def update_order():
 	orderid = content['orderid']
 	quantity = content['quantity']
 	options = content['options']
+	others = content['others']
+	sizes = content['sizes']
 	note = content['note']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
@@ -1121,10 +1223,12 @@ def update_order():
 
 		for rounds in groups:
 			for k in rounds:
-				if k != "status":
+				if k != "status" and k != "id":
 					for orderer in rounds[k]:
 						if orderer['id'] == orderid:
 							orderer['options'] = options
+							orderer['others'] = others
+							orderer['sizes'] = sizes
 							orderer['quantity'] = quantity
 							orderer['note'] = note
 
@@ -1134,6 +1238,38 @@ def update_order():
 		db.session.commit()
 
 		return { "msg": "order updated" }
+	else:
+		msg = "Schedule doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/delete_order", methods=["POST"])
+def delete_order():
+	content = request.get_json()
+
+	scheduleid = content['scheduleid']
+	orderid = content['orderid']
+
+	schedule = Schedule.query.filter_by(id=scheduleid).first()
+
+	if schedule != None:
+		orders = json.loads(schedule.orders)
+
+		groups = orders['groups']
+
+		for rounds in groups:
+			for k in rounds:
+				if k != "status" and k != "id":
+					for m, data in enumerate(rounds[k]):
+						if data['id'] == orderid:
+							del rounds[k][m]
+
+		orders['groups'] = groups
+		schedule.orders = json.dumps(orders)
+
+		db.session.commit()
+
+		return { "msg": "order deleted" }
 	else:
 		msg = "Schedule doesn't exist"
 
@@ -1149,11 +1285,13 @@ def add_diners():
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
 
 	if schedule != None:
-		diners = json.loads(schedule.customers)
+		booker = str(schedule.userId)
 
-		diners += newdiners
+		for k, newdiner in enumerate(newdiners):
+			if newdiner["userid"] == booker:
+				del newdiners[k]
 
-		schedule.customers = json.dumps(diners)
+		schedule.customers = json.dumps(newdiners)
 
 		db.session.commit()
 
@@ -1179,7 +1317,7 @@ def edit_order_callfor():
 
 		for rounds in groups:
 			for k in rounds:
-				if k != "status":
+				if k != "status" and k != "id":
 					for orderer in rounds[k]:
 						if orderer['id'] == orderid:
 							callfor = orderer['callfor']
@@ -1214,16 +1352,37 @@ def edit_order_callfor():
 									searcheddiners.append({ "key": "selected-friend-row-" + str(len(searcheddiners)), "row": row })
 
 							options = orderer['options']
+							others = orderer['others']
+							sizes = orderer['sizes']
+							quantity = int(orderer['quantity'])
+							cost = 0
 
 							for k in range(len(options)):
-								options[k]['key'] = 'opt-' + str(k)
+								options[k]['key'] = "option-" + str(k)
+
+							for k in range(len(others)):
+								others[k]['key'] = "other-" + str(k)
+
+							for k in range(len(sizes)):
+								sizes[k]['key'] = "size-" + str(k)
+
+							for other in others:
+								if other['selected'] == True:
+									cost += float(other['price'])
+
+							if product.price == "":
+								for size in sizes:
+									if size['selected'] == True:
+										cost += quantity * float(size['price'])
+							else:
+								cost += quantity * float(product.price)
 
 							orderingItem = {
 								"name": product.name,
 								"image": product.image,
-								"options": options,
-								"quantity": orderer['quantity'],
-								"cost": float(orderer['quantity'] * float(product.price))
+								"options": options, "others": others, "sizes": sizes,
+								"quantity": int(orderer['quantity']),
+								"cost": cost
 							}
 
 							return { "searchedDiners": searcheddiners, "numSearchedDiners": numsearcheddiners, "orderingItem": orderingItem }
@@ -1249,7 +1408,7 @@ def update_order_callfor():
 
 		for rounds in groups:
 			for k in rounds:
-				if k != "status":
+				if k != "status" and k != "id":
 					for orderer in rounds[k]:
 						if orderer['id'] == orderid:
 							orderer['callfor'] = callfor

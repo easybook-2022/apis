@@ -651,7 +651,10 @@ def get_notifications(id):
 			notifications[-1]['price'] = int(data['quantity']) * float(product.price) if product.price != "" else ""
 
 		# get reservation requests
-		sql = "select * from schedule where (userId = " + str(id) + " and (status = 'requested' or status = 'rebook' or status = 'cancel')) or customers like '%{\"userid\": \"" + str(id) + "\", \"status\": \"waiting\"}%'"
+		sql = "select * from schedule where "
+		sql += "(userId = " + str(id) + " and (status = 'requested' or status = 'rebook' or status = 'cancel' or status = 'accepted'))"
+		sql += " or customers like '%{\"userid\": \"" + str(id) + "\", \"status\": \"waiting\"}%'"
+		sql += " or (status = 'accepted' and customers like '%{\"userid\": \"" + str(id) + "\", \"status\": \"confirm\"}%')"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -698,7 +701,7 @@ def get_notifications(id):
 				"table": data['table'],
 				"booker": userId == data['userId'],
 				"bookerName": booker.username,
-				"customers": customers,
+				"diners": len(customers),
 				"confirm": confirm
 			})
 
@@ -725,7 +728,10 @@ def get_num_updates():
 		num += query(sql, True)[0]["num"]
 
 		# get reservation requests
-		sql = "select count(*) as num from schedule where (userId = " + str(userid) + " and (status = 'requested' or status = 'rebook' or status = 'cancel')) or customers like '%(\"userid\": \"" + str(userid) + "\", \"status\": \"waiting\"}%'"
+		sql = "select count(*) as num from schedule where "
+		sql += "(userId = " + str(userid) + " and (status = 'requested' or status = 'rebook' or status = 'cancel' or status = 'accepted'))"
+		sql += " or customers like '%{\"userid\": \"" + str(userid) + "\", \"status\": \"waiting\"}%'"
+		sql += " or (status = 'accepted' and customers like '%{\"userid\": \"" + str(userid) + "\", \"status\": \"confirm\"}%')"
 		num += query(sql, True)[0]["num"]
 
 		return { "numNotifications": num }
@@ -808,7 +814,7 @@ def search_diners():
 			data = datas[k]
 
 			row.append({
-				"key": "friend-" + str(data['id']),
+				"key": "diner-" + str(data['id']),
 				"id": data['id'],
 				"profile": data['profile'],
 				"username": data['username']

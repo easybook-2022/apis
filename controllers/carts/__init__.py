@@ -288,17 +288,16 @@ def get_cart_items(id):
 
 		for data in datas:
 			product = Product.query.filter_by(id=data['productId']).first()
+			quantity = int(data['quantity'])
 			callfor = json.loads(data['callfor'])
 			options = json.loads(data['options'])
 			others = json.loads(data['others'])
 			sizes = json.loads(data['sizes'])
 			friends = []
 			row = []
-			price = 0
+			cost = 0
 
-			for k in range(len(callfor)):
-				info = callfor[k]
-
+			for k, info in enumerate(callfor):
 				friend = User.query.filter_by(id=info['userid']).first()
 
 				row.append({
@@ -333,17 +332,18 @@ def get_cart_items(id):
 				others[k]["key"] = "other-" + str(k)
 
 			for k in range(len(sizes)):
-				size = sizes[k]
+				sizes[k]["key"] = "size-" + str(k)
 
-				size["key"] = "size-" + str(k)
+			if product.price == "":
+				for size in sizes:
+					if size['selected'] == True:
+						cost += quantity * float(size['price'])
+			else:
+				cost += quantity * float(product.price)
 
-				if size["selected"] == True:
-					price += int(data['quantity']) * float(size["price"])
-
-				sizes[k] = size
-
-			if len(sizes) == 0:
-				price += float(int(data['quantity']) * float(product.price))
+			for other in others:
+				if other['selected'] == True:
+					cost += float(other['price'])
 
 			items.append({
 				"key": "cart-item-" + str(data['id']),
@@ -355,8 +355,8 @@ def get_cart_items(id):
 				"options": options,
 				"others": others,
 				"sizes": sizes,
-				"quantity": data['quantity'],
-				"price": price,
+				"quantity": quantity,
+				"cost": cost,
 				"orderers": friends
 			})
 
@@ -386,8 +386,8 @@ def add_item_to_cart():
 		product = Product.query.filter_by(id=productid).first()
 
 		if product != None:
-			if "true" not in json.dumps(sizes):
-				if size == '':
+			if product.price == '':
+				if "true" not in json.dumps(sizes):
 					msg = "Please choose a size"
 
 			if msg == "":
@@ -416,7 +416,7 @@ def remove_item_from_cart(id):
 		db.session.delete(cartitem)
 		db.session.commit()
 
-		return { "msg": "" }
+		return { "msg": "Cart item removed from cart" }
 	else:
 		msg = "Cart item doesn't exist"
 
@@ -444,22 +444,27 @@ def checkout():
 			product = Product.query.filter_by(id=data['productId']).first()
 			location = Location.query.filter_by(id=product.locationId).first()
 			sizes = json.loads(data['sizes'])
+			others = json.loads(data['others'])
+			quantity = int(data['quantity'])
+			cost = 0
 
-			if len(sizes) > 0:
-				for info in sizes:
-					if info["selected"] == True:
-						price = float(info["price"])
+			if product.price == "":
+				for size in sizes:
+					if size["selected"] == True:
+						cost += quantity * float(size["price"])
 			else:
-				price = float(product.price)
+				cost += quantity * float(product.price)
+
+			for other in others:
+				if other['selected'] == True:
+					cost += float(other['price'])
 
 			quantity = int(data['quantity'])
 			callfor = json.loads(data['callfor'])
 			options = data['options']
 			others = data['others']
-			sizes = data['sizes']
+			sizes = json.dumps(sizes)
 			friends = []
-
-			totalprice = int((price * quantity) * 100)
 
 			if len(callfor) > 0:
 				for info in callfor:
@@ -468,7 +473,7 @@ def checkout():
 					customerid = friend.customerid
 
 					stripe.Charge.create(
-						amount=totalprice,
+						amount=cost,
 						currency="cad",
 						customer=customerid,
 						description=username + " called " + str(quantity) + " of " + product.name + " for " + friend.username,
@@ -478,7 +483,7 @@ def checkout():
 					)
 			else:
 				stripe.Charge.create(
-					amount=totalprice,
+					amount=cost,
 					currency="cad",
 					customer=user.customerid,
 					description=username + " purchased " + str(quantity) + " of " + product.name,
@@ -507,16 +512,7 @@ def edit_cart_item(id):
 
 	if cartitem != None:
 		product = Product.query.filter_by(id=cartitem.productId).first()
-		sizes = json.loads(product.sizes)
-
-		if len(sizes) > 0:
-			sizes = json.loads(cartitem.sizes)
-
-			for info in sizes:
-				if info["selected"] == True:
-					price = cartitem.quantity * float(info["price"])
-		else:
-			price = cartitem.quantity * float(product.price)
+		quantity = int(cartitem.quantity)
 
 		datas = json.loads(cartitem.options)
 		options = []
@@ -555,11 +551,18 @@ def edit_cart_item(id):
 				"selected": data["selected"]
 			})
 
+		if product.price == "":
+			for info in datas:
+				if info["selected"] == True:
+					price = quantity * float(info["price"])
+		else:
+			price = quantity * float(product.price)
+
 		info = {
 			"name": product.name,
 			"info": product.info,
 			"image": product.image,
-			"quantity": cartitem.quantity,
+			"quantity": quantity,
 			"options": options,
 			"others": others,
 			"sizes": sizes,
@@ -714,13 +717,9 @@ def remove_call_for():
 		callfor = json.loads(cartitem.callfor)
 		deleteindex = 0
 
-		for k in range(len(callfor)):
-			info = callfor[k]
-
-			if info['userid'] == callforid:
-				deleteindex = k
-
-		del callfor[deleteindex]
+		for k, data in enumerate(callfor):
+			if data['userid'] == callforid:
+				del callfor[k]
 
 		cartitem.callfor = json.dumps(callfor)
 

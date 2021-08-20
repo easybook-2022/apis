@@ -379,7 +379,8 @@ def get_product_info(id):
 			"options": options,
 			"others": others,
 			"sizes": sizes,
-			"price": float(product.price) if product.price != "" else ""
+			"price": float(product.price) if product.price != "" else 0,
+			"cost": float(product.price) if product.price != "" else 0
 		}
 
 		return { "productInfo": info }
