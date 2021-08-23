@@ -153,7 +153,7 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	customers = db.Column(db.String(255))
+	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
@@ -333,9 +333,7 @@ def get_product_info(id):
 		datas = json.loads(product.options)
 		options = []
 
-		for k in range(len(datas)):
-			data = datas[k]
-
+		for k, data in enumerate(datas):
 			option = { "key": "option-" + str(k), "header": data['text'], "type": data['option'] }
 
 			if data['option'] == 'percentage':
@@ -348,27 +346,23 @@ def get_product_info(id):
 		datas = json.loads(product.others)
 		others = []
 
-		for k in range(len(datas)):
-			data = datas[k]
-
+		for k, data in enumerate(datas):
 			others.append({
 				"key": "other-" + str(k), 
 				"name": data['name'], 
 				"input": data['input'], 
-				"price": data['price'],
+				"price": float(data['price']),
 				"selected": False
 			})
 
 		datas = json.loads(product.sizes)
 		sizes = []
 
-		for k in range(len(datas)):
-			data = datas[k]
-
+		for k, data in enumerate(datas):
 			sizes.append({
 				"key": "size-" + str(k),
 				"name": data["name"],
-				"price": data["price"],
+				"price": float(data["price"]),
 				"selected": False
 			})
 

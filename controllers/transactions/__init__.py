@@ -153,12 +153,12 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	diners = db.Column(db.String(255))
+	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, diners, note, orders, table):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -168,7 +168,7 @@ class Schedule(db.Model):
 		self.cancelReason = cancelReason
 		self.nextTime = nextTime
 		self.locationType = locationType
-		self.diners = diners
+		self.customers = customers
 		self.note = note
 		self.orders = orders
 		self.table = table
@@ -292,22 +292,27 @@ def get_transactions():
 				options = json.loads(data['options'])
 				others = json.loads(data['others'])
 				sizes = json.loads(data['sizes'])
+				cost = 0
 
-				for k in range(len(options)):
-					options[k]["key"] = "option-" + str(k)
+				for k, option in enumerate(options):
+					option["key"] = "option-" + str(k)
 
-				for k in range(len(others)):
-					others[k]["key"] = "other-" + str(k)
+				for k, other in enumerate(others):
+					other["key"] = "other-" + str(k)
 
-				for k in range(len(sizes)):
-					sizes[k]["key"] = "size-" + str(k)
+				for k, size in enumerate(sizes):
+					size["key"] = "size-" + str(k)
 
-				if len(sizes) > 0:
-					for info in sizes:
-						if info["selected"] == True:
-							price = float(info["price"])
+				if product.price == "":
+					for size in sizes:
+						if size["selected"] == True:
+							cost += float(size["price"])
 				else:
-					price = float(product.price)
+					cost += float(product.price)
+
+				for other in others:
+					if other["selected"] == True:
+						cost += float(other["price"])
 
 				row.append({
 					"key": "r-" + str(data['id']),
@@ -317,7 +322,7 @@ def get_transactions():
 					"options": options,
 					"others": others,
 					"sizes": sizes,
-					"price": price
+					"cost": cost
 				})
 
 			transactions.append({

@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, os, math, json
+import mysql.connector, pymysql.cursors, os, math, json, stripe
 from haversine import haversine, Unit
 from werkzeug.security import generate_password_hash, check_password_hash
 from random import randint
@@ -37,14 +37,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	customerid = db.Column(db.String(25))
+	customerId = db.Column(db.String(25))
 
-	def __init__(self, cellnumber, password, username, profile, customerid):
+	def __init__(self, cellnumber, password, username, profile, customerId):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
-		self.customerid = customerid
+		self.customerId = customerId
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
@@ -304,7 +304,7 @@ def get_requests():
 					"time": int(data['time']),
 					"name": service.name if service != None else location.name,
 					"image": service.image if service != None else location.logo,
-					"diners": len(json.loads(data['customers'])) if data['locationType'] != 'nail' else False
+					"diners": len(json.loads(data['customers'])) if data['locationType'] == 'restaurant' else False
 				})
 
 			return { "requests": requests }
@@ -433,7 +433,7 @@ def request_appointment():
 		if location != None:
 			menu = Menu.query.filter_by(id=menuid).first()
 
-			if menu != None:
+			if menu != None or menuid == "":
 				service = Service.query.filter_by(id=serviceid).first()
 
 				if service != None:
@@ -554,9 +554,7 @@ def cancel_reservation_joining():
 	if schedule != None:
 		diners = json.loads(schedule.customers)
 
-		for k in range(len(diners)):
-			diner = diners[k]
-
+		for k, diner in enumerate(diners):
 			if diner['userid'] == userid:
 				diners.pop(k)
 
@@ -579,29 +577,46 @@ def accept_reservation_joining():
 	userid = content['userid']
 	scheduleid = content['scheduleid']
 
-	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	user = User.query.filter_by(id=userid).first()
+	msg = ""
+	status = ""
 
-	if schedule != None:
-		diners = json.loads(schedule.customers)
+	if user != None:
+		customerid = user.customerId
+		customer = stripe.Customer.list_sources(
+			customerid,
+			object="card",
+			limit=1
+		)
+		cards = len(customer.data)
 
-		for k in range(len(diners)):
-			diner = diners[k]
+		if cards > 0:
+			schedule = Schedule.query.filter_by(id=scheduleid).first()
 
-			if diner['userid'] == userid:
-				diner['status'] = 'confirm'
-				diners[k] = diner
+			if schedule != None:
+				diners = json.loads(schedule.customers)
 
-				schedule.customers = json.dumps(diners)
+				for k, diner in enumerate(diners):
+					if diner['userid'] == userid:
+						diner['status'] = 'confirm'
+						diners[k] = diner
 
-				db.session.commit()
+						schedule.customers = json.dumps(diners)
 
-				return { "msg": "diner accepted" }
+						db.session.commit()
 
-		msg = "Diner doesn't exist"
+						return { "msg": "diner accepted" }
+
+				msg = "Diner doesn't exist"
+			else:
+				msg = "Schedule doesn't exist"
+		else:
+			msg = "A payment method is required"
+			status = "cardrequired"
 	else:
-		msg = "Schedule doesn't exist"
+		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/add_diner", methods=["POST"])
 def add_diner():
@@ -627,60 +642,150 @@ def add_diner():
 
 	return { "errormsg": msg }
 
-@app.route("/done_dining", methods=["POST"])
-def done_dining():
-	content = request.get_json()
-
-	userid = str(content['userid'])
-	scheduleid = content['scheduleid']
+@app.route("/done_dining/<id>")
+def done_dining(id):
 	user_orders = []
 
-	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	schedule = Schedule.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
-		datas = json.loads(schedule.customers)
-		diners = []
+		locationid = schedule.locationId
+		location = Location.query.filter_by(id=locationid).first()
 
-		for data in datas:
-			diners.append(str(data['userid']))
+		accountid = location.accountId
+		account = stripe.Account.list_external_accounts(
+			accountid,
+			object="bank_account",
+			limit=1
+		)
+		bankaccounts = len(account.data)
 
-		if userid not in diners:
-			diners.append(userid)
+		if bankaccounts > 0:
+			if location != None:
+				customers = json.loads(schedule.customers)
+				bookerid = int(schedule.userId)
 
-		for diner in diners:
-			if diner == userid:
-				# submit diner's payment to location
+				booker = User.query.filter_by(id=bookerid).first()
+				customerid = {}
+				charges = {}
+				customerid[str(bookerid)] = booker.customerId
+				charges[str(bookerid)] = 0
+
+				for customer in customers:
+					customerinfo = User.query.filter_by(id=customer["userid"]).first()
+
+					customerid[customer["userid"]] = customerinfo.customerId
+					charges[customer["userid"]] = 0
+
 				orders = json.loads(schedule.orders)
-
 				groups = orders['groups']
 
 				for rounds in groups:
 					for round in rounds:
-						if round != "status":
+						if round != "status" and round != "id":
 							for orderer in rounds[round]:
-								if (round == userid and len(orderer['callfor']) == 0) or (round != userid and userid in orderer['callfor']):
-									product = Product.query.filter_by(id=orderer['productid']).first()
+								product = Product.query.filter_by(id=orderer['productid']).first()
 
-									price = float(product.price)
-									quantity = int(orderer['quantity'])
-									callfor = orderer['callfor']
+								quantity = int(orderer['quantity'])
+								sizes = orderer['sizes']
+								others = orderer['others']
+								callfor = orderer['callfor']
+								price = 0
 
-									user_orders.append({
-										"id": orderer['id'],
-										"quantity": quantity,
-										"price": price,
-										"name": product.name
-									})
+								if len(sizes) > 0:
+									for size in sizes:
+										if size["selected"] == True:
+											price = quantity * float(size["price"])
+								else:
+									price = quantity * float(product.price)
 
-							schedule.customers = json.dumps(diners)
+								for other in others:
+									if other["selected"] == True:
+										price += float(other["price"])
 
-							db.session.commit()
+								if len(callfor) > 0:
+									for userid in callfor:
+										charges[str(userid)] += price
+								else:
+									charges[round] += price
 
-		return { "orders": user_orders }
+				for info in charges:
+					stripe.Charge.create(
+						amount=int(charges[info] * 100),
+						currency="cad",
+						customer=customerid[info],
+						transfer_data={
+							"destination": accountid
+						}
+					)
+
+				db.session.delete(schedule)
+				db.session.commit()
+
+				return { "msg": "Feast is done" }
+			else:
+				msg = "Location doesn't exist"
+		else:
+			msg = "Please provide a bank account to receive payment"
+			status = "bankaccountrequired"
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg, "status": status }, 400
+
+@app.route("/done_service/<id>")
+def done_service(id):
+	schedule = Schedule.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
+
+	if schedule != None:
+		locationid = schedule.locationId
+		serviceid = schedule.serviceId
+
+		location = Location.query.filter_by(id=locationid).first()
+		service = Service.query.filter_by(id=serviceid).first()
+
+		if location != None and service != None:
+			accountid = location.accountId
+			account = stripe.Account.list_external_accounts(
+				accountid,
+				object="bank_account",
+				limit=1
+			)
+			bankaccounts = len(account.data)
+
+			if bankaccounts > 0:
+				clientId = schedule.userId
+
+				client = User.query.filter_by(id=clientId).first()
+				customerid = client.customerId
+				price = float(service.price)
+
+				stripe.Charge.create(
+					amount=int(price * 100),
+					currency="cad",
+					customer=customerid,
+					transfer_data={
+						"destination": accountid
+					}
+				)
+
+				db.session.delete(schedule)
+				db.session.commit()
+
+				return { "msg": "Payment received" }
+			else:
+				msg = "Please provide a bank account to receive payment"
+				status = "bankaccountrequired"
+		else:
+			msg = "Location doesn't exist"
+	else:
+		msg = "Schedule doesn't exist"
+
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_appointments/<id>")
 def get_appointments(id):
@@ -697,7 +802,8 @@ def get_appointments(id):
 			"username": user.username,
 			"time": int(data.time),
 			"name": service.name,
-			"image": service.image
+			"image": service.image,
+			"gettingPayment": False
 		})
 
 	return { "appointments": appointments, "numappointments": len(appointments) }
@@ -726,7 +832,8 @@ def get_reservations(id):
 			"image": location.logo,
 			"diners": len(json.loads(data.customers)),
 			"table": data.table,
-			"numMakings": numMakings
+			"numMakings": numMakings,
+			"gettingPayment": False
 		})
 
 	return { "reservations": reservations, "numreservations": len(reservations) }
@@ -801,7 +908,7 @@ def add_item_to_order():
 					if len(groups) > 0:
 						first_group = groups[0]
 
-						if first_group['status'] == "making":
+						if first_group['status'] == "served":
 							groups.insert(0, { "id": getRanStr(), "status": "ordering" })
 
 							first_group = groups[0]
@@ -855,6 +962,7 @@ def see_orders(id):
 				if orderer != "status" and orderer != "id":
 					ordererInfo = User.query.filter_by(id=orderer).first()
 					orders = rounds[orderer]
+					ordererid = orderer
 
 					for order in orders:
 						product = Product.query.filter_by(id=order['productid']).first()
@@ -864,7 +972,7 @@ def see_orders(id):
 						row = []
 						numorderers = 0
 
-						for k in range(len(callfor)):
+						for k, info in enumerate(callfor):
 							info = callfor[k]
 
 							orderer = User.query.filter_by(id=info).first()
@@ -895,18 +1003,14 @@ def see_orders(id):
 						quantity = int(order['quantity'])
 						cost = 0
 
-						for k in range(len(options)):
-							options[k]['key'] = "option-" + str(k)
+						for k, option in enumerate(options):
+							option['key'] = "option-" + str(k)
 
-						for k in range(len(others)):
-							others[k]['key'] = "other-" + str(k)
+						for k, other in enumerate(others):
+							other['key'] = "other-" + str(k)
 
-						for k in range(len(sizes)):
-							sizes[k]['key'] = "size-" + str(k)
-
-						for other in others:
-							if other['selected'] == True:
-								cost += float(other['price'])
+						for k, size in enumerate(sizes):
+							size['key'] = "size-" + str(k)
 
 						if product.price == "":
 							for size in sizes:
@@ -914,6 +1018,10 @@ def see_orders(id):
 									cost += quantity * float(size['price'])
 						else:
 							cost += quantity * float(product.price)
+
+						for other in others:
+							if other['selected'] == True:
+								cost += float(other['price'])
 
 						each_orders.append({
 							"id": order['id'],
@@ -927,26 +1035,29 @@ def see_orders(id):
 							"quantity": quantity,
 							"cost": cost,
 							"orderers": orderers,
+							"ordererid": ordererid,
 							"numorderers": numorderers
 						})
 						each_callfor_num = 0
 						each_order_num += 1
 
-					each_orderers.append({
-						"key": "orders-" + str(each_orderer_num),
-						"orders": each_orders
-					})
-					each_order_num = 0
-					each_orderer_num += 1
-					each_orders = []
+					if len(each_orders) > 0:
+						each_orderers.append({
+							"key": "orders-" + str(each_orderer_num),
+							"orders": each_orders
+						})
+						each_order_num = 0
+						each_orderer_num += 1
+						each_orders = []
 
-			each_rounds.append({
-				"key": "round-" + str(each_round_num),
-				"round": each_orderers,
-				"status": rounds["status"]
-			})
-			each_round_num += 1
-			each_orderers = []
+			if len(each_orderers) > 0:
+				each_rounds.append({
+					"key": "round-" + str(each_round_num),
+					"round": each_orderers,
+					"status": rounds["status"]
+				})
+				each_round_num += 1
+				each_orderers = []
 
 		return { "rounds": each_rounds }
 	else:
@@ -1025,6 +1136,7 @@ def get_orders(id):
 
 						for order in orders:
 							product = Product.query.filter_by(id=order['productid']).first()
+							options = order['options']
 							others = order['others']
 							sizes = order['sizes']
 							quantity = int(order['quantity'])
@@ -1047,8 +1159,8 @@ def get_orders(id):
 								"key": "meal-" + order['id'],
 								"name": product.name,
 								"note": order['note'],
-								"options": order['options'],
-								"quantity": order['quantity'],
+								"options": options, "others": others, "sizes": sizes,
+								"quantity": quantity,
 								"price": round(price, 2)
 							})
 							each_callfor_num = 0
@@ -1062,13 +1174,14 @@ def get_orders(id):
 						each_orderer_num += 1
 						each_orders = []
 
-				each_rounds.append({
-					"id": rounds["id"],
-					"key": "round-" + str(each_round_num),
-					"round": each_orderers
-				})
-				each_round_num += 1
-				each_orderers = []
+				if len(each_orderers) > 0:
+					each_rounds.append({
+						"id": rounds["id"],
+						"key": "round-" + str(each_round_num),
+						"round": each_orderers
+					})
+					each_round_num += 1
+					each_orderers = []
 
 		return { "rounds": each_rounds }
 	else:
@@ -1163,18 +1276,14 @@ def edit_order():
 							quantity = int(orderer['quantity'])
 							cost = 0
 
-							for k in range(len(options)):
-								options[k]['key'] = "info-" + str(k)
+							for k, option in enumerate(options):
+								option['key'] = "option-" + str(k)
 
-							for k in range(len(others)):
-								others[k]['key'] = "other-" + str(k)
+							for k, other in enumerate(others):
+								other['key'] = "other-" + str(k)
 
-							for k in range(len(sizes)):
-								sizes[k]['key'] = "size-" + str(k)
-
-							for other in others:
-								if other['selected'] == True:
-									cost += float(other['price'])
+							for k, size in enumerate(sizes):
+								size['key'] = "size-" + str(k)
 
 							if product.price == "":
 								for size in sizes:
@@ -1182,6 +1291,10 @@ def edit_order():
 										cost += quantity * float(size['price'])
 							else:
 								cost += quantity * float(product.price)
+
+							for other in others:
+								if other['selected'] == True:
+									cost += float(other['price'])
 
 							info = {
 								"name": product.name,
@@ -1326,9 +1439,7 @@ def edit_order_callfor():
 							row = []
 							numsearcheddiners = 0
 
-							for k in range(len(callfor)):
-								info = callfor[k]
-
+							for k, info in enumerate(callfor):
 								user = User.query.filter_by(id=info).first()
 
 								row.append({
@@ -1350,6 +1461,7 @@ def edit_order_callfor():
 											key += 1
 
 									searcheddiners.append({ "key": "selected-friend-row-" + str(len(searcheddiners)), "row": row })
+									row = []
 
 							options = orderer['options']
 							others = orderer['others']
@@ -1357,18 +1469,14 @@ def edit_order_callfor():
 							quantity = int(orderer['quantity'])
 							cost = 0
 
-							for k in range(len(options)):
-								options[k]['key'] = "option-" + str(k)
+							for k, option in enumerate(options):
+								option['key'] = "option-" + str(k)
 
-							for k in range(len(others)):
-								others[k]['key'] = "other-" + str(k)
+							for k, other in enumerate(others):
+								other['key'] = "other-" + str(k)
 
-							for k in range(len(sizes)):
-								sizes[k]['key'] = "size-" + str(k)
-
-							for other in others:
-								if other['selected'] == True:
-									cost += float(other['price'])
+							for k, size in enumerate(sizes):
+								size['key'] = "size-" + str(k)
 
 							if product.price == "":
 								for size in sizes:
@@ -1376,6 +1484,10 @@ def edit_order_callfor():
 										cost += quantity * float(size['price'])
 							else:
 								cost += quantity * float(product.price)
+
+							for other in others:
+								if other['selected'] == True:
+									cost += float(other['price'])
 
 							orderingItem = {
 								"name": product.name,

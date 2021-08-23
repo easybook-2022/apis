@@ -152,7 +152,7 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	customers = db.Column(db.String(255))
+	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
@@ -349,8 +349,8 @@ def remove_menu(id):
 
 	return { "errormsg": "Menu doesn't exist" }
 
-@app.route("/edit_menu/<id>")
-def edit_menu(id):
+@app.route("/get_menu_info/<id>")
+def get_menu_info(id):
 	menu = Menu.query.filter_by(id=id).first()
 
 	if menu != None:

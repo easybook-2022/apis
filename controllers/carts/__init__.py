@@ -154,7 +154,7 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	customers = db.Column(db.String(255))
+	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
@@ -325,14 +325,14 @@ def get_cart_items(id):
 				if info['status'] == 'waiting':
 					active = False
 
-			for k in range(len(options)):
-				options[k]["key"] = "option-" + str(k)
+			for k, option in enumerate(options):
+				option['key'] = "option-" + str(k)
 
-			for k in range(len(others)):
-				others[k]["key"] = "other-" + str(k)
+			for k, other in enumerate(others):
+				other['key'] = "other-" + str(k)
 
-			for k in range(len(sizes)):
-				sizes[k]["key"] = "size-" + str(k)
+			for k, size in enumerate(sizes):
+				size['key'] = "size-" + str(k)
 
 			if product.price == "":
 				for size in sizes:
@@ -473,7 +473,7 @@ def checkout():
 					customerid = friend.customerid
 
 					stripe.Charge.create(
-						amount=cost,
+						amount=(cost * 100),
 						currency="cad",
 						customer=customerid,
 						description=username + " called " + str(quantity) + " of " + product.name + " for " + friend.username,
@@ -483,7 +483,7 @@ def checkout():
 					)
 			else:
 				stripe.Charge.create(
-					amount=cost,
+					amount=(cost * 100),
 					currency="cad",
 					customer=user.customerid,
 					description=username + " purchased " + str(quantity) + " of " + product.name,
@@ -513,61 +513,42 @@ def edit_cart_item(id):
 	if cartitem != None:
 		product = Product.query.filter_by(id=cartitem.productId).first()
 		quantity = int(cartitem.quantity)
+		cost = 0
 
-		datas = json.loads(cartitem.options)
-		options = []
-		for k in range(len(datas)):
-			data = datas[k]
+		options = json.loads(cartitem.options)
+		for k, option in enumerate(options):
+			option["key"] = "option-" + str(k)
 
-			options.append({
-				"key": "option-" + str(k), 
-				"header": data['header'], 
-				"type": data['type'],
-				"selected": data['selected']
-			})
+		others = json.loads(cartitem.others)
+		for k, other in enumerate(others):
+			other["key"] = "other-" + str(k)
 
-		datas = json.loads(cartitem.others)
-		others = []
-		for k in range(len(datas)):
-			data = datas[k]
-
-			others.append({
-				"key": "other-" + str(k), 
-				"name": data['name'], 
-				"input": data['input'], 
-				"price": data['price'],
-				"selected": data['selected']
-			})
-
-		datas = json.loads(cartitem.sizes)
-		sizes = []
-		for k in range(len(datas)):
-			data = datas[k]
-
-			sizes.append({
-				"key": "size-" + str(k),
-				"name": data["name"],
-				"price": data["price"],
-				"selected": data["selected"]
-			})
+		sizes = json.loads(cartitem.sizes)
+		for k, size in enumerate(sizes):
+			size["key"] = "size-" + str(k)
 
 		if product.price == "":
-			for info in datas:
-				if info["selected"] == True:
-					price = quantity * float(info["price"])
+			for size in sizes:
+				if size["selected"] == True:
+					cost += quantity * float(size["price"])
 		else:
-			price = quantity * float(product.price)
+			cost += quantity * float(product.price)
+
+		for other in others:
+			if other["selected"] == True:
+				cost += float(other["price"])
 
 		info = {
 			"name": product.name,
 			"info": product.info,
 			"image": product.image,
+			"price": float(product.price),
 			"quantity": quantity,
 			"options": options,
 			"others": others,
 			"sizes": sizes,
 			"note": cartitem.note,
-			"price": price
+			"cost": cost
 		}
 
 		return { "cartItem": info, "msg": "cart item fetched" }
@@ -614,19 +595,9 @@ def edit_call_for(id):
 		searchedfriends = []
 		row = []
 		numsearchedfriends = 0
+		cost = 0
 
-		if product.price == "":
-			sizes = json.loads(cartitem.sizes)
-
-			for info in sizes:
-				if info["selected"] == True:
-					cost = cartitem.quantity * float(info["price"])
-		else:
-			cost = cartitem.quantity * float(product.price)
-
-		for k in range(len(callfor)):
-			info = callfor[k]
-
+		for k, info in enumerate(callfor):
 			user = User.query.filter_by(id=info['userid']).first()
 
 			row.append({
@@ -650,23 +621,28 @@ def edit_call_for(id):
 				searchedfriends.append({ "key": "selected-friend-row-" + str(len(searchedfriends)), "row": row })
 				row = []
 
-		datas = json.loads(cartitem.options)
-		options = []
-		for k in range(len(datas)):
-			options.append(datas[k])
-			options[-1]["key"] = "option-" + str(k)
+		options = json.loads(cartitem.options)
+		for k, option in enumerate(options):
+			option["key"] = "option-" + str(k)
 
-		datas = json.loads(cartitem.others)
-		others = []
-		for k in range(len(datas)):
-			others.append(datas[k])
-			others[-1]["key"] = "other-" + str(k)
+		others = json.loads(cartitem.others)
+		for k, other in enumerate(others):
+			other["key"] = "other-" + str(k)
 
-		datas = json.loads(cartitem.sizes)
-		sizes = []
-		for k in range(len(datas)):
-			sizes.append(datas[k])
-			sizes[-1]["key"] = "size-" + str(k)
+		sizes = json.loads(cartitem.sizes)
+		for k, size in enumerate(sizes):
+			size["key"] = "size-" + str(k)
+
+		if product.price == "":
+			for size in sizes:
+				if size["selected"] == True:
+					cost += cartitem.quantity * float(size["price"])
+		else:
+			cost += cartitem.quantity * float(product.price)
+
+		for other in others:
+			if other["selected"] == True:
+				cost += float(other["price"])
 
 		orderingItem = {
 			"name": product.name,

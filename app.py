@@ -165,7 +165,7 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	customers = db.Column(db.String(255))
+	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
@@ -280,4 +280,4 @@ app = SharedDataMiddleware(app, {
 })
 
 if __name__ == "__main__":
-	run_simple("192.168.0.16", 5000, app, use_reloader=True, use_debugger=True, use_evalex=True)
+	run_simple("192.168.0.14", 5000, app, use_reloader=True, use_debugger=True, use_evalex=True)

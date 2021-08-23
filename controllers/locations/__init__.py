@@ -153,7 +153,7 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	customers = db.Column(db.String(255))
+	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
@@ -781,9 +781,7 @@ def get_location_profile():
 			data = json.loads(location.hours)
 			day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
-			for k in range(len(hours)):
-				info = hours[k]
-
+			for k, info in enumerate(hours):
 				info["opentime"]["hour"] = data[day[k][:3]]["opentime"]["hour"]
 				info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
 				info["opentime"]["period"] = data[day[k][:3]]["opentime"]["period"]

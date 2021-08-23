@@ -152,12 +152,12 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	diners = db.Column(db.String(255))
+	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, diners, note, orders, table):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -167,7 +167,7 @@ class Schedule(db.Model):
 		self.cancelReason = cancelReason
 		self.nextTime = nextTime
 		self.locationType = locationType
-		self.diners = diners
+		self.customers = customers
 		self.note = note
 		self.orders = orders
 		self.table = table
@@ -309,7 +309,7 @@ def get_service_info(id):
 			"name": service.name,
 			"info": service.info,
 			"image": service.image,
-			"price": service.price,
+			"price": float(service.price),
 			"duration": service.duration
 		}
 

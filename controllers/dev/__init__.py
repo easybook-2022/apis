@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 import mysql.connector, pymysql.cursors, os, stripe, socket
 from werkzeug.security import generate_password_hash, check_password_hash
+from twilio.rest import Client
 
 local = True
 
@@ -29,6 +30,11 @@ mydb = mysql.connector.connect(
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
 stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
+
+account_sid = "ACc2195555d01f8077e6dcd48adca06d14"
+auth_token = "244371c21d9c8e735f0e08dd4c29249a"
+messaging_service_sid = "MG376dcb41368d7deca0bda395f36bf2a7"
+client = Client(account_sid, auth_token)
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -153,7 +159,7 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	customers = db.Column(db.String(255))
+	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
@@ -438,9 +444,20 @@ def payout(id):
 
 	return { "errormsg": msg }
 
-@app.route("/get_ip_address")
-def get_ip_address():
-	s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-	s.connect(("8.8.8.8", 80))
+@app.route("/twilio_test")
+def twilio_test():
+	'''incoming_phone_number = client.incoming_phone_numbers \
+		.create(
+			phone_number='+15005550006',
+			voice_url='http://demo.twilio.com/docs/voice.xml'
+		)'''
 
-	print(s.getsockname()[0])
+	message = client.messages.create(
+		body='All in the game, yo',
+		from_='+15005550006',
+		to='+6479263868'
+	)
+
+	print(message)
+
+	return { "message": message.sid }

@@ -3,6 +3,8 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 import mysql.connector, json, pymysql.cursors, os, stripe
 from werkzeug.security import generate_password_hash, check_password_hash
+from random import randint
+from twilio.rest import Client
 
 local = True
 
@@ -29,6 +31,12 @@ mydb = mysql.connector.connect(
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
 stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
+test_sms = True
+
+account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
+auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
+messaging_service_sid = "MG376dcb41368d7deca0bda395f36bf2a7"
+client = Client(account_sid, auth_token)
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -153,7 +161,7 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	customers = db.Column(db.String(255))
+	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
@@ -522,13 +530,14 @@ def get_bankaccounts(id):
 	location = Location.query.filter_by(id=id).first()
 	accountid = location.accountId
 
-	accounts = stripe.Account.list()
-	datas = accounts.data[0].external_accounts.data
+	accounts = stripe.Account.list_external_accounts(
+		accountid,
+		object="bank_account"
+	)
+	datas = accounts.data
 	bankaccounts = []
 
-	for k in range(len(datas)):
-		data = datas[k]
-
+	for k, data in enumerate(datas):
 		bankaccounts.append({
 			"key": "bankaccount-" + str(k),
 			"id": str(k),
@@ -619,5 +628,93 @@ def delete_bankaccount():
 		return { "msg": "Bank account deleted" }
 	else:
 		msg = "Location doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/get_reset_code/<phonenumber>")
+def get_reset_code(phonenumber):
+	def getRanStr():
+		strid = ""
+
+		for k in range(6):
+			strid += str(randint(0, 9))
+
+		return strid
+
+	owner = Owner.query.filter_by(cellnumber=phonenumber).first()
+
+	if owner != None:
+		code = getRanStr()
+
+		if test_sms == True:
+			message = client.messages \
+				.create(
+					body="Your EasyGO reset code is " + code,
+					from_='+15005550006',
+					to='+16479263868'
+				)
+
+			print("reset code is " + code)
+		else:
+			message = client.messages \
+				.create(
+					messaging_service_sid=messaging_service_sid,
+					to='+1' + str(owner.cellnumber),
+					body="Your EasyGO reset code is " + code,
+				)
+
+		return { "msg": "Reset code sent", "status": message.status, "code": code }
+	else:
+		msg = "Owner doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/reset_password", methods=["POST"])
+def reset_password():
+	content = request.get_json()
+
+	cellnumber = content['cellnumber']
+	password = content['newPassword']
+	confirmPassword = content['confirmPassword']
+
+	owner = Owner.query.filter_by(cellnumber=cellnumber).first()
+
+	if owner != None:
+		if password != '' and confirmPassword != '':
+			if len(password) >= 6:
+				if password == confirmPassword:
+					password = generate_password_hash(password)
+
+					owner.password = password
+
+					db.session.commit()
+
+					ownerid = owner.id
+
+					data = query("select * from location where owners like '%\"" + str(ownerid) + "\"%'", True)
+
+					if len(data) == 0:
+						return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": "", "locationtype": "", "msg": "setup" }
+					else:
+						data = data[0]
+
+						if data['type'] != "":
+							if data['hours'] != "":
+								return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": data['id'], "locationtype": data['type'], "msg": "main" }
+							else:
+								return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": data['id'], "locationtype": data['type'], "msg": "setuphours" }
+						else:
+							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": data['id'], "locationtype": "", "msg": "typesetup" }
+				else:
+					msg = "Password is mismatch"
+			else:
+				msg = "Password needs to be atleast 6 characters long"
+		else:
+			if password == '':
+				msg = "Passwod is blank"
+			else:
+				msg = "Please confirm your password"
+	else:
+		msg = "User doesn't exist"
 
 	return { "errormsg": msg }
