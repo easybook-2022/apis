@@ -35,14 +35,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	customerid = db.Column(db.String(25))
+	info = db.Column(db.String(60))
 
-	def __init__(self, cellnumber, password, username, profile, customerid):
+	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
-		self.customerid = customerid
+		self.info = info
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
@@ -209,7 +209,7 @@ class Cart(db.Model):
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
-	sizes = db.Column(db.String(150))
+	sizes = db.Column(db.String(225))
 	note = db.Column(db.String(100))
 
 	def __init__(self, productId, quantity, adder, callfor, options, others, sizes, note):
@@ -314,9 +314,12 @@ def get_menus():
 
 		if len(datas) > 0:
 			for data in datas:
+				numCategories = query("select count(*) as num from product where menuId = " + str(data['id']), True)[0]["num"]
+
 				menus.append({
 					"key": "menu-" + str(data['id']),
 					"id": data['id'],
+					"numCategories": numCategories,
 					"name": data['name'],
 					"info": data['info'],
 					"image": data['image'],

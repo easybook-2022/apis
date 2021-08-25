@@ -44,14 +44,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	customerid = db.Column(db.String(25))
+	info = db.Column(db.String(60))
 
-	def __init__(self, cellnumber, password, username, profile, customerid):
+	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
-		self.customerid = customerid
+		self.info = info
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
@@ -149,7 +149,7 @@ class Service(db.Model):
 
 	def __repr__(self):
 		return '<Service %r>' % self.name
-		
+
 class Schedule(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	userId = db.Column(db.Integer)
@@ -364,7 +364,8 @@ def setup():
 	user = User.query.filter_by(id=userid).first()
 
 	if user != None:
-		customerid = user.customerid
+		info = json.loads(user.info)
+		customerid = info["customerId"]
 
 		user.username = username
 		user.profile = profile.filename
@@ -412,7 +413,8 @@ def update():
 		user.username = username
 		user.cellnumber = cellnumber
 
-		customerid = user.customerid
+		info = json.loads(user.info)
+		customerid = info["customerId"]
 
 		stripe.Customer.modify(
 			customerid,
@@ -450,12 +452,19 @@ def add_paymentmethod():
 	user = User.query.filter_by(id=userid).first()
 
 	if user != None:
-		customerid = user.customerid
+		info = json.loads(user.info)
+		customerid = info["customerId"]
 
 		stripe.Customer.create_source(
 			customerid,
 			source=cardtoken
 		)
+
+		info["status"] = "filled"
+
+		user.info = json.dumps(info)
+
+		db.session.commit()
 
 		return { "msg": "Added a payment method" }
 	else:
@@ -472,7 +481,8 @@ def update_paymentmethod():
 	user = User.query.filter_by(id=userid).first()
 
 	if user != None:
-		customerid = user.customerid
+		info = json.loads(user.info)
+		customerid = info["customerId"]
 
 		stripe.Customer.delete_source(
 			customerid,
@@ -495,7 +505,8 @@ def get_payment_methods(id):
 	user = User.query.filter_by(id=id).first()
 
 	if user != None:
-		customerid = user.customerid
+		info = json.loads(user.info)
+		customerid = info["customerId"]
 
 		customer = stripe.Customer.retrieve(customerid)
 		default_card = customer.default_source
@@ -533,7 +544,8 @@ def set_paymentmethoddefault():
 	user = User.query.filter_by(id=userid).first()
 
 	if user != None:
-		customerid = user.customerid
+		info = json.loads(user.info)
+		customerid = info["customerId"]
 
 		stripe.Customer.modify(
 			customerid,
@@ -556,7 +568,8 @@ def get_paymentmethod_info():
 	user = User.query.filter_by(id=userid).first()
 
 	if user != None:
-		customerid = user.customerid
+		info = json.loads(user.info)
+		customerid = info["customerId"]
 
 		card = stripe.Customer.retrieve_source(
 			customerid,
@@ -585,7 +598,8 @@ def delete_paymentmethod():
 	user = User.query.filter_by(id=userid).first()
 
 	if user != None:
-		customerid = user.customerid
+		info = json.loads(user.info)
+		customerid = info["customerId"]
 
 		stripe.Customer.delete_source(
 			customerid,
@@ -607,7 +621,7 @@ def get_notifications(id):
 		notifications = []
 		
 		# get orders
-		sql = "select * from cart where callfor like '%\"userid\": " + str(id) + ",%'"
+		sql = "select * from cart where callfor like '%\"userid\": " + str(id) + ", \"status\": \"waiting\"%'"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -648,13 +662,55 @@ def get_notifications(id):
 				"sizes": sizes,
 				"quantity": int(data['quantity']),
 				"orderers": friends,
-				"adder": {
-					"username": adder.username,
-					"profile": adder.profile
-				}
+				"adder": { "username": adder.username, "profile": adder.profile },
+				"price": int(data['quantity']) * float(product.price) if product.price != "" else ""
 			})
 
-			notifications[-1]['price'] = int(data['quantity']) * float(product.price) if product.price != "" else ""
+		# get requested payment method to order for
+		sql = "select * from cart where callfor like '%\"userid\": " + str(id) + ", \"status\": \"paymentrequested\"%'"
+		data = query(sql, True)
+
+		for data in datas:
+			adder = User.query.filter_by(id=data['adder']).first()
+			product = Product.query.filter_by(id=data['productId']).first()
+			callfor = json.loads(data['callfor'])
+			options = json.loads(data['options'])
+			others = json.loads(data['others'])
+			sizes = json.loads(data['sizes'])
+			friends = []
+
+			for info in callfor:
+				friend = User.query.filter_by(id=info['userid']).first()
+
+				friends.append({
+					"key": str(data['id']) + "-" + str(friend.id),
+					"username": friend.username,
+					"profile": friend.profile
+				})
+
+			for k, option in enumerate(options):
+				option["key"] = "option-" + str(k)
+
+			for k, other in enumerate(others):
+				other["key"] = "other-" + str(k)
+
+			for k, size in enumerate(sizes):
+				size["key"] = "size-" + str(k)
+
+			notifications.append({
+				"key": "order-" + str(data['id']),
+				"type": "paymentrequested",
+				"id": str(data['id']),
+				"name": product.name,
+				"image": product.image,
+				"options": options,
+				"others": others,
+				"sizes": sizes,
+				"quantity": int(data['quantity']),
+				"orderers": friends,
+				"adder": { "username": adder.username, "profile": adder.profile },
+				"price": int(data['quantity']) * float(product.price) if product.price != "" else ""
+			})
 
 		# get reservation requests
 		sql = "select * from schedule where "
@@ -676,7 +732,7 @@ def get_notifications(id):
 			booker = User.query.filter_by(id=data['userId']).first()
 			confirm = False
 
-			if "userid" in data['customers']:
+			if "[" in data['customers']:
 				customers = json.loads(data['customers'])
 				
 				for customer in customers:
@@ -732,7 +788,11 @@ def get_num_updates():
 		num = 0
 
 		# orders called for user
-		sql = "select count(*) as num from cart where callfor like '%\"userid\": " + str(userid) + ",%'"
+		sql = "select count(*) as num from cart where callfor like '%\"userid\": " + str(userid) + ", \"status\": \"waiting\"%'"
+		num += query(sql, True)[0]["num"]
+
+		# requested payment method for order for
+		sql = "select count(*) as num from cart where callfor like '%\"userid\": " + str(userid) + ", \"status\": \"paymentrequested\"%'"
 		num += query(sql, True)[0]["num"]
 
 		# get reservation requests
@@ -841,6 +901,45 @@ def search_diners():
 		return { "searchedDiners": searcheddiners, "numSearchedDiners": numSearchedDiners }
 	else:
 		msg = "Schedule doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/select_user/<id>")
+def select_user(id):
+	user = User.query.filter_by(id=id).first()
+
+	if user != None:
+		info = json.loads(user.info)
+		customerid = info["customerId"]
+		customer = stripe.Customer.list_sources(
+			customerid,
+			object="card",
+			limit=1
+		)
+		cards = len(customer.data)
+
+		return { "username": user.username, "cards": cards }
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/request_user_payment_method/<id>")
+def request_user_payment_method(id):
+	user = User.query.filter_by(id=id).first()
+
+	if user != None:
+		info = json.loads(user.info)
+
+		info["status"] = "requested"
+
+		user.info = json.dumps(info)
+
+		db.session.commit()
+
+		return { "msg": "Card requested" }
+	else:
+		msg = "User doesn't exist"
 
 	return { "errormsg": msg }
 

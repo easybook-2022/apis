@@ -37,14 +37,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	customerid = db.Column(db.String(25))
+	info = db.Column(db.String(60))
 
-	def __init__(self, cellnumber, password, username, profile, customerid):
+	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
-		self.customerid = customerid
+		self.info = info
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
@@ -142,7 +142,7 @@ class Service(db.Model):
 
 	def __repr__(self):
 		return '<Service %r>' % self.name
-		
+
 class Schedule(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	userId = db.Column(db.Integer)
@@ -211,7 +211,7 @@ class Cart(db.Model):
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
-	sizes = db.Column(db.String(150))
+	sizes = db.Column(db.String(225))
 	note = db.Column(db.String(100))
 
 	def __init__(self, productId, quantity, adder, callfor, options, others, sizes, note):
@@ -322,7 +322,7 @@ def get_cart_items(id):
 					friends.append({ "key": len(friends), "row": row })
 					row = []
 
-				if info['status'] == 'waiting':
+				if info['status'] == 'waiting' or info['status'] == 'payment':
 					active = False
 
 			for k, option in enumerate(options):
@@ -373,7 +373,7 @@ def add_item_to_cart():
 	userid = content['userid']
 	productid = content['productid']
 	quantity = content['quantity']
-	callfor = json.dumps(content['callfor'])
+	callfor = content['callfor']
 	options = content['options']
 	others = content['others']
 	sizes = content['sizes']
@@ -381,32 +381,47 @@ def add_item_to_cart():
 
 	user = User.query.filter_by(id=userid).first()
 	msg = ""
+	status = ""
 
 	if user != None:
-		product = Product.query.filter_by(id=productid).first()
+		info = json.loads(user.info)
+		customerid = info["customerId"]
+		customer = stripe.Customer.list_sources(
+			customerid,
+			object="card",
+			limit=1
+		)
+		cards = len(customer.data)
 
-		if product != None:
-			if product.price == '':
-				if "true" not in json.dumps(sizes):
-					msg = "Please choose a size"
+		if cards > 0 or len(callfor) > 0:
+			product = Product.query.filter_by(id=productid).first()
 
-			if msg == "":
-				options = json.dumps(options)
-				others = json.dumps(others)
-				sizes = json.dumps(sizes)
-
-				cartitem = Cart(productid, quantity, userid, callfor, options, others, sizes, note)
-
-				db.session.add(cartitem)
-				db.session.commit()
-
-				return { "msg": "item added to cart" }
+			if product != None:
+				if product.price == '':
+					if "true" not in json.dumps(sizes):
+						msg = "Please choose a size"
+			else:
+				msg = "Product doesn't exist"
 		else:
-			msg = "Product doesn't exist"
+			msg = "A payment method is required"
+			status = "cardrequired"
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	if msg == "":
+		callfor = json.dumps(callfor)
+		options = json.dumps(options)
+		others = json.dumps(others)
+		sizes = json.dumps(sizes)
+
+		cartitem = Cart(productid, quantity, userid, callfor, options, others, sizes, note)
+
+		db.session.add(cartitem)
+		db.session.commit()
+
+		return { "msg": "item added to cart" }
+
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/remove_item_from_cart/<id>")
 def remove_item_from_cart(id):
@@ -470,7 +485,8 @@ def checkout():
 				for info in callfor:
 					friends.append(str(info['userid']))
 					friend = User.query.filter_by(id=info['userid']).first()
-					customerid = friend.customerid
+					info = json.loads(friend.info)
+					customerid = info["customerId"]
 
 					stripe.Charge.create(
 						amount=(cost * 100),
@@ -482,10 +498,13 @@ def checkout():
 						}
 					)
 			else:
+				info = json.loads(user.info)
+				customerid = info["customerId"]
+
 				stripe.Charge.create(
 					amount=(cost * 100),
 					currency="cad",
-					customer=user.customerid,
+					customer=customerid,
 					description=username + " purchased " + str(quantity) + " of " + product.name,
 					transfer_data={
 						"destination": location.accountId
@@ -542,7 +561,7 @@ def edit_cart_item(id):
 			"name": product.name,
 			"info": product.info,
 			"image": product.image,
-			"price": float(product.price),
+			"price": float(product.price) if product.price != "" else 0,
 			"quantity": quantity,
 			"options": options,
 			"others": others,

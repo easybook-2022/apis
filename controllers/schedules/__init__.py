@@ -37,14 +37,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	customerId = db.Column(db.String(25))
+	info = db.Column(db.String(60))
 
-	def __init__(self, cellnumber, password, username, profile, customerId):
+	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
-		self.customerId = customerId
+		self.info = info
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
@@ -79,11 +79,12 @@ class Location(db.Model):
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
 	accountId = db.Column(db.String(25))
+	state = db.Column(db.String(6))
 
 	def __init__(
 		self, 
 		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
-		longitude, latitude, owners, type, hours, accountId
+		longitude, latitude, owners, type, hours, accountId, state
 	):
 		self.name = name
 		self.addressOne = addressOne
@@ -99,6 +100,7 @@ class Location(db.Model):
 		self.type = type
 		self.hours = hours
 		self.accountId = accountId
+		self.state = state
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -211,7 +213,7 @@ class Cart(db.Model):
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
-	sizes = db.Column(db.String(150))
+	sizes = db.Column(db.String(225))
 	note = db.Column(db.String(100))
 
 	def __init__(self, productId, quantity, adder, callfor, options, others, sizes, note):
@@ -582,7 +584,8 @@ def accept_reservation_joining():
 	status = ""
 
 	if user != None:
-		customerid = user.customerId
+		info = json.loads(user.info)
+		customerid = info["customerId"]
 		customer = stripe.Customer.list_sources(
 			customerid,
 			object="card",
@@ -670,13 +673,15 @@ def done_dining(id):
 				booker = User.query.filter_by(id=bookerid).first()
 				customerid = {}
 				charges = {}
-				customerid[str(bookerid)] = booker.customerId
+				info = json.loads(booker.info)
+				customerid[str(bookerid)] = info["customerId"]
 				charges[str(bookerid)] = 0
 
 				for customer in customers:
 					customerinfo = User.query.filter_by(id=customer["userid"]).first()
+					info = json.loads(customerinfo.info)
 
-					customerid[customer["userid"]] = customerinfo.customerId
+					customerid[customer["userid"]] = info["customerId"]
 					charges[customer["userid"]] = 0
 
 				orders = json.loads(schedule.orders)
@@ -761,7 +766,8 @@ def done_service(id):
 				clientId = schedule.userId
 
 				client = User.query.filter_by(id=clientId).first()
-				customerid = client.customerId
+				info = json.loads(client.info)
+				customerid = info["customerId"]
 				price = float(service.price)
 
 				stripe.Charge.create(

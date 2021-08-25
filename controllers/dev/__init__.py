@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, os, stripe, socket
+import mysql.connector, pymysql.cursors, os, json, stripe
 from werkzeug.security import generate_password_hash, check_password_hash
 from twilio.rest import Client
 
@@ -42,14 +42,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	customerid = db.Column(db.String(25))
+	info = db.Column(db.String(60))
 
-	def __init__(self, cellnumber, password, username, profile, customerid):
+	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
-		self.customerid = customerid
+		self.info = info
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
@@ -385,12 +385,12 @@ def reset():
 			if os.path.exists("static/" + file):
 				os.remove("static/" + file)
 
-	accounts = stripe.Account.list(limit=3)
+	accounts = stripe.Account.list()
 
 	for data in accounts.data:
 		stripe.Account.delete(data.id)
 
-	customers = stripe.Customer.list(limit=3)
+	customers = stripe.Customer.list()
 
 	for data in customers.data:
 		stripe.Customer.delete(data.id)
@@ -402,7 +402,8 @@ def charge(id):
 	user = User.query.filter_by(id=id).first()
 
 	if user != None:
-		customerid = user.customerid
+		info = json.loads(user.info)
+		customerid = info["customerId"]
 		amount = 2.00
 
 		stripe.Charge.create(

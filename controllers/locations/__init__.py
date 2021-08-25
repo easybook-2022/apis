@@ -36,14 +36,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	customerid = db.Column(db.String(25))
+	customerId = db.Column(db.String(25))
 
-	def __init__(self, cellnumber, password, username, profile, customerid):
+	def __init__(self, cellnumber, password, username, profile, customerId):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
-		self.customerid = customerid
+		self.customerId = customerId
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
@@ -78,11 +78,12 @@ class Location(db.Model):
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
 	accountId = db.Column(db.String(25))
+	state = db.Column(db.String(6))
 
 	def __init__(
 		self, 
 		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
-		longitude, latitude, owners, type, hours, accountId
+		longitude, latitude, owners, type, hours, accountId, state
 	):
 		self.name = name
 		self.addressOne = addressOne
@@ -98,6 +99,7 @@ class Location(db.Model):
 		self.type = type
 		self.hours = hours
 		self.accountId = accountId
+		self.state = state
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -210,7 +212,7 @@ class Cart(db.Model):
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
-	sizes = db.Column(db.String(150))
+	sizes = db.Column(db.String(225))
 	note = db.Column(db.String(100))
 
 	def __init__(self, productId, quantity, adder, callfor, options, others, sizes, note):
@@ -345,7 +347,7 @@ def setup_location():
 				name, addressOne, addressTwo, 
 				city, province, postalcode, phonenumber, logo.filename,
 				longitude, latitude, '["' + str(ownerid) + '"]',
-				'', '', connectedaccount.id
+				'', '', connectedaccount.id, "unlist"
 			)
 			db.session.add(location)
 			db.session.commit()
@@ -894,6 +896,7 @@ def get_info():
 		storeAddress = addressOne + " " + addressTwo + ", " + city + ", " + province + " " + postalcode
 		storeLogo = location.logo
 		locationType = 'salon' if location.type == 'nail' or location.type == 'hair' else 'restaurant'
+		locationState = location.state
 
 		num_menus = Menu.query.filter_by(locationId=locationid, parentMenuId=menuid).count()
 		num_services = Service.query.filter_by(locationId=locationid, menuId=menuid).count()
@@ -908,13 +911,31 @@ def get_info():
 			menuInfo = menu.info
 
 		if num_menus > 0:
-			return { "msg": "menus", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType }
+			return { "msg": "menus", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType, "locationState": locationState }
 		elif num_services > 0:
-			return { "msg": "services", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType }
+			return { "msg": "services", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType, "locationState": locationState }
 		elif num_products > 0:
-			return { "msg": "products", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType }
+			return { "msg": "products", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType, "locationState": locationState }
 		else:
-			return { "msg": "", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType }
+			return { "msg": "", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType, "locationState": locationState }
+	else:
+		msg = "Location doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/change_location_state/<id>")
+def change_location_state(id):
+	location = Location.query.filter_by(id=id).first()
+
+	if location != None:
+		state = location.state
+		state = "unlist" if state == "listed" else "listed"
+
+		location.state = state
+
+		db.session.commit()
+
+		return { "msg": "Change location state", "state": location.state }
 	else:
 		msg = "Location doesn't exist"
 
