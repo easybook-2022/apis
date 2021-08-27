@@ -84,11 +84,12 @@ class Location(db.Model):
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
 	accountId = db.Column(db.String(25))
+	state = db.Column(db.String(6))
 
 	def __init__(
 		self, 
 		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
-		longitude, latitude, owners, type, hours, accountId
+		longitude, latitude, owners, type, hours, accountId, state
 	):
 		self.name = name
 		self.addressOne = addressOne
@@ -104,6 +105,7 @@ class Location(db.Model):
 		self.type = type
 		self.hours = hours
 		self.accountId = accountId
+		self.state = state
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -210,16 +212,20 @@ class Product(db.Model):
 
 class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
+	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
-	sizes = db.Column(db.String(150))
+	sizes = db.Column(db.String(225))
 	note = db.Column(db.String(100))
+	status = db.Column(db.String(10))
+	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, productId, quantity, adder, callfor, options, others, sizes, note):
+	def __init__(self, locationId, productId, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+		self.locationId = locationId
 		self.productId = productId
 		self.quantity = quantity
 		self.adder = adder
@@ -228,6 +234,8 @@ class Cart(db.Model):
 		self.others = others
 		self.sizes = sizes
 		self.note = note
+		self.status = status
+		self.orderNumber = orderNumber
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
@@ -429,7 +437,7 @@ def payout(id):
 		amount = 2.00
 
 		if balance > amount:
-			accountid = location.accountid
+			accountid = location.accountId
 
 			stripe.Transfer.create(
 				amount=int(amount * 100),

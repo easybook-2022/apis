@@ -212,16 +212,20 @@ class Product(db.Model):
 
 class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
+	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
-	sizes = db.Column(db.String(150))
+	sizes = db.Column(db.String(225))
 	note = db.Column(db.String(100))
+	status = db.Column(db.String(10))
+	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, productId, quantity, adder, callfor, options, others, sizes, note):
+	def __init__(self, locationId, productId, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+		self.locationId = locationId
 		self.productId = productId
 		self.quantity = quantity
 		self.adder = adder
@@ -230,6 +234,8 @@ class Cart(db.Model):
 		self.others = others
 		self.sizes = sizes
 		self.note = note
+		self.status = status
+		self.orderNumber = orderNumber
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
@@ -333,8 +339,9 @@ def register():
 					customer = stripe.Customer.create(
 						phone=cellnumber
 					)
+					info = json.dumps({"customerId": customer.id, "status": "required"})
 
-					user = User(cellnumber, password, '', '', customer.id)
+					user = User(cellnumber, password, '', '', info)
 					db.session.add(user)
 					db.session.commit()
 
@@ -652,7 +659,7 @@ def get_notifications(id):
 				size["key"] = "size-" + str(k)
 
 			notifications.append({
-				"key": "order-" + str(data['id']),
+				"key": "order-" + str(len(notifications)),
 				"type": "order",
 				"id": str(data['id']),
 				"name": product.name,
@@ -668,7 +675,7 @@ def get_notifications(id):
 
 		# get requested payment method to order for
 		sql = "select * from cart where callfor like '%\"userid\": " + str(id) + ", \"status\": \"paymentrequested\"%'"
-		data = query(sql, True)
+		datas = query(sql, True)
 
 		for data in datas:
 			adder = User.query.filter_by(id=data['adder']).first()
@@ -698,7 +705,7 @@ def get_notifications(id):
 				size["key"] = "size-" + str(k)
 
 			notifications.append({
-				"key": "order-" + str(data['id']),
+				"key": "order-" + str(len(notifications)),
 				"type": "paymentrequested",
 				"id": str(data['id']),
 				"name": product.name,
@@ -747,7 +754,7 @@ def get_notifications(id):
 				customers = int(data['customers'])
 
 			notifications.append({
-				"key": "order-" + str(data['id']),
+				"key": "order-" + str(len(notifications)),
 				"type": "service",
 				"id": str(data['id']),
 				"locationid": data['locationId'],

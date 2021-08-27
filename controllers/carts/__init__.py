@@ -205,6 +205,7 @@ class Product(db.Model):
 
 class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
+	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
@@ -213,8 +214,11 @@ class Cart(db.Model):
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(225))
 	note = db.Column(db.String(100))
+	status = db.Column(db.String(10))
+	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, productId, quantity, adder, callfor, options, others, sizes, note):
+	def __init__(self, locationId, productId, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+		self.locationId = locationId
 		self.productId = productId
 		self.quantity = quantity
 		self.adder = adder
@@ -223,6 +227,8 @@ class Cart(db.Model):
 		self.others = others
 		self.sizes = sizes
 		self.note = note
+		self.status = status
+		self.orderNumber = orderNumber
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
@@ -273,7 +279,7 @@ def welcome_users():
 
 @app.route("/get_num_items/<id>")
 def get_num_items(id):
-	datas = query("select * from cart where adder = " + str(id), True)
+	datas = query("select * from cart where adder = " + str(id) + " and status = 'listed'", True)
 
 	return { "numCartItems": len(datas) }
 
@@ -282,17 +288,17 @@ def get_cart_items(id):
 	user = User.query.filter_by(id=id).first()
 
 	if user != None:
-		datas = query("select * from cart where adder = " + str(user.id), True)
+		datas = Cart.query.filter_by(adder=user.id, status="listed").all()
 		items = []
 		active = True if len(datas) > 0 else False
 
 		for data in datas:
-			product = Product.query.filter_by(id=data['productId']).first()
-			quantity = int(data['quantity'])
-			callfor = json.loads(data['callfor'])
-			options = json.loads(data['options'])
-			others = json.loads(data['others'])
-			sizes = json.loads(data['sizes'])
+			product = Product.query.filter_by(id=data.productId).first()
+			quantity = int(data.quantity)
+			callfor = json.loads(data.callfor)
+			options = json.loads(data.options)
+			others = json.loads(data.others)
+			sizes = json.loads(data.sizes)
 			friends = []
 			row = []
 			cost = 0
@@ -302,7 +308,7 @@ def get_cart_items(id):
 
 				row.append({
 					"id": friend.id,
-					"key": str(data['id']) + "-" + str(friend.id),
+					"key": str(data.id) + "-" + str(friend.id),
 					"username": friend.username,
 					"profile": friend.profile,
 					"status": info['status']
@@ -311,7 +317,7 @@ def get_cart_items(id):
 				if len(row) == 4 or (len(callfor) - 1 == k and len(row) > 0):
 					if len(callfor) - 1 == k and len(row) > 0:
 						leftover = 4 - len(row)
-						id = data['id'] + 1
+						id = data.id + 1
 						key = friend.id + 1
 
 						for m in range(leftover):
@@ -346,11 +352,11 @@ def get_cart_items(id):
 					cost += float(other['price'])
 
 			items.append({
-				"key": "cart-item-" + str(data['id']),
-				"id": str(data['id']),
+				"key": "cart-item-" + str(data.id),
+				"id": str(data.id),
 				"name": product.name,
 				"productId": product.id,
-				"note": data['note'],
+				"note": data.note,
 				"image": product.image,
 				"options": options,
 				"others": others,
@@ -380,10 +386,11 @@ def add_item_to_cart():
 	note = content['note']
 
 	user = User.query.filter_by(id=userid).first()
+	product = Product.query.filter_by(id=productid).first()
 	msg = ""
 	status = ""
 
-	if user != None:
+	if user != None and product != None:
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 		customer = stripe.Customer.list_sources(
@@ -394,19 +401,17 @@ def add_item_to_cart():
 		cards = len(customer.data)
 
 		if cards > 0 or len(callfor) > 0:
-			product = Product.query.filter_by(id=productid).first()
-
-			if product != None:
-				if product.price == '':
-					if "true" not in json.dumps(sizes):
-						msg = "Please choose a size"
-			else:
-				msg = "Product doesn't exist"
+			if product.price == '':
+				if "true" not in json.dumps(sizes):
+					msg = "Please choose a size"
 		else:
 			msg = "A payment method is required"
 			status = "cardrequired"
 	else:
-		msg = "User doesn't exist"
+		if user != None:
+			msg = "User doesn't exist"
+		else:
+			msg = "Product doesn't exist"
 
 	if msg == "":
 		callfor = json.dumps(callfor)
@@ -414,7 +419,7 @@ def add_item_to_cart():
 		others = json.dumps(others)
 		sizes = json.dumps(sizes)
 
-		cartitem = Cart(productid, quantity, userid, callfor, options, others, sizes, note)
+		cartitem = Cart(product.locationId, productid, quantity, userid, callfor, options, others, sizes, note, "listed", "")
 
 		db.session.add(cartitem)
 		db.session.commit()
@@ -439,87 +444,32 @@ def remove_item_from_cart(id):
 
 @app.route("/checkout", methods=["POST"])
 def checkout():
+	def getRanStr():
+		while True:
+			strid = ""
+
+			for k in range(4):
+				strid += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 9))
+
+			numsame = query("select count(*) as num from cart where orderNumber = '" + strid + "'", True)[0]["num"]
+
+			if numsame == 0:
+				return strid
+
 	content = request.get_json()
 
 	adder = content['userid']
 	time = content['time']
 
 	user = User.query.filter_by(id=adder).first()
-	username = user.username
 
 	if user != None:
-		datas = query("select * from cart where adder = " + str(adder), True)
+		username = user.username
+		orderNumber = getRanStr()
 
-		for data in datas:
-			groupId = ""
+		query("update cart set status = 'checkout', orderNumber = '" + orderNumber + "' where adder = " + str(adder) + " and status = 'listed'", False)
 
-			for k in range(20):
-				groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
-
-			product = Product.query.filter_by(id=data['productId']).first()
-			location = Location.query.filter_by(id=product.locationId).first()
-			sizes = json.loads(data['sizes'])
-			others = json.loads(data['others'])
-			quantity = int(data['quantity'])
-			cost = 0
-
-			if product.price == "":
-				for size in sizes:
-					if size["selected"] == True:
-						cost += quantity * float(size["price"])
-			else:
-				cost += quantity * float(product.price)
-
-			for other in others:
-				if other['selected'] == True:
-					cost += float(other['price'])
-
-			quantity = int(data['quantity'])
-			callfor = json.loads(data['callfor'])
-			options = data['options']
-			others = data['others']
-			sizes = json.dumps(sizes)
-			friends = []
-
-			if len(callfor) > 0:
-				for info in callfor:
-					friends.append(str(info['userid']))
-					friend = User.query.filter_by(id=info['userid']).first()
-					info = json.loads(friend.info)
-					customerid = info["customerId"]
-
-					stripe.Charge.create(
-						amount=(cost * 100),
-						currency="cad",
-						customer=customerid,
-						description=username + " called " + str(quantity) + " of " + product.name + " for " + friend.username,
-						transfer_data={
-							"destination": location.accountId
-						}
-					)
-			else:
-				info = json.loads(user.info)
-				customerid = info["customerId"]
-
-				stripe.Charge.create(
-					amount=(cost * 100),
-					currency="cad",
-					customer=customerid,
-					description=username + " purchased " + str(quantity) + " of " + product.name,
-					transfer_data={
-						"destination": location.accountId
-					}
-				)
-
-			for k in range(quantity):
-				transaction = Transaction(groupId, product.id, adder, json.dumps(friends), options, others, sizes, time)
-
-				db.session.add(transaction)
-				db.session.commit()
-
-			query("delete from cart where id = " + str(data['id']), False)
-
-		return { "msg": "checkout completed" }
+		return { "msg": "order sent" }
 	else:
 		msg = "User doesn't exist"
 

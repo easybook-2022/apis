@@ -207,6 +207,7 @@ class Product(db.Model):
 
 class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
+	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
@@ -215,8 +216,11 @@ class Cart(db.Model):
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(225))
 	note = db.Column(db.String(100))
+	status = db.Column(db.String(10))
+	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, productId, quantity, adder, callfor, options, others, sizes, note):
+	def __init__(self, locationId, productId, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+		self.locationId = locationId
 		self.productId = productId
 		self.quantity = quantity
 		self.adder = adder
@@ -225,6 +229,8 @@ class Cart(db.Model):
 		self.others = others
 		self.sizes = sizes
 		self.note = note
+		self.status = status
+		self.orderNumber = orderNumber
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
@@ -406,15 +412,6 @@ def reschedule_reservation():
 		msg = "Reservation doesn't exist"
 
 	return { "errormsg": msg }
-
-@app.route("/accept_appointment", methods=["POST"])
-def accept_appointment():
-	content = request.get_json()
-
-	requestid = content['requestid']
-	tablenum = content['tablenum']
-
-	return { "msg": "" }
 
 @app.route("/request_appointment", methods=["POST"])
 def request_appointment():
@@ -814,6 +811,198 @@ def get_appointments(id):
 
 	return { "appointments": appointments, "numappointments": len(appointments) }
 
+@app.route("/get_cart_orderers/<id>")
+def get_cart_orderers(id):
+	datas = query("select adder, orderNumber from cart where locationId = " + str(id) + " and status = 'checkout' group by adder, orderNumber", True)
+	cartOrderers = []
+
+	for k, data in enumerate(datas):
+		adder = User.query.filter_by(id=data['adder']).first()
+		orders = Cart.query.filter_by(adder=data['adder'], locationId=id, status='checkout').all()
+		numOrders = 0
+
+		for order in orders:
+			callfor = json.loads(order.callfor)
+
+			if len(callfor) > 0:
+				numOrders += len(callfor)
+			else:
+				numOrders += 1
+
+		cartOrderers.append({
+			"key": "cartorderer-" + str(k),
+			"id": adder.id,
+			"username": adder.username,
+			"profile": adder.profile,
+			"numOrders": numOrders,
+			"orderNumber": data['orderNumber']
+		})
+
+	return { "cartOrderers": cartOrderers }
+
+@app.route("/see_user_orders", methods=["POST"])
+def see_user_orders():
+	content = request.get_json()
+
+	userid = content['userid']
+	locationid = content['locationid']
+	ordernumber = content['ordernumber']
+
+	datas = Cart.query.filter_by(adder=userid, locationId=locationid, orderNumber=ordernumber, status='checkout').all()
+	orders = []
+	totalcost = 0
+
+	for data in datas:
+		product = Product.query.filter_by(id=data.productId).first()
+		quantity = int(data.quantity)
+		callfor = json.loads(data.callfor)
+		options = json.loads(data.options)
+		others = json.loads(data.others)
+		sizes = json.loads(data.sizes)
+		row = []
+		cost = 0
+
+		for k, option in enumerate(options):
+			option['key'] = "option-" + str(k)
+
+		for k, other in enumerate(others):
+			other['key'] = "other-" + str(k)
+
+		for k, size in enumerate(sizes):
+			size['key'] = "size-" + str(k)
+
+		if product.price == "":
+			for size in sizes:
+				if size['selected'] == True:
+					cost += quantity * float(size['price'])
+					totalcost += quantity * float(size['price'])
+		else:
+			cost += quantity * float(product.price)
+			totalcost += quantity * float(product.price)
+
+		for other in others:
+			if other['selected'] == True:
+				cost += float(other['price'])
+				totalcost += float(other['price'])
+
+		orders.append({
+			"key": "cart-item-" + str(data.id),
+			"id": str(data.id),
+			"name": product.name,
+			"productId": product.id,
+			"note": data.note,
+			"image": product.image,
+			"options": options,
+			"others": others,
+			"sizes": sizes,
+			"quantity": quantity,
+			"cost": cost,
+			"orderers": len(callfor)
+		})
+
+	return { "orders": orders, "totalcost": totalcost }
+
+@app.route("/receive_payment", methods=["POST"])
+def receive_payment():
+	content = request.get_json()
+
+	userid = str(content['userid'])
+	ordernumber = content['ordernumber']
+	locationid = content['locationid']
+	time = content['time']
+
+	user = User.query.filter_by(id=userid).first()
+	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
+	status = ""
+
+	if user != None and location != None:
+		accountid = location.accountId
+		account = stripe.Account.list_external_accounts(accountid, object="bank_account", limit=1)
+		bankaccounts = len(account.data)
+
+		if bankaccounts == 1:
+			username = user.username
+			adder = user.id
+			
+			datas = query("select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "'", True)
+			charges = {}
+
+			for data in datas:
+				groupId = ""
+
+				for k in range(20):
+					groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
+
+				product = Product.query.filter_by(id=data['productId']).first()
+				location = Location.query.filter_by(id=product.locationId).first()
+				sizes = json.loads(data['sizes'])
+				others = json.loads(data['others'])
+				quantity = int(data['quantity'])
+				cost = 0
+
+				if product.price == "":
+					for size in sizes:
+						if size["selected"] == True:
+							cost += quantity * float(size["price"])
+				else:
+					cost += quantity * float(product.price)
+
+				for other in others:
+					if other['selected'] == True:
+						cost += float(other['price'])
+
+				quantity = int(data['quantity'])
+				callfor = json.loads(data['callfor'])
+				options = data['options']
+				others = data['others']
+				sizes = json.dumps(sizes)
+				friends = []
+
+				if len(callfor) > 0:
+					for info in callfor:
+						friends.append(str(info['userid']))
+						friend = User.query.filter_by(id=info['userid']).first()
+						friendid = str(info['userid'])
+
+						if friendid in charges:
+							charges[friendid] += float(cost)
+						else:
+							charges[friendid] = float(cost)
+				else:
+					if userid in charges:
+						charges[userid] += float(cost)
+					else:
+						charges[userid] = float(cost)
+
+				for k in range(quantity):
+					transaction = Transaction(groupId, product.id, adder, json.dumps(friends), options, others, sizes, time)
+
+					db.session.add(transaction)
+					db.session.commit()
+
+				query("delete from cart where id = " + str(data['id']), False)
+
+			for info in charges:
+				userInfo = User.query.filter_by(id=info).first()
+				customerid = json.loads(userInfo.info)["customerId"]
+
+				stripe.Charge.create(
+					amount=int(charges[info] * 100),
+					currency="cad",
+					customer=customerid,
+					transfer_data={
+						"destination": location.accountId
+					}
+				)
+
+			return { "msg": "Order delivered and payment made" }
+		else:
+			msg = "Bank account required"
+			status = "bankaccountrequired"
+
+	return { "errormsg": msg, "status": status }, 400
+
 @app.route("/get_reservations/<id>")
 def get_reservations(id):
 	datas = Schedule.query.filter_by(locationId=id, status='accepted').all()
@@ -944,8 +1133,8 @@ def add_item_to_order():
 
 	return { "errormsg": msg }
 
-@app.route("/see_orders/<id>")
-def see_orders(id):
+@app.route("/see_dining_orders/<id>")
+def see_dining_orders(id):
 	schedule = Schedule.query.filter_by(id=id).first()
 
 	if schedule != None:
@@ -1113,8 +1302,8 @@ def edit_diners(id):
 
 	return { "errormsg": msg }
 
-@app.route("/get_orders/<id>")
-def get_orders(id):
+@app.route("/get_dining_orders/<id>")
+def get_dining_orders(id):
 	schedule = Schedule.query.filter_by(id=id).first()
 
 	if schedule != None:
@@ -1147,6 +1336,15 @@ def get_orders(id):
 							sizes = order['sizes']
 							quantity = int(order['quantity'])
 							price = 0
+
+							for k, option in enumerate(options):
+								option["key"] = "option-" + str(k)
+
+							for k, other in enumerate(others):
+								other["key"] = "other-" + str(k)
+
+							for k, size in enumerate(sizes):
+								size["key"] = "size-" + str(k)
 
 							for other in others:
 								if other['selected'] == True:

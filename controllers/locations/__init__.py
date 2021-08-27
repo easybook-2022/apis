@@ -36,14 +36,14 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	customerId = db.Column(db.String(25))
+	info = db.Column(db.String(60))
 
-	def __init__(self, cellnumber, password, username, profile, customerId):
+	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
-		self.customerId = customerId
+		self.info = info
 
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
@@ -206,6 +206,7 @@ class Product(db.Model):
 
 class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
+	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
@@ -214,8 +215,11 @@ class Cart(db.Model):
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(225))
 	note = db.Column(db.String(100))
+	status = db.Column(db.String(10))
+	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, productId, quantity, adder, callfor, options, others, sizes, note):
+	def __init__(self, locationId, productId, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+		self.locationId = locationId
 		self.productId = productId
 		self.quantity = quantity
 		self.adder = adder
@@ -224,6 +228,8 @@ class Cart(db.Model):
 		self.others = others
 		self.sizes = sizes
 		self.note = note
+		self.status = status
+		self.orderNumber = orderNumber
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
@@ -481,6 +487,17 @@ def fetch_num_appointments(id):
 
 	return { "numAppointments": numAppointments }
 
+@app.route("/fetch_num_cartorderers/<id>")
+def fetch_num_cartorderers(id):
+	numCartorderers = query("select count(*) as num from cart where locationId = " + str(id) + " and status = 'checkout' group by adder, orderNumber", True)
+
+	if len(numCartorderers) > 0:
+		numCartorderers = len(numCartorderers)
+	else:
+		numCartorderers = 0
+
+	return { "numCartorderers": numCartorderers }
+
 @app.route("/fetch_num_reservations/<id>")
 def fetch_num_reservations(id):
 	numReservations = query("select count(*) as num from schedule where locationId = " + str(id) + " and status = 'accepted' and not customers = '[]'", True)[0]["num"]
@@ -567,8 +584,8 @@ def get_locations():
 			point1 = (longitude, latitude)
 
 			# get restaurants
-			sql = "select * from location where type = 'restaurant' " + orderQuery + " limit 0, 10"
-			maxsql = "select count(*) as num from location where type = 'restaurant' " + orderQuery
+			sql = "select * from location where type = 'restaurant' and state = 'listed' " + orderQuery + " limit 0, 10"
+			maxsql = "select count(*) as num from location where type = 'restaurant' and state = 'listed' " + orderQuery
 			datas = query(sql, True)
 			maxdatas = query(maxsql, True)[0]["num"]
 			for data in datas:
@@ -600,8 +617,8 @@ def get_locations():
 			locations[0]["index"] += len(datas)
 
 			# get hair salons
-			sql = "select * from location where type = 'hair' " + orderQuery + " limit 0, 10"
-			maxsql = "select count(*) as num from location where type = 'hair' " + orderQuery
+			sql = "select * from location where type = 'hair' and state = 'listed' " + orderQuery + " limit 0, 10"
+			maxsql = "select count(*) as num from location where type = 'hair' and state = 'listed' " + orderQuery
 			datas = query(sql, True)
 			maxdatas = query(maxsql, True)[0]["num"]
 			for data in datas:
@@ -633,8 +650,8 @@ def get_locations():
 			locations[1]["index"] += len(datas)
 
 			# get nail salons
-			sql = "select * from location where type = 'nail' " + orderQuery + " limit 0, 10"
-			maxsql = "select count(*) as num from location where type = 'nail' " + orderQuery
+			sql = "select * from location where type = 'nail' and state = 'listed' " + orderQuery + " limit 0, 10"
+			maxsql = "select count(*) as num from location where type = 'nail' and state = 'listed' " + orderQuery
 			datas = query(sql, True)
 			maxdatas = query(maxsql, True)[0]["num"]
 			for data in datas:
@@ -926,20 +943,36 @@ def get_info():
 @app.route("/change_location_state/<id>")
 def change_location_state(id):
 	location = Location.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		state = location.state
-		state = "unlist" if state == "listed" else "listed"
+		numproducts = Product.query.filter_by(locationId=id).count()
+		numservices = Service.query.filter_by(locationId=id).count()
 
-		location.state = state
+		accountid = location.accountId
+		account = stripe.Account.list_external_accounts(accountid, object="bank_account", limit=1)
+		bankaccounts = len(account.data)
 
-		db.session.commit()
+		if (state == "unlist" and ((numproducts > 0 or numservices > 0) and bankaccounts == 1)) or (state == "listed"):
+			location.state = "listed" if state == "unlist" else "unlist"
 
-		return { "msg": "Change location state", "state": location.state }
+			db.session.commit()
+
+			return { "msg": "Change location state", "state": location.state }
+		else:
+			if state == "unlist":
+				if numproducts == 0 and numservices == 0:
+					msg = "Menu setup required"
+					status = "menusetuprequired"
+				else:
+					msg = "Bank account required"
+					status = "bankaccountrequired"
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_hours", methods=["POST"])
 def get_hours():
