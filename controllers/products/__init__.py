@@ -510,7 +510,7 @@ def update_product():
 			oldimage = product.image
 
 			if oldimage != image.filename:
-				if os.path.exists("static/" + oldimage):
+				if oldimage != "" and os.path.exists("static/" + oldimage):
 					os.remove("static/" + oldimage)
 
 				image.save(os.path.join('static', image.filename))

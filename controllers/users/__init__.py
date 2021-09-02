@@ -282,7 +282,15 @@ def query(sql, output):
 
 @app.route("/", methods=["GET"])
 def welcome_users():
-	return { "msg": "welcome to users of easygo" }
+	datas = query("select * from user", True)
+	users = []
+
+	for data in datas:
+		users.append({
+			"id": data["id"]
+		})
+
+	return { "msg": "welcome to users of easygo", "users": users }
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -410,7 +418,7 @@ def update():
 			if user.profile != None:
 				oldprofile = user.profile
 
-				if os.path.exists("static/" + oldprofile):
+				if oldprofile != "" and os.path.exists("static/" + oldprofile):
 					os.remove("static/" + oldprofile)
 
 			profile.save(os.path.join('static', profile.filename))
@@ -865,6 +873,7 @@ def search_friends():
 def search_diners():
 	content = request.get_json()
 
+	userid = str(content['userid'])
 	scheduleid = content['scheduleid']
 	searchusername = content['username']
 
@@ -876,6 +885,9 @@ def search_diners():
 
 		for data in datas:
 			customers.append(data['userid'])
+
+		if userid in customers:
+			customers.remove(userid)
 
 		datas = query("select id, profile, username from user where username like '%" + searchusername + "%' and id in (" + json.dumps(customers)[1:-1] + ")", True)
 		row = []

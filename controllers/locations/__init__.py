@@ -276,7 +276,15 @@ def query(sql, output):
 
 @app.route("/", methods=["GET"])
 def welcome_locations():
-	return { "msg": "welcome to locations of easygo" }
+	datas = query("select * from location", True)
+	locations = []
+
+	for data in datas:
+		locations.append({
+			"id": data["id"]
+		})
+
+	return { "msg": "welcome to locations of easygo", "locations": locations }
 
 @app.route("/setup_location", methods=["POST"])
 def setup_location():
@@ -460,7 +468,7 @@ def update_location():
 				if logo.filename != oldlogo:
 					location.logo = logo.filename
 
-					if os.path.exists("static/" + oldlogo):
+					if oldlogo != "" and os.path.exists("static/" + oldlogo):
 						os.remove("static/" + oldlogo)
 
 					logo.save(os.path.join('static', logo.filename))
@@ -500,7 +508,7 @@ def fetch_num_cartorderers(id):
 
 @app.route("/fetch_num_reservations/<id>")
 def fetch_num_reservations(id):
-	numReservations = query("select count(*) as num from schedule where locationId = " + str(id) + " and status = 'accepted' and not customers = '[]'", True)[0]["num"]
+	numReservations = Schedule.query.filter_by(locationId=id, status='accepted').count()
 
 	return { "numReservations": numReservations }
 
@@ -831,7 +839,7 @@ def get_location_profile():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/make_reservation", methods=["POST"])
 def make_reservation():

@@ -381,7 +381,7 @@ def update_service():
 			oldimage = service.image
 
 			if oldimage != image.filename:
-				if os.path.exists("static/" + oldimage):
+				if oldimage != "" and os.path.exists("static/" + oldimage):
 					os.remove("static/" + oldimage)
 
 				image.save(os.path.join('static', image.filename))
@@ -405,7 +405,7 @@ def remove_service(id):
 	if service != None:
 		image = service.image
 
-		if os.path.exists("static/" + image):
+		if image != "" and os.path.exists("static/" + image):
 			os.remove("static/" + image)
 
 		db.session.delete(service)

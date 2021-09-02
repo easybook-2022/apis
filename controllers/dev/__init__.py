@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 import mysql.connector, pymysql.cursors, os, json, stripe
 from werkzeug.security import generate_password_hash, check_password_hash
+from random import randint
 from twilio.rest import Client
 
 local = True
@@ -31,9 +32,9 @@ mycursor = mydb.cursor()
 migrate = Migrate(app, db)
 stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
 
-account_sid = "ACc2195555d01f8077e6dcd48adca06d14"
-auth_token = "244371c21d9c8e735f0e08dd4c29249a"
-messaging_service_sid = "MG376dcb41368d7deca0bda395f36bf2a7"
+account_sid = "AC8c3cd78674e391f0834a086891304e52"
+auth_token = "b7f9e3b46ac445302a4a0710e95f44c1"
+mss = "MG376dcb41368d7deca0bda395f36bf2a7"
 client = Client(account_sid, auth_token)
 
 class User(db.Model):
@@ -280,12 +281,23 @@ def query(sql, output):
 
 		return results
 
+@app.route("/")
+def welcome_dev():
+	num = str(randint(0, 9))
+
+	return { "msg": "welcome to dev of easygo: " + num }
+
 @app.route("/reset")
 def reset():
 	delete = False
 	users = query("select * from user", True)
+	
 	for user in users:
 		delete = True
+		info = json.loads(user['info'])
+
+		stripe.Customer.delete(info['customerId'])
+
 		query("delete from user where id = " + str(user['id']), False)
 
 	if delete == True:
@@ -305,8 +317,11 @@ def reset():
 	for location in locations:
 		delete = True
 		logo = location['logo']
+		accountid = location['accountId']
 
-		if os.path.exists("static/" + logo):
+		stripe.Account.delete(accountid)
+
+		if logo != "" and os.path.exists("static/" + logo):
 			os.remove("static/" + logo)
 
 		query("delete from location where id = " + str(location['id']), False)
@@ -320,7 +335,7 @@ def reset():
 		delete = True
 		image = menu['image']
 
-		if os.path.exists("static/" + image):
+		if image != "" and os.path.exists("static/" + image):
 			os.remove("static/" + image)
 
 		query("delete from menu where id = " + str(menu['id']), False)
@@ -334,7 +349,7 @@ def reset():
 		delete = True
 		image = service['image']
 
-		if os.path.exists("static/" + image):
+		if image != "" and os.path.exists("static/" + image):
 			os.remove("static/" + image)
 
 		query("delete from service where id = " + str(service['id']), False)
@@ -358,7 +373,7 @@ def reset():
 		delete = True
 		image = product['image']
 
-		if os.path.exists("static/" + image):
+		if image != "" and os.path.exists("static/" + image):
 			os.remove("static/" + image)
 
 		query("delete from product where id = " + str(product['id']), False)
@@ -390,18 +405,8 @@ def reset():
 
 	for file in files:
 		if ".jpg" in file:
-			if os.path.exists("static/" + file):
-				os.remove("static/" + file)
-
-	accounts = stripe.Account.list()
-
-	for data in accounts.data:
-		stripe.Account.delete(data.id)
-
-	customers = stripe.Customer.list()
-
-	for data in customers.data:
-		stripe.Customer.delete(data.id)
+			if file != "" and os.path.exists("static/" + file):
+				os.remove("static/" + file)		
 
 	return { "reset": True }
 
@@ -463,8 +468,8 @@ def twilio_test():
 
 	message = client.messages.create(
 		body='All in the game, yo',
-		from_='+15005550006',
-		to='+6479263868'
+		messaging_service_sid=mss,
+		to='+16479263868'
 	)
 
 	print(message)

@@ -335,7 +335,7 @@ def get_menus():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/remove_menu/<id>")
 def remove_menu(id):
@@ -389,7 +389,7 @@ def save_menu():
 		oldimage = menu.image
 
 		if image.filename != oldimage:
-			if os.path.exists("static/" + oldimage):
+			if oldimage != "" and os.path.exists("static/" + oldimage):
 				os.remove("static/" + oldimage)
 
 			image.save(os.path.join('static', image.filename))
@@ -423,7 +423,7 @@ def add_menu():
 			location = Location.query.filter_by(id=locationid).first()
 
 			if location != None:
-				data = query("select * from menu where (parentMenuId = '" + str(parentMenuid) + "' and name = '" + name + "')", True)
+				data = query("select * from menu where locationId = " + str(locationid) + " and (parentMenuId = '" + str(parentMenuid) + "' and name = '" + name + "')", True)
 
 				if len(data) == 0:
 					menu = Menu(locationid, parentMenuid, name, info, image.filename)

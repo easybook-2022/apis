@@ -1,8 +1,8 @@
 from flask import Flask, request, jsonify
-from werkzeug.serving import run_simple
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 import mysql.connector, os
+from werkzeug.serving import run_simple
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from werkzeug.middleware.shared_data import SharedDataMiddleware
 
@@ -283,9 +283,10 @@ app.wsgi_app = DispatcherMiddleware(None, {
 	'/transactions': transactions_controller
 })
 
-app = SharedDataMiddleware(app, {
+app.wsgi_app = SharedDataMiddleware(app.wsgi_app, {
     '/static': os.path.join(os.path.dirname(__file__), 'static')
 })
 
 if __name__ == "__main__":
-	run_simple("192.168.0.14", 5000, app, use_reloader=True, use_debugger=True, use_evalex=True)
+	# 192.168.0.16
+	run_simple("192.168.0.16", 5000, app, use_reloader=True, use_debugger=True, use_evalex=True)

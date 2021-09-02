@@ -282,7 +282,15 @@ def query(sql, output):
 
 @app.route("/", methods=["GET"])
 def welcome_owners():
-	return { "msg": "welcome to owners of easygo" }
+	datas = query("select * from owner", True)
+	owners = []
+
+	for data in datas:
+		owners.append({
+			"id": data["id"]
+		})
+
+	return { "msg": "welcome to owners of easygo", "owners": owners }
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -301,8 +309,9 @@ def login():
 				ownerid = owner['id']
 
 				data = query("select * from location where owners like '%\"" + str(ownerid) + "\"%'", True)
+				logo = data[0]["logo"] if len(data) > 0 else ""
 
-				if len(data) == 0:
+				if len(data) == 0 or logo == "":
 					return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": "", "locationtype": "", "msg": "setup" }
 				else:
 					data = data[0]
