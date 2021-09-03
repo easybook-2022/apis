@@ -406,7 +406,17 @@ def reset():
 	for file in files:
 		if ".jpg" in file:
 			if file != "" and os.path.exists("static/" + file):
-				os.remove("static/" + file)		
+				os.remove("static/" + file)
+
+	'''accounts = stripe.Account.list()
+
+	for account in accounts.data:
+		stripe.Account.delete(account.id)
+
+	customers = stripe.Customer.list()
+
+	for customer in customers.data:
+		stripe.Customer.delete(customer.id)'''
 
 	return { "reset": True }
 

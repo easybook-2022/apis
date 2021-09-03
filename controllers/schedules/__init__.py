@@ -360,7 +360,8 @@ def get_reservation_info(id):
 			info = {
 				"locationId": locationId,
 				"name": location.name,
-				"diners": len(json.loads(schedule.customers))
+				"diners": len(json.loads(schedule.customers)),
+				"note": schedule.note
 			}
 
 			return { "reservationInfo": info }
@@ -1103,7 +1104,7 @@ def add_item_to_order():
 					if len(groups) > 0:
 						first_group = groups[0]
 
-						if first_group['status'] == "served":
+						if first_group['status'] == "served" or first_group['status'] == "making":
 							groups.insert(0, { "id": getRanStr(), "status": "ordering" })
 
 							first_group = groups[0]
@@ -1641,22 +1642,23 @@ def edit_order_callfor():
 							product = Product.query.filter_by(id=orderer['productid']).first()
 							searcheddiners = []
 							row = []
+							key = 0
 							numsearcheddiners = 0
 
 							for k, info in enumerate(callfor):
 								user = User.query.filter_by(id=info).first()
 
 								row.append({
-									"key": "selected-friend-" + str(user.id),
+									"key": "selected-friend-" + str(key),
 									"id": user.id,
 									"profile": user.profile,
 									"username": user.username
 								})
+								key += 1
 								numsearcheddiners += 1
 
 								if len(row) == 4 or (len(callfor) - 1 == k and len(row) > 0):
 									if len(callfor) - 1 == k and len(row) > 0:
-										key = user.id + 1
 
 										leftover = 4 - len(row)
 

@@ -847,59 +847,60 @@ def make_reservation():
 
 	userid = content['userid']
 	locationid = content['locationid']
+	scheduleid = content['scheduleid']
 	time = content['time']
 	customers = json.dumps(content['diners'])
 	note = content['note']
 
 	user = User.query.filter_by(id=userid).first()
+	msg = ""
+	status = ""
 
 	if user != None:
-		location = Location.query.filter_by(id=locationid).first()
+		info = json.loads(user.info)
+		customerid = info['customerId']
+		customer = stripe.Customer.list_sources(
+			customerid,
+			object="card",
+			limit=1
+		)
+		cards = len(customer.data)
 
-		if location != None:
-			requested_reservation = Schedule.query.filter_by(
-				locationId=locationid,
-				menuId="",
-				serviceId="",
-				userId=userid,
-				status='requested'
-			).first()
-			rebooked_reservation = Schedule.query.filter_by(
-				locationId=locationid,
-				menuId="",
-				serviceId="",
-				userId=userid,
-				status='rebook'
-			).first()
+		if cards > 0:
+			location = Location.query.filter_by(id=locationid).first()
 
-			if requested_reservation == None and rebooked_reservation == None: # nothing created yet
-				schedule = Schedule(userid, locationid, "", "", time, "requested", '', '', location.type, customers, note, '{"groups":[],"donedining":false}', '')
+			if location != None:
+				if scheduleid == None: # new schedule
+					schedule = Schedule(userid, locationid, "", "", time, "requested", '', '', location.type, customers, note, '{"groups":[],"donedining":false}', '')
 
-				db.session.add(schedule)
-				db.session.commit()
-
-				msg = "reservation added"
-
-				return { "msg": msg }
-			else:
-				if rebooked_reservation != None:
-					rebooked_reservation.status = 'requested'
-					rebooked_reservation.time = time
-					rebooked_reservation.customers = customers
-
+					db.session.add(schedule)
 					db.session.commit()
 
-					msg = "reservation re-requested"
+					msg = "reservation added"
 
 					return { "msg": msg }
 				else:
-					msg = "reservation already requested"
+					schedule = Schedule.query.filter_by(id=scheduleid).first()
+
+					if schedule != None:
+						schedule.status = 'requested'
+						schedule.time = time
+						schedule.note = note
+
+						db.session.commit()
+
+						return { "msg": "reservation re-requested" }
+					else:
+						msg = "Schedule doesn't exist"
+			else:
+				msg = "Location doesn't exist"
 		else:
-			msg = "Location doesn't exist"
+			msg = "A payment method is required"
+			status = "cardrequired"
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_info", methods=["POST"])
 def get_info():
