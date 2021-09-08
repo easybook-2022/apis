@@ -635,8 +635,8 @@ def get_notifications(id):
 		userId = user.id
 		notifications = []
 		
-		# get orders
-		sql = "select * from cart where callfor like '%\"userid\": " + str(id) + ", \"status\": \"waiting\"%'"
+		# cart orders called for user
+		sql = "select * from cart where callfor like '%\"userid\": \"" + str(id) + "\", \"status\": \"waiting\"%'"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -668,7 +668,7 @@ def get_notifications(id):
 
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
-				"type": "order",
+				"type": "cart-order",
 				"id": str(data['id']),
 				"name": product.name,
 				"image": product.image,
@@ -681,8 +681,42 @@ def get_notifications(id):
 				"price": int(data['quantity']) * float(product.price) if product.price != "" else ""
 			})
 
+		# dining orders called for user
+		sql = "select * from schedule where orders like '%\"userid\": \"" + str(id) + "\", \"status\": \"confirmawaits\"%'"
+		datas = query(sql, True)
+
+		for data in datas:
+			orders = json.loads(data['orders'])
+			groups = orders['groups']
+
+			for rounds in groups:
+				for k in rounds:
+					if k != "status" and k != "id":
+						for orderer in rounds[k]:
+							if {"userid": str(id), "status": "confirmawaits"} in orderer['callfor']:
+								callfor = orderer['callfor']
+								product = Product.query.filter_by(id=orderer['productid']).first()
+								adder = User.query.filter_by(id=k).first()
+								options = orderer['options']
+								others = orderer['others']
+								sizes = orderer['sizes']
+
+								notifications.append({
+									"key": "order-" + str(len(notifications)),
+									"type": "dining-order",
+									"orderid": str(orderer['id']),
+									"name": product.name,
+									"image": product.image,
+									"options": options,
+									"others": others,
+									"sizes": sizes,
+									"quantity": int(orderer['quantity']),
+									"adder": { "username": adder.username, "profile": adder.profile },
+									"price": int(orderer['quantity']) * float(product.price) if product.price != "" else ""
+								})
+
 		# get requested payment method to order for
-		sql = "select * from cart where callfor like '%\"userid\": " + str(id) + ", \"status\": \"paymentrequested\"%'"
+		sql = "select * from cart where callfor like '%\"userid\": \"" + str(id) + "\", \"status\": \"paymentrequested\"%'"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -731,7 +765,7 @@ def get_notifications(id):
 		sql = "select * from schedule where "
 		sql += "(userId = " + str(id) + " and (status = 'requested' or status = 'rebook' or status = 'cancel' or status = 'accepted'))"
 		sql += " or customers like '%{\"userid\": \"" + str(id) + "\", \"status\": \"waiting\"}%'"
-		sql += " or (status = 'accepted' and customers like '%{\"userid\": \"" + str(id) + "\", \"status\": \"confirm\"}%')"
+		sql += " or (status = 'accepted' and customers like '%{\"userid\": \"" + str(id) + "\", \"status\": \"confirmed\"}%')"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -752,7 +786,7 @@ def get_notifications(id):
 				
 				for customer in customers:
 					if customer['userid'] == id:
-						confirm = customer['status'] == 'confirm'
+						confirm = customer['status'] == 'confirmed'
 
 				if str(data['userId']) == id:
 					confirm = data["status"] == 'accepted'
@@ -802,19 +836,23 @@ def get_num_updates():
 	if user != None:
 		num = 0
 
-		# orders called for user
-		sql = "select count(*) as num from cart where callfor like '%\"userid\": " + str(userid) + ", \"status\": \"waiting\"%'"
+		# cart orders called for user
+		sql = "select count(*) as num from cart where callfor like '%\"userid\": \"" + str(userid) + "\", \"status\": \"waiting\"%'"
+		num += query(sql, True)[0]["num"]
+
+		# dining orders called for user
+		sql = "select count(*) as num from schedule where orders like '%\"userid\": \"" + str(userid) + "\", \"status\": \"confirmawaits\"%'"
 		num += query(sql, True)[0]["num"]
 
 		# requested payment method for order for
-		sql = "select count(*) as num from cart where callfor like '%\"userid\": " + str(userid) + ", \"status\": \"paymentrequested\"%'"
+		sql = "select count(*) as num from cart where callfor like '%\"userid\": \"" + str(userid) + "\", \"status\": \"paymentrequested\"%'"
 		num += query(sql, True)[0]["num"]
 
 		# get reservation requests
 		sql = "select count(*) as num from schedule where "
 		sql += "(userId = " + str(userid) + " and (status = 'requested' or status = 'rebook' or status = 'cancel' or status = 'accepted'))"
 		sql += " or customers like '%{\"userid\": \"" + str(userid) + "\", \"status\": \"waiting\"}%'"
-		sql += " or (status = 'accepted' and customers like '%{\"userid\": \"" + str(userid) + "\", \"status\": \"confirm\"}%')"
+		sql += " or (status = 'accepted' and customers like '%{\"userid\": \"" + str(userid) + "\", \"status\": \"confirmed\"}%')"
 		num += query(sql, True)[0]["num"]
 
 		return { "numNotifications": num }
@@ -884,23 +922,26 @@ def search_diners():
 		customers = [str(schedule.userId)]
 
 		for data in datas:
-			customers.append(data['userid'])
+			customers.append(data["userid"])
 
 		if userid in customers:
 			customers.remove(userid)
 
-		datas = query("select id, profile, username from user where username like '%" + searchusername + "%' and id in (" + json.dumps(customers)[1:-1] + ")", True)
+		datas = query("select id, profile, username, info from user where username like '%" + searchusername + "%' and id in (" + json.dumps(customers)[1:-1] + ")", True)
 		row = []
 		searcheddiners = []
 		rownum = 0
 		numSearchedDiners = 0
 
 		for k, data in enumerate(datas):
+			info = json.loads(data["info"])
+
 			row.append({
 				"key": "diner-" + str(data['id']),
 				"id": data['id'],
 				"profile": data['profile'],
-				"username": data['username']
+				"username": data['username'],
+				"status": info["status"]
 			})
 			numSearchedDiners += 1
 

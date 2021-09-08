@@ -475,6 +475,107 @@ def checkout():
 
 	return { "errormsg": msg }
 
+@app.route("/receive_payment", methods=["POST"])
+def receive_payment():
+	content = request.get_json()
+
+	userid = str(content['userid'])
+	ordernumber = content['ordernumber']
+	locationid = content['locationid']
+	time = content['time']
+
+	user = User.query.filter_by(id=userid).first()
+	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
+	status = ""
+
+	if user != None and location != None:
+		accountid = location.accountId
+		account = stripe.Account.list_external_accounts(accountid, object="bank_account", limit=1)
+		bankaccounts = len(account.data)
+
+		if bankaccounts == 1:
+			username = user.username
+			adder = user.id
+			
+			datas = query("select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "'", True)
+			charges = {}
+
+			for data in datas:
+				groupId = ""
+
+				for k in range(20):
+					groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
+
+				product = Product.query.filter_by(id=data['productId']).first()
+				location = Location.query.filter_by(id=product.locationId).first()
+				sizes = json.loads(data['sizes'])
+				others = json.loads(data['others'])
+				quantity = int(data['quantity'])
+				cost = 0
+
+				if product.price == "":
+					for size in sizes:
+						if size["selected"] == True:
+							cost += quantity * float(size["price"])
+				else:
+					cost += quantity * float(product.price)
+
+				for other in others:
+					if other['selected'] == True:
+						cost += float(other['price'])
+
+				quantity = int(data['quantity'])
+				callfor = json.loads(data['callfor'])
+				options = data['options']
+				others = data['others']
+				sizes = json.dumps(sizes)
+				friends = []
+
+				if len(callfor) > 0:
+					for info in callfor:
+						friends.append(str(info['userid']))
+						friend = User.query.filter_by(id=info['userid']).first()
+						friendid = str(info['userid'])
+
+						if friendid in charges:
+							charges[friendid] += float(cost)
+						else:
+							charges[friendid] = float(cost)
+				else:
+					if userid in charges:
+						charges[userid] += float(cost)
+					else:
+						charges[userid] = float(cost)
+
+				for k in range(quantity):
+					transaction = Transaction(groupId, product.id, adder, json.dumps(friends), options, others, sizes, time)
+
+					db.session.add(transaction)
+					db.session.commit()
+
+				query("delete from cart where id = " + str(data['id']), False)
+
+			for info in charges:
+				userInfo = User.query.filter_by(id=info).first()
+				customerid = json.loads(userInfo.info)["customerId"]
+
+				stripe.Charge.create(
+					amount=int(charges[info] * 100),
+					currency="cad",
+					customer=customerid,
+					transfer_data={
+						"destination": location.accountId
+					}
+				)
+
+			return { "msg": "Order delivered and payment made" }
+		else:
+			msg = "Bank account required"
+			status = "bankaccountrequired"
+
+	return { "errormsg": msg, "status": status }, 400
+
 @app.route("/edit_cart_item/<id>")
 def edit_cart_item(id):
 	cartitem = Cart.query.filter_by(id=id).first()
@@ -563,6 +664,7 @@ def edit_call_for(id):
 		product = Product.query.filter_by(id=cartitem.productId).first()
 		searchedfriends = []
 		row = []
+		key = 0
 		numsearchedfriends = 0
 		cost = 0
 
@@ -570,17 +672,16 @@ def edit_call_for(id):
 			user = User.query.filter_by(id=info['userid']).first()
 
 			row.append({
-				"key": "selected-friend-" + str(user.id),
+				"key": "selected-friend-" + str(key),
 				"id": user.id,
 				"profile": user.profile,
 				"username": user.username
 			})
+			key += 1
 			numsearchedfriends += 1
 
 			if len(row) == 4 or (len(callfor) - 1 == k and len(row) > 0):
 				if len(callfor) - 1 == k and len(row) > 0:
-					key = user.id + 1
-
 					leftover = 4 - len(row)
 
 					for k in range(leftover):

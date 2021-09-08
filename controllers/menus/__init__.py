@@ -320,7 +320,9 @@ def get_menus():
 
 		if len(datas) > 0:
 			for data in datas:
-				numCategories = query("select count(*) as num from product where menuId = " + str(data['id']), True)[0]["num"]
+				numCategories = 0
+				numCategories += query("select count(*) as num from product where menuId = " + str(data['id']), True)[0]["num"]
+				numCategories += query("select count(*) as num from service where menuId = " + str(data['id']), True)[0]["num"]
 
 				menus.append({
 					"key": "menu-" + str(data['id']),

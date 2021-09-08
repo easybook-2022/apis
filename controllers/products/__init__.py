@@ -390,8 +390,8 @@ def get_product_info(id):
 
 	return { "errormsg": msg }
 
-@app.route("/cancel_order", methods=["POST"])
-def cancel_order():
+@app.route("/cancel_cart_order", methods=["POST"])
+def cancel_cart_order():
 	content = request.get_json()
 
 	userid = content['userid']
@@ -418,8 +418,8 @@ def cancel_order():
 
 	return { "errormsg": msg }
 
-@app.route("/confirm_order", methods=["POST"])
-def confirm_order():
+@app.route("/confirm_cart_order", methods=["POST"])
+def confirm_cart_order():
 	content = request.get_json()
 
 	userid = content['userid']

@@ -870,22 +870,26 @@ def make_reservation():
 			location = Location.query.filter_by(id=locationid).first()
 
 			if location != None:
-				if scheduleid == None: # new schedule
-					schedule = Schedule(userid, locationid, "", "", time, "requested", '', '', location.type, customers, note, '{"groups":[],"donedining":false}', '')
+				if scheduleid == None:
+					reservation = Schedule.query.filter_by(userId=userid, locationId=locationid).first()
 
-					db.session.add(schedule)
-					db.session.commit()
+					if reservation == None:
+						reservation = Schedule(userid, locationid, "", "", time, "requested", '', '', location.type, customers, note, '{"groups":[],"donedining":false,"charge_status":"unstarted"}', '')
 
-					msg = "reservation added"
+						db.session.add(reservation)
+						db.session.commit()
 
-					return { "msg": msg }
+						return { "msg": "reservation added" }
+					else:
+						msg = "Reservation already made"
+						status = "existed"
 				else:
-					schedule = Schedule.query.filter_by(id=scheduleid).first()
+					reservation = Schedule.query.filter_by(id=scheduleid).first()
 
-					if schedule != None:
-						schedule.status = 'requested'
-						schedule.time = time
-						schedule.note = note
+					if reservation != None:
+						reservation.status = 'requested'
+						reservation.time = time
+						reservation.note = note
 
 						db.session.commit()
 

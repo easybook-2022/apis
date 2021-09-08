@@ -312,6 +312,7 @@ def get_requests():
 					"time": int(data['time']),
 					"name": service.name if service != None else location.name,
 					"image": service.image if service != None else location.logo,
+					"note": data['note'],
 					"diners": len(json.loads(data['customers'])) if data['locationType'] == 'restaurant' else False
 				})
 
@@ -420,71 +421,65 @@ def request_appointment():
 
 	userid = content['userid']
 	locationid = content['locationid']
-	menuid = content['menuid']
+	scheduleid = content['scheduleid']
 	serviceid = content['serviceid']
 	time = content['time']
 	note = content['note']
 
 	user = User.query.filter_by(id=userid).first()
+	msg = ""
+	status = ""
 
 	if user != None:
-		location = Location.query.filter_by(id=locationid).first()
+		info = json.loads(user.info)
+		customerid = info['customerId']
+		customer = stripe.Customer.list_sources(
+			customerid,
+			object="card",
+			limit=1
+		)
+		cards = len(customer.data)
 
-		if location != None:
-			menu = Menu.query.filter_by(id=menuid).first()
+		if cards > 0:
+			location = Location.query.filter_by(id=locationid).first()
 
-			if menu != None or menuid == "":
-				service = Service.query.filter_by(id=serviceid).first()
+			if location != None:
+				if scheduleid == None:
+					appointment = Schedule.query.filter_by(userId=userid, serviceId=serviceid).first()
 
-				if service != None:
-					serviceName = service.name
-
-					requested_appointment = Schedule.query.filter_by(
-						locationId=locationid,
-						menuId=menuid,
-						serviceId=serviceid,
-						userId=userid,
-						status='requested'
-					).first()
-					rebooked_appointment = Schedule.query.filter_by(
-						locationId=locationid,
-						menuId=menuid,
-						serviceId=serviceid,
-						userId=userid,
-						status='rebook'
-					).first()
-
-					if requested_appointment == None and rebooked_appointment == None: # nothing created yet
-						appointment = Schedule(userid, locationid, menuid, serviceid, time, "requested", '', '', location.type, 1, note, '[]', '')
+					if appointment == None:
+						service = Service.query.filter_by(id=serviceid).first()
+						appointment = Schedule(userid, locationid, service.menuId, serviceid, time, "requested", '', '', location.type, 1, note, '[]', '')
 
 						db.session.add(appointment)
 						db.session.commit()
 
-						msg = "appointment added"
-
-						return { "msg": msg }
+						return { "msg": "appointment added" }
 					else:
-						if rebooked_appointment != None:
-							rebooked_appointment.status = 'requested'
-							rebooked_appointment.time = time
-
-							db.session.commit()
-
-							msg = "appointment re-requested"
-
-							return { "msg": msg }
-						else:
-							msg = "Appointment already requested"
+						msg = "Appointment already made"
+						status = "existed"
 				else:
-					msg = "Service doesn't exist"
+					appointment = Schedule.query.filter_by(id=scheduleid).first()
+
+					if appointment != None:
+						appointment.status = 'requested'
+						appointment.time = time
+						appointment.note = note
+
+						db.session.commit()
+
+						return { "msg": "appointment re-requested" }
+					else:
+						msg = "Appointment doesn't exist"
 			else:
-				msg = "Menu doesn't exist"
+				msg = "Location doesn't exist"
 		else:
-			msg = "Location doesn't exist"
+			msg = "A payment method is required"
+			status = "cardrequired"
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/accept_request", methods=["POST"])
 def accept_request():
@@ -536,7 +531,7 @@ def close_request(id):
 		db.session.delete(appointment)
 		db.session.commit()
 
-		return { "msg": "" }
+		return { "msg": "success" }
 	else:
 		msg = "Appointment doesn't exist"
 
@@ -599,7 +594,7 @@ def accept_reservation_joining():
 
 				for k, diner in enumerate(diners):
 					if diner['userid'] == userid:
-						diner['status'] = 'confirm'
+						diner['status'] = 'confirmed'
 						diners[k] = diner
 
 						schedule.customers = json.dumps(diners)
@@ -647,96 +642,80 @@ def add_diner():
 def done_dining(id):
 	user_orders = []
 
-	schedule = Schedule.query.filter_by(id=id).first()
+	numUnserved = query("select count(*) as num from schedule where ((length(orders) - length(replace(orders, 'making', ''))) / 6 > 0) and id = " + str(id), True)[0]["num"]
 	msg = ""
 	status = ""
 
+	if numUnserved == 0:
+		return { "msg": "success" }
+	else:
+		msg = "There's still some unserved orders"
+		status = "unserved"
+
+	return { "errormsg": msg, "status": status }, 400
+
+@app.route("/get_diners_payments", methods=["POST"])
+def get_diners_payments():
+	content = request.get_json()
+
+	scheduleid = content['scheduleid']
+	userid = str(content['userid'])
+
+	schedule = Schedule.query.filter_by(id=scheduleid).first()
+
 	if schedule != None:
-		locationid = schedule.locationId
-		location = Location.query.filter_by(id=locationid).first()
+		location = Location.query.filter_by(id=schedule.locationId).first()
 
-		accountid = location.accountId
-		account = stripe.Account.list_external_accounts(
-			accountid,
-			object="bank_account",
-			limit=1
-		)
-		bankaccounts = len(account.data)
+		if location != None:
+			accountid = location.accountId
+			orders = json.loads(schedule.orders)
+			charges = orders["charges"]
+			charge_status = orders["charge_status"]
 
-		if bankaccounts > 0:
-			if location != None:
-				customers = json.loads(schedule.customers)
-				bookerid = int(schedule.userId)
+			if charge_status != "started":
+				orders["charge_status"] = "started"
 
-				booker = User.query.filter_by(id=bookerid).first()
-				customerid = {}
-				charges = {}
-				info = json.loads(booker.info)
-				customerid[str(bookerid)] = info["customerId"]
-				charges[str(bookerid)] = 0
+				schedule.orders = json.dumps(orders)
+				db.session.commit()
 
-				for customer in customers:
-					customerinfo = User.query.filter_by(id=customer["userid"]).first()
-					info = json.loads(customerinfo.info)
+			if userid in charges:
+				total = charges[userid]
 
-					customerid[customer["userid"]] = info["customerId"]
-					charges[customer["userid"]] = 0
+				if total > 0:
+					user = User.query.filter_by(id=userid).first()
+					info = json.loads(user.info)
 
-				orders = json.loads(schedule.orders)
-				groups = orders['groups']
+					customerid = info["customerId"]
 
-				for rounds in groups:
-					for round in rounds:
-						if round != "status" and round != "id":
-							for orderer in rounds[round]:
-								product = Product.query.filter_by(id=orderer['productid']).first()
-
-								quantity = int(orderer['quantity'])
-								sizes = orderer['sizes']
-								others = orderer['others']
-								callfor = orderer['callfor']
-								price = 0
-
-								if len(sizes) > 0:
-									for size in sizes:
-										if size["selected"] == True:
-											price = quantity * float(size["price"])
-								else:
-									price = quantity * float(product.price)
-
-								for other in others:
-									if other["selected"] == True:
-										price += float(other["price"])
-
-								if len(callfor) > 0:
-									for userid in callfor:
-										charges[str(userid)] += price
-								else:
-									charges[round] += price
-
-				for info in charges:
 					stripe.Charge.create(
-						amount=int(charges[info] * 100),
+						amount=int(total * 100),
 						currency="cad",
-						customer=customerid[info],
+						customer=customerid,
 						transfer_data={
 							"destination": accountid
 						}
 					)
 
-				db.session.delete(schedule)
+				del charges[userid]
+
+				if charges != {}:
+					orders["charges"] = charges
+
+					schedule.orders = json.dumps(orders)
+				else:
+					db.session.delete(schedule)
+
 				db.session.commit()
 
-				return { "msg": "Feast is done" }
+				return { "msg": "payment received" }
 			else:
-				msg = "Location doesn't exist"
+				msg = "Diner doesn't exist"
 		else:
-			msg = "Please provide a bank account to receive payment"
-			status = "bankaccountrequired"
+			msg = "Location doesn't exist"
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": msg }
 
 @app.route("/done_service/<id>")
 def done_service(id):
@@ -903,106 +882,99 @@ def see_user_orders():
 
 	return { "orders": orders, "totalcost": totalcost }
 
-@app.route("/receive_payment", methods=["POST"])
-def receive_payment():
-	content = request.get_json()
+@app.route("/get_diners_orders/<id>")
+def get_diners_orders(id):
+	schedule = Schedule.query.filter_by(id=id).first()
 
-	userid = str(content['userid'])
-	ordernumber = content['ordernumber']
-	locationid = content['locationid']
-	time = content['time']
+	if schedule != None:
+		orders = json.loads(schedule.orders)
+		customers = json.loads(schedule.customers)
 
-	user = User.query.filter_by(id=userid).first()
-	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
-	status = ""
+		user = User.query.filter_by(id=schedule.userId).first()
+		charges = { str(schedule.userId): {
+			"userId": str(schedule.userId),
+			"charge": float(0.00),
+			"username": user.username,
+			"profile": user.profile
+		}}
 
-	if user != None and location != None:
-		accountid = location.accountId
-		account = stripe.Account.list_external_accounts(accountid, object="bank_account", limit=1)
-		bankaccounts = len(account.data)
+		for customer in customers:
+			user = User.query.filter_by(id=customer["userid"]).first()
+			charges[customer["userid"]] = {
+				"userId": customer["userid"],
+				"charge": float(0.00),
+				"username": user.username,
+				"profile": user.profile
+			}
 
-		if bankaccounts == 1:
-			username = user.username
-			adder = user.id
-			
-			datas = query("select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "'", True)
-			charges = {}
+		groups = orders['groups']
+		diners = []
+		total = 0
+		charge_status = orders["charge_status"]
 
-			for data in datas:
-				groupId = ""
+		if charge_status == "unstarted" or charge_status == "calculating":
+			orders['charges'] = {}
+			orders['charge_status'] = "calculating"
 
-				for k in range(20):
-					groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
+			for rounds in groups:
+				for round in rounds:
+					if round != "status" and round != "id":
+						for orderer in rounds[round]:
+							product = Product.query.filter_by(id=orderer['productid']).first()
 
-				product = Product.query.filter_by(id=data['productId']).first()
-				location = Location.query.filter_by(id=product.locationId).first()
-				sizes = json.loads(data['sizes'])
-				others = json.loads(data['others'])
-				quantity = int(data['quantity'])
-				cost = 0
+							quantity = int(orderer['quantity'])
+							sizes = orderer['sizes']
+							others = orderer['others']
+							callfor = orderer['callfor']
+							price = 0
 
-				if product.price == "":
-					for size in sizes:
-						if size["selected"] == True:
-							cost += quantity * float(size["price"])
-				else:
-					cost += quantity * float(product.price)
+							if len(sizes) > 0:
+								for size in sizes:
+									if size["selected"] == True:
+										price = quantity * float(size["price"])
+							else:
+								price = quantity * float(product.price)
 
-				for other in others:
-					if other['selected'] == True:
-						cost += float(other['price'])
+							for other in others:
+								if other["selected"] == True:
+									price += float(other["price"])
 
-				quantity = int(data['quantity'])
-				callfor = json.loads(data['callfor'])
-				options = data['options']
-				others = data['others']
-				sizes = json.dumps(sizes)
-				friends = []
+							if len(callfor) > 0:
+								for info in callfor:
+									charges[str(info["userid"])]["charge"] += price
+							else:
+								charges[round]["charge"] += price
 
-				if len(callfor) > 0:
-					for info in callfor:
-						friends.append(str(info['userid']))
-						friend = User.query.filter_by(id=info['userid']).first()
-						friendid = str(info['userid'])
+			for index, charge in enumerate(charges):
+				charges[charge]["key"] = "user-" + str(index)
+				charges[charge]["payed"] = False
+				charges[charge]["paying"] = False
+				total += charges[charge]["charge"]
 
-						if friendid in charges:
-							charges[friendid] += float(cost)
-						else:
-							charges[friendid] = float(cost)
-				else:
-					if userid in charges:
-						charges[userid] += float(cost)
-					else:
-						charges[userid] = float(cost)
+				orders['charges'][charge] = charges[charge]["charge"]
 
-				for k in range(quantity):
-					transaction = Transaction(groupId, product.id, adder, json.dumps(friends), options, others, sizes, time)
+				diners.append(charges[charge])
 
-					db.session.add(transaction)
-					db.session.commit()
+			schedule.orders = json.dumps(orders)
 
-				query("delete from cart where id = " + str(data['id']), False)
-
-			for info in charges:
-				userInfo = User.query.filter_by(id=info).first()
-				customerid = json.loads(userInfo.info)["customerId"]
-
-				stripe.Charge.create(
-					amount=int(charges[info] * 100),
-					currency="cad",
-					customer=customerid,
-					transfer_data={
-						"destination": location.accountId
-					}
-				)
-
-			return { "msg": "Order delivered and payment made" }
+			db.session.commit()
 		else:
-			msg = "Bank account required"
-			status = "bankaccountrequired"
+			user_charges = orders["charges"]
 
-	return { "errormsg": msg, "status": status }, 400
+			for index, charge in enumerate(user_charges):
+				charges[charge]["key"] = "user-" + str(index)
+				charges[charge]["payed"] = False
+				charges[charge]["paying"] = False
+				charges[charge]["charge"] += user_charges[charge]
+				total += user_charges[charge]
+
+				diners.append(charges[charge])
+
+		return { "diners": diners, "total": total }
+	else:
+		msg = "Reservation doesn't exist"
+
+	return { "errormsg": msg }
 
 @app.route("/get_reservations/<id>")
 def get_reservations(id):
@@ -1171,13 +1143,14 @@ def see_dining_orders(id):
 						for k, info in enumerate(callfor):
 							info = callfor[k]
 
-							orderer = User.query.filter_by(id=info).first()
+							orderer = User.query.filter_by(id=info["userid"]).first()
 
 							row.append({
 								"key": "orderer-" + str(each_callfor_num),
 								"id": orderer.id,
 								"username": orderer.username,
-								"profile": orderer.profile
+								"profile": orderer.profile,
+								"status": info["status"]
 							})
 							each_callfor_num += 1
 							numorderers += 1
@@ -1219,6 +1192,8 @@ def see_dining_orders(id):
 							if other['selected'] == True:
 								cost += float(other['price'])
 
+						orderer = User.query.filter_by(id=ordererid).first()
+
 						each_orders.append({
 							"id": order['id'],
 							"image": product.image,
@@ -1231,7 +1206,7 @@ def see_dining_orders(id):
 							"quantity": quantity,
 							"cost": cost,
 							"orderers": orderers,
-							"ordererid": ordererid,
+							"orderer": { "id": ordererid, "username": orderer.username },
 							"numorderers": numorderers
 						})
 						each_callfor_num = 0
@@ -1267,27 +1242,27 @@ def edit_diners(id):
 
 	if schedule != None:
 		customers = json.loads(schedule.customers)
-		customers.append({ "userid": str(schedule.userId), "status": "confirm" })
+		customers.append({ "userid": str(schedule.userId), "status": "confirmed" })
 		diners = []
 		row = []
+		key = 0
 		numdiners = 0
 
 		for k, customer in enumerate(customers):
 			diner = User.query.filter_by(id=customer['userid']).first()
 
 			row.append({
-				"key": "diner-" + str(diner.id),
+				"key": "diner-" + str(key),
 				"id": diner.id,
 				"profile": diner.profile,
 				"username": diner.username,
 				"status": customer['status']
 			})
+			key += 1
 			numdiners += 1
 
 			if len(row) == 4 or (len(customers) - 1 == k and len(row) > 0):
 				if len(customers) - 1 == k and len(row) > 0:
-					key = diner.id + 1
-
 					leftover = 4 - len(row)
 
 					for k in range(leftover):
@@ -1336,7 +1311,6 @@ def get_dining_orders(id):
 							others = order['others']
 							sizes = order['sizes']
 							quantity = int(order['quantity'])
-							price = 0
 
 							for k, option in enumerate(options):
 								option["key"] = "option-" + str(k)
@@ -1347,17 +1321,6 @@ def get_dining_orders(id):
 							for k, size in enumerate(sizes):
 								size["key"] = "size-" + str(k)
 
-							for other in others:
-								if other['selected'] == True:
-									price += float(other['price'])
-
-							if product.price == "":
-								for size in sizes:
-									if size['selected'] == True:
-										price += quantity * float(size['price'])
-							else:
-								price += quantity * float(product.price)
-
 							each_orders.append({
 								"id": order['id'],
 								"image": product.image,
@@ -1366,7 +1329,7 @@ def get_dining_orders(id):
 								"note": order['note'],
 								"options": options, "others": others, "sizes": sizes,
 								"quantity": quantity,
-								"price": round(price, 2)
+								"callfor": len(order['callfor'])
 							})
 							each_callfor_num = 0
 							each_order_num += 1
@@ -1427,6 +1390,8 @@ def deliver_round():
 @app.route("/send_orders/<id>")
 def send_orders(id):
 	schedule = Schedule.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		orders = json.loads(schedule.orders)
@@ -1434,25 +1399,37 @@ def send_orders(id):
 		groups = orders['groups']
 
 		first_group = groups[0]
+		confirmed = True
 
 		if first_group['status'] == "ordering":
-			first_group['status'] = "making"
+			for k in first_group:
+				if k != "status" and k != "id":
+					for orderer in first_group[k]:
+						for info in orderer["callfor"]:
+							if info["status"] == "confirmawaits":
+								confirmed = False
 
-			groups[0] = first_group
+								msg = "unconfirm orders"
+								status = "unconfirmedorders"
 
-			orders['groups'] = groups
+			if confirmed == True:
+				first_group['status'] = "making"
 
-			schedule.orders = json.dumps(orders)
+				groups[0] = first_group
 
-			db.session.commit()
+				orders['groups'] = groups
 
-			return { "msg": "order sent" }
+				schedule.orders = json.dumps(orders)
+
+				db.session.commit()
+
+				return { "msg": "order sent" }
 		else:
 			msg = "Orders already sent"
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/edit_order", methods=["POST"])
 def edit_order():
@@ -1606,7 +1583,7 @@ def add_diners():
 		booker = str(schedule.userId)
 
 		for k, newdiner in enumerate(newdiners):
-			if newdiner["userid"] == booker:
+			if newdiner["userid"] == booker: # remove booker from diners
 				del newdiners[k]
 
 		schedule.customers = json.dumps(newdiners)
@@ -1630,7 +1607,6 @@ def edit_order_callfor():
 
 	if schedule != None:
 		orders = json.loads(schedule.orders)
-
 		groups = orders['groups']
 
 		for rounds in groups:
@@ -1646,20 +1622,20 @@ def edit_order_callfor():
 							numsearcheddiners = 0
 
 							for k, info in enumerate(callfor):
-								user = User.query.filter_by(id=info).first()
+								user = User.query.filter_by(id=info["userid"]).first()
 
 								row.append({
 									"key": "selected-friend-" + str(key),
 									"id": user.id,
 									"profile": user.profile,
-									"username": user.username
+									"username": user.username,
+									"status": info["status"]
 								})
 								key += 1
 								numsearcheddiners += 1
 
 								if len(row) == 4 or (len(callfor) - 1 == k and len(row) > 0):
 									if len(callfor) - 1 == k and len(row) > 0:
-
 										leftover = 4 - len(row)
 
 										for k in range(leftover):
@@ -1709,6 +1685,95 @@ def edit_order_callfor():
 
 	return { "errormsg": msg }
 
+@app.route("/diner_is_removable", methods=["POST"])
+def diner_is_removable():
+	content = request.get_json()
+
+	scheduleid = content['scheduleid']
+	userid = str(content['userid'])
+
+	schedule = Schedule.query.filter_by(id=scheduleid).first()
+
+	if schedule != None:
+		orders = json.loads(schedule.orders)
+		groups = orders["groups"]
+
+		for rounds in groups:
+			for k in rounds:
+				if (k != "status" and k != "id") and (userid == k):
+					user = User.query.filter_by(id=userid).first()
+
+					return { "removable": False, "username": user.username }
+
+		return { "removable": True }
+	else:
+		msg = "Schedule doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/cancel_dining_order", methods=["POST"])
+def cancel_dining_order():
+	content = request.get_json()
+
+	orderid = content['orderid']
+	ordererid = content['ordererid']
+
+	data = query("select orders from schedule where orders like '%\"" + str(orderid) + "\"%'", True)
+
+	if len(data) == 1:
+		data = data[0]
+		orders = json.loads(data["orders"])
+
+		for rounds in orders["groups"]:
+			for k in rounds:
+				if k != "status" and k != "id":
+					for index, orderer in enumerate(rounds[k]):
+						if orderer['id'] == orderid:
+							for index, info in enumerate(orderer['callfor']):
+								if info["userid"] == str(ordererid):
+									if len(orderer['callfor']) == 1:
+										del rounds[k][index]
+									else:
+										del orderer["callfor"][index]
+
+		query("update schedule set orders = '" + json.dumps(orders) + "' where orders like '%\"" + str(ordererid) + "\"%'", False)
+
+		return { "msg": "user order cancelled" }
+	else:
+		msg = "Schedule doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/confirm_dining_order", methods=["POST"])
+def confirm_dining_order():
+	content = request.get_json()
+
+	orderid = content['orderid']
+	ordererid = content['ordererid']
+
+	data = query("select orders from schedule where orders like '%\"" + str(orderid) + "\"%'", True)
+
+	if len(data) == 1:
+		data = data[0]
+		orders = json.loads(data["orders"])
+
+		for rounds in orders["groups"]:
+			for k in rounds:
+				if k != "status" and k != "id":
+					for orderer in rounds[k]:
+						if orderer['id'] == orderid:
+							for info in orderer['callfor']:
+								if info["userid"] == str(ordererid):
+									info["status"] = "confirmed"
+
+		query("update schedule set orders = '" + json.dumps(orders) + "' where orders like '%\"" + str(ordererid) + "\"%'", False)
+
+		return { "msg": "user order confirmed" }
+	else:
+		msg = "Schedule doesn't exist"
+
+	return { "errormsg": msg }
+
 @app.route("/update_order_callfor", methods=["POST"])
 def update_order_callfor():
 	content = request.get_json()
@@ -1721,7 +1786,6 @@ def update_order_callfor():
 
 	if schedule != None:
 		orders = json.loads(schedule.orders)
-
 		groups = orders['groups']
 
 		for rounds in groups:
