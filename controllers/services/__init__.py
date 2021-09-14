@@ -156,8 +156,9 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
+	info = db.Column(db.String(80))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -171,6 +172,7 @@ class Schedule(db.Model):
 		self.note = note
 		self.orders = orders
 		self.table = table
+		self.info = info
 
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
@@ -235,6 +237,7 @@ class Transaction(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	groupId = db.Column(db.String(20)) # same for each cart
 	productId = db.Column(db.Integer)
+	serviceId = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
@@ -242,9 +245,10 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(150))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, productId, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, productId, serviceId, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.productId = productId
+		self.serviceId = serviceId
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options

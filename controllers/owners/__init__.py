@@ -31,11 +31,11 @@ mydb = mysql.connector.connect(
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
 stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
-test_sms = True
+test_sms = False
 
 account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
 auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
-messaging_service_sid = "MG376dcb41368d7deca0bda395f36bf2a7"
+mss = "MG376dcb41368d7deca0bda395f36bf2a7"
 client = Client(account_sid, auth_token)
 
 class User(db.Model):
@@ -165,8 +165,9 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
+	info = db.Column(db.String(80))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -180,6 +181,7 @@ class Schedule(db.Model):
 		self.note = note
 		self.orders = orders
 		self.table = table
+		self.info = info
 
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
@@ -244,6 +246,7 @@ class Transaction(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	groupId = db.Column(db.String(20)) # same for each cart
 	productId = db.Column(db.Integer)
+	serviceId = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
@@ -251,9 +254,10 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(150))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, productId, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, productId, serviceId, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.productId = productId
+		self.serviceId = serviceId
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
@@ -279,6 +283,14 @@ def query(sql, output):
 		results = cursorobj.fetchall()
 
 		return results
+
+def getRanStr():
+		strid = ""
+
+		for k in range(6):
+			strid += str(randint(0, 9))
+
+		return strid
 
 @app.route("/", methods=["GET"])
 def welcome_owners():
@@ -334,6 +346,18 @@ def login():
 			msg = "Password is blank"
 
 	return { "errormsg": msg }
+
+@app.route("/verify/<cellnumber>")
+def verify(cellnumber):
+	verifycode = getRanStr()
+
+	message = client.messages.create(
+		body='Verify code: ' + str(verifycode),
+		messaging_service_sid=mss,
+		to='+1' + str(cellnumber)
+	)
+
+	return { "verifycode": verifycode }
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -596,6 +620,7 @@ def get_bankaccount_info():
 	bankid = content['bankid']
 
 	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
 
 	if location != None:
 		accountid = location.accountId
@@ -618,10 +643,12 @@ def get_bankaccount_info():
 				}
 
 				return { "bankaccountInfo": info }
+
+		msg = "Bank doesn't exist"
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/delete_bankaccount", methods=["POST"])
 def delete_bankaccount():
@@ -648,14 +675,6 @@ def delete_bankaccount():
 
 @app.route("/get_reset_code/<phonenumber>")
 def get_reset_code(phonenumber):
-	def getRanStr():
-		strid = ""
-
-		for k in range(6):
-			strid += str(randint(0, 9))
-
-		return strid
-
 	owner = Owner.query.filter_by(cellnumber=phonenumber).first()
 
 	if owner != None:

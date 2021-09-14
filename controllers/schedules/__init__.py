@@ -160,8 +160,9 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
+	info = db.Column(db.String(80))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -175,6 +176,7 @@ class Schedule(db.Model):
 		self.note = note
 		self.orders = orders
 		self.table = table
+		self.info = info
 
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
@@ -239,6 +241,7 @@ class Transaction(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	groupId = db.Column(db.String(20)) # same for each cart
 	productId = db.Column(db.Integer)
+	serviceId = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
@@ -246,9 +249,10 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(150))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, productId, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, productId, serviceId, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.productId = productId
+		self.serviceId = serviceId
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
@@ -279,48 +283,39 @@ def query(sql, output):
 def welcome_schedules():
 	return { "msg": "welcome to schedules of easygo" }
 
-@app.route("/get_requests", methods=["POST"])
-def get_requests():
-	content = request.get_json()
+@app.route("/get_requests/<id>")
+def get_requests(id):
+	location = Location.query.filter_by(id=id).first()
 
-	ownerid = content['ownerid']
-	locationid = content['locationid']
+	if location != None:
+		datas = query("select * from schedule where locationId = " + str(id) + " and status = 'requested'", True)
+		requests = []
 
-	owner = Owner.query.filter_by(id=ownerid).first()
+		for data in datas:
+			service = None
 
-	if owner != None:
-		location = Location.query.filter_by(id=locationid).first()
+			if data['serviceId'] != "":
+				service = Service.query.filter_by(id=data['serviceId']).first()
 
-		if location != None:
-			datas = query("select * from schedule where locationId = " + str(locationid) + " and status = 'requested'", True)
-			requests = []
+			user = User.query.filter_by(id=data['userId']).first()
 
-			for data in datas:
-				service = None
+			requests.append({
+				"key": "request-" + str(data['id']),
+				"id": str(data['id']),
+				"type": data['locationType'],
+				"userId": user.id,
+				"username": user.username,
+				"time": int(data['time']),
+				"name": service.name if service != None else location.name,
+				"image": service.image if service != None else location.logo,
+				"note": data['note'],
+				"diners": len(json.loads(data['customers'])) if data['locationType'] == 'restaurant' else False,
+				"tablenum": data['table']
+			})
 
-				if data['serviceId'] != "":
-					service = Service.query.filter_by(id=data['serviceId']).first()
-
-				user = User.query.filter_by(id=data['userId']).first()
-
-				requests.append({
-					"key": "request-" + str(data['id']),
-					"id": str(data['id']),
-					"type": data['locationType'],
-					"userId": user.id,
-					"username": user.username,
-					"time": int(data['time']),
-					"name": service.name if service != None else location.name,
-					"image": service.image if service != None else location.logo,
-					"note": data['note'],
-					"diners": len(json.loads(data['customers'])) if data['locationType'] == 'restaurant' else False
-				})
-
-			return { "requests": requests }
-		else:
-			msg = "Location doesn't exist"
+		return { "requests": requests }
 	else:
-		msg = "Owner doesn't exist"
+		msg = "Location doesn't exist"
 
 	return { "errormsg": msg }
 
@@ -362,7 +357,8 @@ def get_reservation_info(id):
 				"locationId": locationId,
 				"name": location.name,
 				"diners": len(json.loads(schedule.customers)),
-				"note": schedule.note
+				"note": schedule.note,
+				"table": schedule.table
 			}
 
 			return { "reservationInfo": info }
@@ -371,7 +367,7 @@ def get_reservation_info(id):
 	else:
 		msg = "Reservation doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/reschedule_appointment", methods=["POST"])
 def reschedule_appointment():
@@ -400,16 +396,18 @@ def reschedule_reservation():
 
 	reservationid = content['reservationid']
 	time = content['time']
+	table = content['table']
 
 	schedule = Schedule.query.filter_by(id=reservationid).first()
 
 	if schedule != None:
 		schedule.status = "rebook"
 		schedule.nextTime = time
+		schedule.table = table
 
 		db.session.commit()
 
-		return { "msg": "" }
+		return { "msg": "Reservation rescheduled" }
 	else:
 		msg = "Reservation doesn't exist"
 
@@ -449,7 +447,8 @@ def request_appointment():
 
 					if appointment == None:
 						service = Service.query.filter_by(id=serviceid).first()
-						appointment = Schedule(userid, locationid, service.menuId, serviceid, time, "requested", '', '', location.type, 1, note, '[]', '')
+						info = json.dumps({"paymentsent": False,"customer_cancel": False,"salon_cancel": False})
+						appointment = Schedule(userid, locationid, service.menuId, serviceid, time, "requested", '', '', location.type, 1, note, '[]', '', info)
 
 						db.session.add(appointment)
 						db.session.commit()
@@ -726,6 +725,7 @@ def done_service(id):
 	if schedule != None:
 		locationid = schedule.locationId
 		serviceid = schedule.serviceId
+		info = json.loads(schedule.info)
 
 		location = Location.query.filter_by(id=locationid).first()
 		service = Service.query.filter_by(id=serviceid).first()
@@ -743,23 +743,27 @@ def done_service(id):
 				clientId = schedule.userId
 
 				client = User.query.filter_by(id=clientId).first()
-				info = json.loads(client.info)
-				customerid = info["customerId"]
+				clientInfo = json.loads(client.info)
+				customerid = clientInfo["customerId"]
 				price = float(service.price)
 
-				stripe.Charge.create(
-					amount=int(price * 100),
-					currency="cad",
-					customer=customerid,
-					transfer_data={
-						"destination": accountid
-					}
-				)
+				if info["paymentsent"] == True:
+					stripe.Charge.create(
+						amount=int(price * 100),
+						currency="cad",
+						customer=customerid,
+						transfer_data={
+							"destination": accountid
+						}
+					)
 
-				db.session.delete(schedule)
-				db.session.commit()
+					db.session.delete(schedule)
+					db.session.commit()
 
-				return { "msg": "Payment received" }
+					return { "msg": "Payment received", "clientName": client.username, "name": service.name, "price": service.price }
+				else:
+					msg = "Client hasn't sent payment yet"
+					status = "paymentunsent"
 			else:
 				msg = "Please provide a bank account to receive payment"
 				status = "bankaccountrequired"
@@ -770,20 +774,75 @@ def done_service(id):
 
 	return { "errormsg": msg, "status": status }, 400
 
+@app.route("/cancel_service", methods=["POST"])
+def cancel_service():
+	content = request.get_json()
+
+	scheduleid = content['scheduleid']
+	type = content['type']
+
+	schedule = Schedule.query.filter_by(id=scheduleid).first()
+
+	if schedule != None:
+		info = json.loads(schedule.info)
+		salon_cancel = info['salon_cancel']
+		customer_cancel = info['customer_cancel']
+		delete_service = False
+
+		if type == "salon":
+			if customer_cancel == True:
+				delete_service = True
+		elif type == "customer":
+			if salon_cancel == True:
+				delete_service = True
+
+		if delete_service == True:
+			db.session.delete(schedule)
+		else:
+			info[type + '_cancel'] = True
+
+			schedule.info = json.dumps(info)
+
+		db.session.commit()
+
+		return { "msg": "appointment cancelled", "delete": delete_service }
+	else:
+		msg = "Schedule doens't exist"
+
+	return { "errormsg": msg }, 400
+
+@app.route("/send_payment/<id>")
+def send_payment(id):
+	schedule = Schedule.query.filter_by(id=id).first()
+
+	if schedule != None:
+		info = json.loads(schedule.info)
+		info["paymentsent"] = True
+
+		schedule.info = json.dumps(info)
+
+		db.session.commit()
+
+		return { "msg": "Payment sent" }
+	else:
+		msg = "Schedule doesn't exist"
+
+	return { "errormsg": msg, "status": status }, 400
+
 @app.route("/get_appointments/<id>")
 def get_appointments(id):
-	datas = Schedule.query.filter_by(locationId=id, status='accepted').all()
+	datas = query("select * from schedule where locationId = " + str(id) + " and status = 'accepted'", True)
 	appointments = []
 
 	for data in datas:
-		user = User.query.filter_by(id=data.userId).first()
-		service = Service.query.filter_by(id=data.serviceId).first()
+		user = User.query.filter_by(id=data['userId']).first()
+		service = Service.query.filter_by(id=data['serviceId']).first()
 
 		appointments.append({
-			"key": "appointment-" + str(data.id),
-			"id": str(data.id),
+			"key": "appointment-" + str(data['id']),
+			"id": str(data['id']),
 			"username": user.username,
-			"time": int(data.time),
+			"time": int(data['time']),
 			"name": service.name,
 			"image": service.image,
 			"gettingPayment": False
@@ -791,18 +850,54 @@ def get_appointments(id):
 
 	return { "appointments": appointments, "numappointments": len(appointments) }
 
+@app.route("/search_customers", methods=["POST"])
+def search_customers():
+	content = request.get_json()
+
+	locationid = content['locationid']
+	searchingusername = content['username']
+
+	location = Location.query.filter_by(id=locationid).first()
+
+	if location != None:
+		datas = Schedule.query.filter_by(locationId=locationid).all()
+		appointments = []
+
+		for data in datas:
+			user = User.query.filter_by(id=data.userId).first()
+			username = user.username
+
+			if searchingusername.lower() in username.lower():
+				service = Service.query.filter_by(id=data.serviceId).first()
+
+				appointments.append({
+					"key": "appointment-" + str(data.id),
+					"id": str(data.id),
+					"username": user.username,
+					"time": int(data.time),
+					"name": service.name,
+					"image": service.image,
+					"gettingPayment": False
+				})
+
+		return { "appointments": appointments, "numappointments": len(appointments) }
+	else:
+		msg = "Location doesn't exist"
+
+	return { "errormsg": msg }
+
 @app.route("/get_cart_orderers/<id>")
 def get_cart_orderers(id):
-	datas = query("select adder, orderNumber from cart where locationId = " + str(id) + " and status = 'checkout' group by adder, orderNumber", True)
+	datas = query("select adder, orderNumber from cart where locationId = " + str(id) + " and (status = 'checkout' or status = 'ready') group by adder, orderNumber", True)
 	cartOrderers = []
 
 	for k, data in enumerate(datas):
 		adder = User.query.filter_by(id=data['adder']).first()
-		orders = Cart.query.filter_by(adder=data['adder'], locationId=id, status='checkout').all()
+		orders = query("select * from cart where adder = " + str(data['adder']) + " and locationId = " + str(id) + " and (status = 'checkout' or status = 'ready')", True)
 		numOrders = 0
 
 		for order in orders:
-			callfor = json.loads(order.callfor)
+			callfor = json.loads(order['callfor'])
 
 			if len(callfor) > 0:
 				numOrders += len(callfor)
@@ -828,17 +923,18 @@ def see_user_orders():
 	locationid = content['locationid']
 	ordernumber = content['ordernumber']
 
-	datas = Cart.query.filter_by(adder=userid, locationId=locationid, orderNumber=ordernumber, status='checkout').all()
+	datas = query("select * from cart where adder = " + str(userid) + " and locationId = " + str(locationid) + " and orderNumber = '" + ordernumber + "' and (status='checkout' or status='ready')", True)
 	orders = []
 	totalcost = 0
+	ready = True
 
 	for data in datas:
-		product = Product.query.filter_by(id=data.productId).first()
-		quantity = int(data.quantity)
-		callfor = json.loads(data.callfor)
-		options = json.loads(data.options)
-		others = json.loads(data.others)
-		sizes = json.loads(data.sizes)
+		product = Product.query.filter_by(id=data['productId']).first()
+		quantity = int(data['quantity'])
+		callfor = json.loads(data['callfor'])
+		options = json.loads(data['options'])
+		others = json.loads(data['others'])
+		sizes = json.loads(data['sizes'])
 		row = []
 		cost = 0
 
@@ -866,11 +962,11 @@ def see_user_orders():
 				totalcost += float(other['price'])
 
 		orders.append({
-			"key": "cart-item-" + str(data.id),
-			"id": str(data.id),
+			"key": "cart-item-" + str(data['id']),
+			"id": str(data['id']),
 			"name": product.name,
 			"productId": product.id,
-			"note": data.note,
+			"note": data['note'],
 			"image": product.image,
 			"options": options,
 			"others": others,
@@ -880,7 +976,10 @@ def see_user_orders():
 			"orderers": len(callfor)
 		})
 
-	return { "orders": orders, "totalcost": totalcost }
+		if data['status'] == "checkout":
+			ready = False
+
+	return { "orders": orders, "totalcost": totalcost, "ready": ready }
 
 @app.route("/get_diners_orders/<id>")
 def get_diners_orders(id):

@@ -35,7 +35,7 @@ test_sms = True
 
 account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
 auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
-messaging_service_sid = "MG376dcb41368d7deca0bda395f36bf2a7"
+mss = "MG376dcb41368d7deca0bda395f36bf2a7"
 client = Client(account_sid, auth_token)
 
 class User(db.Model):
@@ -165,8 +165,9 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
+	info = db.Column(db.String(80))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -180,6 +181,7 @@ class Schedule(db.Model):
 		self.note = note
 		self.orders = orders
 		self.table = table
+		self.info = info
 
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
@@ -244,6 +246,7 @@ class Transaction(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	groupId = db.Column(db.String(20)) # same for each cart
 	productId = db.Column(db.Integer)
+	serviceId = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
@@ -251,9 +254,10 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(150))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, productId, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, productId, serviceId, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.productId = productId
+		self.serviceId = serviceId
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
@@ -279,6 +283,14 @@ def query(sql, output):
 		results = cursorobj.fetchall()
 
 		return results
+
+def getRanStr():
+	strid = ""
+
+	for k in range(6):
+		strid += str(randint(0, 9))
+
+	return strid
 
 @app.route("/", methods=["GET"])
 def welcome_users():
@@ -327,6 +339,18 @@ def login():
 			msg = "Password is blank"
 
 	return { "errormsg": msg }
+
+@app.route("/verify/<cellnumber>")
+def verify(cellnumber):
+	verifycode = getRanStr()
+
+	message = client.messages.create(
+		body='Verify code: ' + str(verifycode),
+		messaging_service_sid=mss,
+		to='+1' + str(cellnumber)
+	)
+
+	return { "verifycode": verifycode }
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -634,8 +658,44 @@ def get_notifications(id):
 	if user != None:
 		userId = user.id
 		notifications = []
+
+		# cart orders called for self
+		sql = "select * from cart where adder = " + str(id) + " and status = 'checkout'"
+		datas = query(sql, True)
+
+		for data in datas:
+			adder = User.query.filter_by(id=data['adder']).first()
+			product = Product.query.filter_by(id=data['productId']).first()
+			options = json.loads(data['options'])
+			others = json.loads(data['others'])
+			sizes = json.loads(data['sizes'])
+
+			for k, option in enumerate(options):
+				option["key"] = "option-" + str(k)
+
+			for k, other in enumerate(others):
+				other["key"] = "other-" + str(k)
+
+			for k, size in enumerate(sizes):
+				size["key"] = "size-" + str(k)
+
+			notifications.append({
+				"key": "order-" + str(len(notifications)),
+				"type": "cart-order-self",
+				"id": str(data['id']),
+				"name": product.name,
+				"image": product.image,
+				"options": options,
+				"others": others,
+				"sizes": sizes,
+				"quantity": int(data['quantity']),
+				"adder": { "username": adder.username, "profile": adder.profile },
+				"price": int(data['quantity']) * float(product.price) if product.price != "" else "",
+				"orderNumber": data['orderNumber'],
+				"status": data['status']
+			})
 		
-		# cart orders called for user
+		# cart orders called for other user(s)
 		sql = "select * from cart where callfor like '%\"userid\": \"" + str(id) + "\", \"status\": \"waiting\"%'"
 		datas = query(sql, True)
 
@@ -668,7 +728,7 @@ def get_notifications(id):
 
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
-				"type": "cart-order",
+				"type": "cart-order-other",
 				"id": str(data['id']),
 				"name": product.name,
 				"image": product.image,
@@ -780,6 +840,7 @@ def get_notifications(id):
 
 			booker = User.query.filter_by(id=data['userId']).first()
 			confirm = False
+			info = json.loads(data['info'])
 
 			if "[" in data['customers']:
 				customers = json.loads(data['customers'])
@@ -815,7 +876,8 @@ def get_notifications(id):
 				"booker": userId == data['userId'],
 				"bookerName": booker.username,
 				"diners": customers,
-				"confirm": confirm
+				"confirm": confirm,
+				"paymentSent": info["paymentsent"] if data['info'] != '{}' else None
 			})
 
 		return { "notifications": notifications }
@@ -836,7 +898,11 @@ def get_num_updates():
 	if user != None:
 		num = 0
 
-		# cart orders called for user
+		# cart orders called for self
+		sql = "select count(*) as num from cart where adder = " + str(userid) + " and status = 'checkout'"
+		num += query(sql, True)[0]["num"]
+
+		# cart orders called for other user(s)
 		sql = "select count(*) as num from cart where callfor like '%\"userid\": \"" + str(userid) + "\", \"status\": \"waiting\"%'"
 		num += query(sql, True)[0]["num"]
 
@@ -1005,14 +1071,6 @@ def request_user_payment_method(id):
 
 @app.route("/get_reset_code/<phonenumber>")
 def get_reset_code(phonenumber):
-	def getRanStr():
-		strid = ""
-
-		for k in range(6):
-			strid += str(randint(0, 9))
-
-		return strid
-
 	user = User.query.filter_by(cellnumber=phonenumber).first()
 
 	if user != None:

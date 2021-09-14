@@ -159,8 +159,9 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
+	info = db.Column(db.String(80))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -174,6 +175,7 @@ class Schedule(db.Model):
 		self.note = note
 		self.orders = orders
 		self.table = table
+		self.info = info
 
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
@@ -238,6 +240,7 @@ class Transaction(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	groupId = db.Column(db.String(20)) # same for each cart
 	productId = db.Column(db.Integer)
+	serviceId = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
@@ -245,9 +248,10 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(150))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, productId, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, productId, serviceId, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.productId = productId
+		self.serviceId = serviceId
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
@@ -497,7 +501,7 @@ def fetch_num_appointments(id):
 
 @app.route("/fetch_num_cartorderers/<id>")
 def fetch_num_cartorderers(id):
-	numCartorderers = query("select count(*) as num from cart where locationId = " + str(id) + " and status = 'checkout' group by adder, orderNumber", True)
+	numCartorderers = query("select count(*) as num from cart where locationId = " + str(id) + " and (status = 'checkout' or status = 'ready') group by adder, orderNumber", True)
 
 	if len(numCartorderers) > 0:
 		numCartorderers = len(numCartorderers)
@@ -720,8 +724,8 @@ def get_more_locations():
 		lat1 = latitude
 
 		# get locations
-		sql = "select * from location where type = '" + type + "' " + orderQuery + " limit " + index + ", 10"
-		maxsql = "select count(*) as num from location where type = '" + type + "' " + orderQuery
+		sql = "select * from location where type = '" + type + "' and state = 'listed' " + orderQuery + " limit " + index + ", 10"
+		maxsql = "select count(*) as num from location where type = '" + type + "' and state = 'listed' " + orderQuery
 		datas = query(sql, True)
 		maxdatas = query(maxsql, True)[0]["num"]
 		for data in datas:
@@ -874,7 +878,17 @@ def make_reservation():
 					reservation = Schedule.query.filter_by(userId=userid, locationId=locationid).first()
 
 					if reservation == None:
-						reservation = Schedule(userid, locationid, "", "", time, "requested", '', '', location.type, customers, note, '{"groups":[],"donedining":false,"charge_status":"unstarted"}', '')
+						charge_info = {}
+
+						for customer in customers:
+							charge_info[customer["userid"]] = {
+								"charge": 0.00,
+								"paymentsent": False
+							}
+
+						orders = json.dumps({"groups":[],"donedining":False,"charge_info":charge_info,"charge_status":"unstarted"})
+
+						reservation = Schedule(userid, locationid, "", "", time, "requested", '', '', location.type, customers, note, orders, '', '{}')
 
 						db.session.add(reservation)
 						db.session.commit()

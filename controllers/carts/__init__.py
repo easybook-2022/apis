@@ -158,8 +158,9 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
+	info = db.Column(db.String(80))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table):
+	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.locationId = locationId
 		self.menuId = menuId
@@ -173,6 +174,7 @@ class Schedule(db.Model):
 		self.note = note
 		self.orders = orders
 		self.table = table
+		self.info = info
 
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
@@ -237,6 +239,7 @@ class Transaction(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	groupId = db.Column(db.String(20)) # same for each cart
 	productId = db.Column(db.Integer)
+	serviceId = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
@@ -244,9 +247,10 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(150))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, productId, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, productId, serviceId, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.productId = productId
+		self.serviceId = serviceId
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
@@ -475,6 +479,35 @@ def checkout():
 
 	return { "errormsg": msg }
 
+@app.route("/order_ready", methods=["POST"])
+def order_ready():
+	content = request.get_json()
+
+	userid = content['userid']
+	locationid = content['locationid']
+	ordernumber = content['ordernumber']
+
+	location = Location.query.filter_by(id=locationid).first()
+
+	if location != None:
+		orders = Cart.query.filter_by(orderNumber=ordernumber).count()
+
+		if orders > 0:
+			datas = Cart.query.filter_by(adder=userid, locationId=locationid, orderNumber=ordernumber, status='checkout').all()
+
+			for data in datas:
+				data.status = "ready"
+
+			db.session.commit()
+
+			return { "msg": "Order ready" }
+		else:
+			msg = "Order doesn't exist"
+	else:
+		msg = "Location doesn't exist"
+
+	return { "errormsg": msg }, 400
+
 @app.route("/receive_payment", methods=["POST"])
 def receive_payment():
 	content = request.get_json()
@@ -498,7 +531,7 @@ def receive_payment():
 			username = user.username
 			adder = user.id
 			
-			datas = query("select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "'", True)
+			datas = query("select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "' and status = 'ready'", True)
 			charges = {}
 
 			for data in datas:
@@ -549,7 +582,7 @@ def receive_payment():
 						charges[userid] = float(cost)
 
 				for k in range(quantity):
-					transaction = Transaction(groupId, product.id, adder, json.dumps(friends), options, others, sizes, time)
+					transaction = Transaction(groupId, product.id, 0, adder, json.dumps(friends), options, others, sizes, time)
 
 					db.session.add(transaction)
 					db.session.commit()
