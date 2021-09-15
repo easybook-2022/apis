@@ -344,13 +344,21 @@ def login():
 def verify(cellnumber):
 	verifycode = getRanStr()
 
-	message = client.messages.create(
-		body='Verify code: ' + str(verifycode),
-		messaging_service_sid=mss,
-		to='+1' + str(cellnumber)
-	)
+	user = User.query.filter_by(cellnumber=cellnumber).first()
 
-	return { "verifycode": verifycode }
+	if user == None:
+		if test_sms == False:
+			message = client.messages.create(
+				body='Verify code: ' + str(verifycode),
+				messaging_service_sid=mss,
+				to='+1' + str(cellnumber)
+			)
+
+		return { "verifycode": verifycode }
+	else:
+		msg = "Cell number already used"
+
+	return { "errormsg": msg }
 
 @app.route("/register", methods=["POST"])
 def register():

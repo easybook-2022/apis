@@ -31,7 +31,7 @@ mydb = mysql.connector.connect(
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
 stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
-test_sms = False
+test_sms = True
 
 account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
 auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
@@ -351,13 +351,21 @@ def login():
 def verify(cellnumber):
 	verifycode = getRanStr()
 
-	message = client.messages.create(
-		body='Verify code: ' + str(verifycode),
-		messaging_service_sid=mss,
-		to='+1' + str(cellnumber)
-	)
+	owner = Owner.query.filter_by(cellnumber=cellnumber).first()
 
-	return { "verifycode": verifycode }
+	if owner == None:
+		if test_sms == False:
+			message = client.messages.create(
+				body='Verify code: ' + str(verifycode),
+				messaging_service_sid=mss,
+				to='+1' + str(cellnumber)
+			)
+
+		return { "verifycode": verifycode }
+	else:
+		msg = "Cell number already used"
+
+	return { "errormsg": msg }
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -680,22 +688,14 @@ def get_reset_code(phonenumber):
 	if owner != None:
 		code = getRanStr()
 
-		if test_sms == True:
-			message = client.messages \
-				.create(
-					body="Your EasyGO reset code is " + code,
-					from_='+15005550006',
-					to='+16479263868'
-				)
-
-			print("reset code is " + code)
-		else:
+		if test_sms == False:
 			message = client.messages \
 				.create(
 					messaging_service_sid=messaging_service_sid,
 					to='+1' + str(owner.cellnumber),
 					body="Your EasyGO reset code is " + code,
 				)
+			
 
 		return { "msg": "Reset code sent", "status": message.status, "code": code }
 	else:
