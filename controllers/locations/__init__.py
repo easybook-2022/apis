@@ -853,7 +853,7 @@ def make_reservation():
 	locationid = content['locationid']
 	scheduleid = content['scheduleid']
 	time = content['time']
-	customers = json.dumps(content['diners'])
+	customers = content['diners']
 	note = content['note']
 
 	user = User.query.filter_by(id=userid).first()
@@ -875,22 +875,27 @@ def make_reservation():
 
 			if location != None:
 				if scheduleid == None:
-					reservation = Schedule.query.filter_by(userId=userid, locationId=locationid).first()
+					schedule = Schedule.query.filter_by(userId=userid, locationId=locationid).first()
 
-					if reservation == None:
-						charge_info = {}
+					if schedule == None:
+						charges = { str(str(userid)): {
+							"charge": 0.00,
+							"paymentsent": False,
+							"paid": False
+						}}
 
 						for customer in customers:
-							charge_info[customer["userid"]] = {
+							charges[customer["userid"]] = {
 								"charge": 0.00,
-								"paymentsent": False
+								"paymentsent": False,
+								"paid": False
 							}
 
-						orders = json.dumps({"groups":[],"donedining":False,"charge_info":charge_info,"charge_status":"unstarted"})
+						orders = json.dumps({"groups":[],"donedining":False,"charges":charges,"status":"unstarted"})
 
-						reservation = Schedule(userid, locationid, "", "", time, "requested", '', '', location.type, customers, note, orders, '', '{}')
+						schedule = Schedule(userid, locationid, "", "", time, "requested", '', '', location.type, json.dumps(customers), note, orders, '', '{}')
 
-						db.session.add(reservation)
+						db.session.add(schedule)
 						db.session.commit()
 
 						return { "msg": "reservation added" }
@@ -898,12 +903,12 @@ def make_reservation():
 						msg = "Reservation already made"
 						status = "existed"
 				else:
-					reservation = Schedule.query.filter_by(id=scheduleid).first()
+					schedule = Schedule.query.filter_by(id=scheduleid).first()
 
-					if reservation != None:
-						reservation.status = 'requested'
-						reservation.time = time
-						reservation.note = note
+					if schedule != None:
+						schedule.status = 'requested'
+						schedule.time = time
+						schedule.note = note
 
 						db.session.commit()
 

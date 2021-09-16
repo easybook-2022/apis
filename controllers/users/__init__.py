@@ -668,7 +668,7 @@ def get_notifications(id):
 		notifications = []
 
 		# cart orders called for self
-		sql = "select * from cart where adder = " + str(id) + " and status = 'checkout'"
+		sql = "select * from cart where adder = " + str(id)
 		datas = query(sql, True)
 
 		for data in datas:
@@ -850,7 +850,7 @@ def get_notifications(id):
 			confirm = False
 			info = json.loads(data['info'])
 
-			if "[" in data['customers']:
+			if data["locationType"] == 'restaurant':
 				customers = json.loads(data['customers'])
 				
 				for customer in customers:
@@ -863,6 +863,14 @@ def get_notifications(id):
 				customers = len(customers)
 			else:
 				customers = int(data['customers'])
+
+			if data["locationType"] != 'restaurant':
+				paymentSent = info["paymentsent"]
+			else:
+				orders = json.loads(data["orders"])
+				charges = orders["charges"]
+
+				paymentSent = charges[str(userId)]["paymentsent"]
 
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
@@ -885,7 +893,7 @@ def get_notifications(id):
 				"bookerName": booker.username,
 				"diners": customers,
 				"confirm": confirm,
-				"paymentSent": info["paymentsent"] if data['info'] != '{}' else None
+				"paymentSent": paymentSent
 			})
 
 		return { "notifications": notifications }
@@ -907,7 +915,7 @@ def get_num_updates():
 		num = 0
 
 		# cart orders called for self
-		sql = "select count(*) as num from cart where adder = " + str(userid) + " and status = 'checkout'"
+		sql = "select count(*) as num from cart where adder = " + str(userid)
 		num += query(sql, True)[0]["num"]
 
 		# cart orders called for other user(s)
@@ -1001,21 +1009,18 @@ def search_diners():
 		if userid in customers:
 			customers.remove(userid)
 
-		datas = query("select id, profile, username, info from user where username like '%" + searchusername + "%' and id in (" + json.dumps(customers)[1:-1] + ")", True)
+		datas = query("select id, profile, username from user where username like '%" + searchusername + "%' and id in (" + json.dumps(customers)[1:-1] + ")", True)
 		row = []
 		searcheddiners = []
 		rownum = 0
 		numSearchedDiners = 0
 
 		for k, data in enumerate(datas):
-			info = json.loads(data["info"])
-
 			row.append({
 				"key": "diner-" + str(data['id']),
 				"id": data['id'],
 				"profile": data['profile'],
-				"username": data['username'],
-				"status": info["status"]
+				"username": data['username']
 			})
 			numSearchedDiners += 1
 
@@ -1084,24 +1089,14 @@ def get_reset_code(phonenumber):
 	if user != None:
 		code = getRanStr()
 
-		if test_sms == True:
-			message = client.messages \
-				.create(
-					body="Your EasyGO reset code is " + code,
-					from_='+15005550006',
-					to='+16479263868'
-				)
+		if test_sms == False:
+			message = client.messages.create(
+				body="Your EasyGO reset code is " + code,
+				messaging_service_sid=mss,
+				to='+1' + str(user.cellnumber)
+			)
 
-			print("reset code is " + code)
-		else:
-			message = client.messages \
-				.create(
-					messaging_service_sid=messaging_service_sid,
-					to='+1' + str(user.cellnumber),
-					body="Your EasyGO reset code is " + code,
-				)
-
-		return { "msg": "Reset code sent", "status": message.status, "code": code }
+		return { "msg": "Reset code sent", "code": code }
 	else:
 		msg = "Owner doesn't exist"
 

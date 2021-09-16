@@ -681,23 +681,21 @@ def delete_bankaccount():
 
 	return { "errormsg": msg }
 
-@app.route("/get_reset_code/<phonenumber>")
-def get_reset_code(phonenumber):
-	owner = Owner.query.filter_by(cellnumber=phonenumber).first()
+@app.route("/get_reset_code/<cellnumber>")
+def get_reset_code(cellnumber):
+	owner = Owner.query.filter_by(cellnumber=cellnumber).first()
 
 	if owner != None:
 		code = getRanStr()
 
 		if test_sms == False:
-			message = client.messages \
-				.create(
-					messaging_service_sid=messaging_service_sid,
-					to='+1' + str(owner.cellnumber),
-					body="Your EasyGO reset code is " + code,
-				)
-			
+			message = client.messages.create(
+				body="Your EasyGO reset code is " + code,
+				messaging_service_sid=mss,
+				to='+1' + str(owner.cellnumber)
+			)
 
-		return { "msg": "Reset code sent", "status": message.status, "code": code }
+		return { "msg": "Reset code sent", "code": code }
 	else:
 		msg = "Owner doesn't exist"
 

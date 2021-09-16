@@ -669,39 +669,44 @@ def get_diners_payments():
 			accountid = location.accountId
 			orders = json.loads(schedule.orders)
 			charges = orders["charges"]
-			charge_status = orders["charge_status"]
+			status = orders["status"]
 
-			if charge_status != "started":
-				orders["charge_status"] = "started"
+			if status != "started":
+				orders["status"] = "started"
 
 				schedule.orders = json.dumps(orders)
 				db.session.commit()
 
 			if userid in charges:
-				total = charges[userid]
+				user = User.query.filter_by(id=userid).first()
 
-				if total > 0:
-					user = User.query.filter_by(id=userid).first()
-					info = json.loads(user.info)
+				charge = charges[userid]["charge"]
+				paymentSent = charges[userid]["paymentsent"]
+				paid = charges[userid]["paid"]
 
-					customerid = info["customerId"]
+				if charge > 0 and paid == False:
+					if paymentSent == True:
+						info = json.loads(user.info)
 
-					stripe.Charge.create(
-						amount=int(total * 100),
-						currency="cad",
-						customer=customerid,
-						transfer_data={
-							"destination": accountid
-						}
-					)
+						customerid = info["customerId"]
 
-				del charges[userid]
+						stripe.Charge.create(
+							amount=int(charge * 100),
+							currency="cad",
+							customer=customerid,
+							transfer_data={
+								"destination": accountid
+							}
+						)
 
-				if charges != {}:
-					orders["charges"] = charges
+						charges[userid]["paid"] = True
 
-					schedule.orders = json.dumps(orders)
-				else:
+						orders["charges"] = charges
+						schedule.orders = json.dumps(orders)
+					else:
+						return { "errormsg": "Payment unconfirmed", "status": "paymentunconfirmed", "username": user.username }, 400
+
+				if "\"paid\": false" not in json.dumps(charges):
 					db.session.delete(schedule)
 
 				db.session.commit()
@@ -714,7 +719,7 @@ def get_diners_payments():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/done_service/<id>")
 def done_service(id):
@@ -811,8 +816,8 @@ def cancel_service():
 
 	return { "errormsg": msg }, 400
 
-@app.route("/send_payment/<id>")
-def send_payment(id):
+@app.route("/send_service_payment/<id>")
+def send_service_payment(id):
 	schedule = Schedule.query.filter_by(id=id).first()
 
 	if schedule != None:
@@ -827,7 +832,30 @@ def send_payment(id):
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": msg }, 400
+
+@app.route("/send_dining_payment", methods=["POST"])
+def send_dining_payment():
+	content = request.get_json()
+
+	userid = content['userid']
+	scheduleid = content['scheduleid']
+
+	schedule = Schedule.query.filter_by(id=scheduleid).first()
+
+	if schedule != None:
+		orders = json.loads(schedule.orders)
+		orders["charges"][str(userid)]["paymentsent"] = True
+
+		schedule.orders = json.dumps(orders)
+
+		db.session.commit()
+
+		return { "msg": "Payment sent" }
+	else:
+		msg = "Schedule doesn't exist"
+
+	return { "errormsg": msg }, 400
 
 @app.route("/get_appointments/<id>")
 def get_appointments(id):
@@ -988,32 +1016,31 @@ def get_diners_orders(id):
 	if schedule != None:
 		orders = json.loads(schedule.orders)
 		customers = json.loads(schedule.customers)
+		groups = orders["groups"]
+		status = orders["status"]
+		charges = orders["charges"]
 
-		user = User.query.filter_by(id=schedule.userId).first()
-		charges = { str(schedule.userId): {
-			"userId": str(schedule.userId),
-			"charge": float(0.00),
-			"username": user.username,
-			"profile": user.profile
-		}}
+		user_charges = {}
 
-		for customer in customers:
-			user = User.query.filter_by(id=customer["userid"]).first()
-			charges[customer["userid"]] = {
-				"userId": customer["userid"],
-				"charge": float(0.00),
-				"username": user.username,
-				"profile": user.profile
+		if str(schedule.userId) in charges:
+			user_charges[str(schedule.userId)] = {
+				"charge": charges[str(schedule.userId)]["charge"],
+				"paymentsent": charges[str(schedule.userId)]["paymentsent"],
+				"paid": charges[str(schedule.userId)]["paid"]
 			}
 
-		groups = orders['groups']
+		for customer in customers:
+			user_charges[customer["userid"]] = {
+				"charge": charges[customer["userid"]]["charge"],
+				"paymentsent": charges[customer["userid"]]["paymentsent"],
+				"paid": charges[customer["userid"]]["paid"]
+			}
+
 		diners = []
 		total = 0
-		charge_status = orders["charge_status"]
 
-		if charge_status == "unstarted" or charge_status == "calculating":
-			orders['charges'] = {}
-			orders['charge_status'] = "calculating"
+		if status == "unstarted" or status == "calculating":
+			orders["status"] = "calculating"
 
 			for rounds in groups:
 				for round in rounds:
@@ -1040,40 +1067,35 @@ def get_diners_orders(id):
 
 							if len(callfor) > 0:
 								for info in callfor:
-									charges[str(info["userid"])]["charge"] += price
+									user_charges[str(info["userid"])]["charge"] += price
 							else:
-								charges[round]["charge"] += price
+								user_charges[round]["charge"] += price
 
-			for index, charge in enumerate(charges):
-				charges[charge]["key"] = "user-" + str(index)
-				charges[charge]["payed"] = False
-				charges[charge]["paying"] = False
-				total += charges[charge]["charge"]
-
-				orders['charges'][charge] = charges[charge]["charge"]
-
-				diners.append(charges[charge])
+			orders["charges"] = user_charges
 
 			schedule.orders = json.dumps(orders)
 
 			db.session.commit()
-		else:
-			user_charges = orders["charges"]
 
-			for index, charge in enumerate(user_charges):
-				charges[charge]["key"] = "user-" + str(index)
-				charges[charge]["payed"] = False
-				charges[charge]["paying"] = False
-				charges[charge]["charge"] += user_charges[charge]
-				total += user_charges[charge]
+		for index, charge in enumerate(user_charges):
+			user = User.query.filter_by(id=charge).first()
 
-				diners.append(charges[charge])
+			user_charges[charge]["key"] = "user-" + str(index)
+			user_charges[charge]["userId"] = user.id
+			user_charges[charge]["username"] = user.username
+			user_charges[charge]["profile"] = user.profile
+			user_charges[charge]["payed"] = False
+			user_charges[charge]["paying"] = False
+
+			total += user_charges[charge]["charge"]
+
+			diners.append(user_charges[charge])
 
 		return { "diners": diners, "total": total }
 	else:
 		msg = "Reservation doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/get_reservations/<id>")
 def get_reservations(id):
@@ -1117,7 +1139,7 @@ def get_schedule_info(id):
 			"locationId": schedule.locationId,
 			"time": schedule.time,
 			"table": schedule.table,
-			"numdiners": len(json.loads(schedule.customers))
+			"numdiners": len(json.loads(schedule.customers)) + 1
 		}
 
 		return { "scheduleInfo": info, "msg": "" }
@@ -1805,6 +1827,34 @@ def diner_is_removable():
 					return { "removable": False, "username": user.username }
 
 		return { "removable": True }
+	else:
+		msg = "Schedule doesn't exist"
+
+	return { "errormsg": msg }
+
+@app.route("/diner_is_selectable", methods=["POST"])
+def diner_is_selectable():
+	content = request.get_json()
+
+	scheduleid = content['scheduleid']
+	userid = str(content['userid'])
+
+	num = query("select count(*) as num from schedule where id = " + str(scheduleid) + " and customers like '%%'", True)[0]["num"]
+	user = User.query.filter_by(id=userid).first()
+
+	if user != None:
+		info = json.loads(user.info)
+
+		status = info["status"]
+
+		isconfirmed = True if query("select count(*) as num from schedule where id = " + str(scheduleid) + " and customers like '%\"userid\": \"" + userid + "\", \"status\": \"confirmed\"%'", True)[0]["num"] > 0 else False
+
+		if status == "filled" and isconfirmed == True:
+			return { "selectable": True, "username": user.username }
+
+		msg = "paymentrequired" if status == "required" else "unconfirmeddiner"
+
+		return { "selectable": False, "username": user.username, "msg": msg }
 	else:
 		msg = "Schedule doesn't exist"
 
