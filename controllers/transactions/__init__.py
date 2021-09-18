@@ -236,7 +236,8 @@ class Cart(db.Model):
 
 class Transaction(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
-	groupId = db.Column(db.String(20)) # same for each cart
+	groupId = db.Column(db.String(20))
+	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	serviceId = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
@@ -246,8 +247,9 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(150))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, productId, serviceId, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, locationId, productId, serviceId, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
+		self.locationId = locationId
 		self.productId = productId
 		self.serviceId = serviceId
 		self.adder = adder
@@ -295,45 +297,60 @@ def get_transactions():
 		carts = query("select groupId, time from transaction group by groupId, time order by time desc limit " + str(cartIndex) + ", 5", True)
 
 		for cart in carts:
-			datas = query("select * from transaction where groupId = '" + cart['groupId'] + "'", True)
+			datas = query("select * from transaction where adder = " + str(userid) + " and groupId = '" + cart['groupId'] + "'", True)
 
 			for data in datas:
+				location = Location.query.filter_by(id=data['locationId']).first()
 				product = Product.query.filter_by(id=data['productId']).first()
+				service = Service.query.filter_by(id=data['serviceId']).first()
 				options = json.loads(data['options'])
 				others = json.loads(data['others'])
 				sizes = json.loads(data['sizes'])
-				cost = 0
+				cost = service.price if service != None else 0
 
-				for k, option in enumerate(options):
-					option["key"] = "option-" + str(k)
+				if product != None:
+					for k, option in enumerate(options):
+						option["key"] = "option-" + str(k)
 
-				for k, other in enumerate(others):
-					other["key"] = "other-" + str(k)
+					for k, other in enumerate(others):
+						other["key"] = "other-" + str(k)
 
-				for k, size in enumerate(sizes):
-					size["key"] = "size-" + str(k)
+					for k, size in enumerate(sizes):
+						size["key"] = "size-" + str(k)
 
-				if product.price == "":
-					for size in sizes:
-						if size["selected"] == True:
-							cost += float(size["price"])
-				else:
-					cost += float(product.price)
+					if product.price == "":
+						for size in sizes:
+							if size["selected"] == True:
+								cost += float(size["price"])
+					else:
+						cost += float(product.price)
 
-				for other in others:
-					if other["selected"] == True:
-						cost += float(other["price"])
+					for other in others:
+						if other["selected"] == True:
+							cost += float(other["price"])
 
-				row.append({
-					"key": "r-" + str(data['id']),
-					"id": str(data['id']),
-					"name": product.name,
-					"image": product.image,
-					"options": options,
-					"others": others,
-					"sizes": sizes,
-					"cost": cost
-				})
+					row.append({
+						"key": "r-" + str(data['id']),
+						"id": str(data['id']),
+						"location": location.name if location != None else "",
+						"name": product.name,
+						"image": product.image,
+						"options": options,
+						"others": others,
+						"sizes": sizes,
+						"cost": cost,
+						"type": "product"
+					})
+
+				if service != None:
+					row.append({
+						"key": "r-" + str(data['id']),
+						"id": str(data['id']),
+						"name": service.name,
+						"image": service.image,
+						"cost": cost,
+						"type": "service"
+					})
 
 			transactions.append({
 				"key": "g-" + str(len(transactions)),

@@ -237,7 +237,8 @@ class Cart(db.Model):
 
 class Transaction(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
-	groupId = db.Column(db.String(20)) # same for each cart
+	groupId = db.Column(db.String(20))
+	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	serviceId = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
@@ -247,8 +248,9 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(150))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, productId, serviceId, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, locationId, productId, serviceId, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
+		self.locationId = locationId
 		self.productId = productId
 		self.serviceId = serviceId
 		self.adder = adder
@@ -582,7 +584,7 @@ def receive_payment():
 						charges[userid] = float(cost)
 
 				for k in range(quantity):
-					transaction = Transaction(groupId, product.id, 0, adder, json.dumps(friends), options, others, sizes, time)
+					transaction = Transaction(groupId, 0, product.id, 0, adder, json.dumps(friends), options, others, sizes, time)
 
 					db.session.add(transaction)
 					db.session.commit()

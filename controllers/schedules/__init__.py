@@ -239,7 +239,8 @@ class Cart(db.Model):
 
 class Transaction(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
-	groupId = db.Column(db.String(20)) # same for each cart
+	groupId = db.Column(db.String(20))
+	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	serviceId = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
@@ -249,8 +250,9 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(150))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, productId, serviceId, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, locationId, productId, serviceId, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
+		self.locationId = locationId
 		self.productId = productId
 		self.serviceId = serviceId
 		self.adder = adder
@@ -659,6 +661,7 @@ def get_diners_payments():
 
 	scheduleid = content['scheduleid']
 	userid = str(content['userid'])
+	time = content['time']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
 
@@ -669,13 +672,6 @@ def get_diners_payments():
 			accountid = location.accountId
 			orders = json.loads(schedule.orders)
 			charges = orders["charges"]
-			status = orders["status"]
-
-			if status != "started":
-				orders["status"] = "started"
-
-				schedule.orders = json.dumps(orders)
-				db.session.commit()
 
 			if userid in charges:
 				user = User.query.filter_by(id=userid).first()
@@ -703,6 +699,51 @@ def get_diners_payments():
 
 						orders["charges"] = charges
 						schedule.orders = json.dumps(orders)
+
+						# create recents
+						groupId = ""
+
+						for k in range(20):
+							groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
+
+						for rounds in orders["groups"]:
+							for round in rounds:
+								if round != "status" and round != "id":
+									user_orders = rounds[round]
+
+									for order in user_orders:
+										collect = False
+
+										if "\"userid\": \"" + userid + "\"" in json.dumps(order["callfor"]):
+											collect = True
+										elif round == userid:
+											collect = True
+
+										if collect == True:
+											product = Product.query.filter_by(id=order['productid']).first()
+
+											quantity = int(order['quantity'])
+											options = order['options']
+											others = order['others']
+											sizes = order['sizes']
+											callfor = order['callfor']
+											price = 0
+
+											if len(sizes) > 0:
+												for size in sizes:
+													if size["selected"] == True:
+														price = quantity * float(size["price"])
+											else:
+												price = quantity * float(product.price)
+
+											for other in others:
+												if other["selected"] == True:
+													price += float(other["price"])
+
+											transaction = Transaction(groupId, location.id, order['productid'], 0, userid, '[]', json.dumps(options), json.dumps(others), json.dumps(sizes), time)
+
+											db.session.add(transaction)
+											db.session.commit()
 					else:
 						return { "errormsg": "Payment unconfirmed", "status": "paymentunconfirmed", "username": user.username }, 400
 
@@ -721,9 +762,14 @@ def get_diners_payments():
 
 	return { "errormsg": msg }, 400
 
-@app.route("/done_service/<id>")
-def done_service(id):
-	schedule = Schedule.query.filter_by(id=id).first()
+@app.route("/done_service", methods=["POST"])
+def done_service():
+	content = request.get_json()
+
+	scheduleid = content['scheduleid']
+	time = content['time']
+
+	schedule = Schedule.query.filter_by(id=scheduleid).first()
 	msg = ""
 	status = ""
 
@@ -762,6 +808,14 @@ def done_service(id):
 						}
 					)
 
+					groupId = ""
+
+					for k in range(20):
+						groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
+
+					transaction = Transaction(groupId, locationid, 0, schedule.serviceId, schedule.userId, '[]', '[]', '[]', '[]', time)
+
+					db.session.add(transaction)
 					db.session.delete(schedule)
 					db.session.commit()
 
@@ -1017,21 +1071,20 @@ def get_diners_orders(id):
 		orders = json.loads(schedule.orders)
 		customers = json.loads(schedule.customers)
 		groups = orders["groups"]
-		status = orders["status"]
 		charges = orders["charges"]
 
 		user_charges = {}
 
 		if str(schedule.userId) in charges:
 			user_charges[str(schedule.userId)] = {
-				"charge": charges[str(schedule.userId)]["charge"],
+				"charge": 0,
 				"paymentsent": charges[str(schedule.userId)]["paymentsent"],
 				"paid": charges[str(schedule.userId)]["paid"]
 			}
 
 		for customer in customers:
 			user_charges[customer["userid"]] = {
-				"charge": charges[customer["userid"]]["charge"],
+				"charge": 0,
 				"paymentsent": charges[customer["userid"]]["paymentsent"],
 				"paid": charges[customer["userid"]]["paid"]
 			}
@@ -1039,37 +1092,34 @@ def get_diners_orders(id):
 		diners = []
 		total = 0
 
-		if status == "unstarted" or status == "calculating":
-			orders["status"] = "calculating"
+		for rounds in groups:
+			for round in rounds:
+				if round != "status" and round != "id":
+					for orderer in rounds[round]:
+						product = Product.query.filter_by(id=orderer['productid']).first()
 
-			for rounds in groups:
-				for round in rounds:
-					if round != "status" and round != "id":
-						for orderer in rounds[round]:
-							product = Product.query.filter_by(id=orderer['productid']).first()
+						quantity = int(orderer['quantity'])
+						sizes = orderer['sizes']
+						others = orderer['others']
+						callfor = orderer['callfor']
+						price = 0
 
-							quantity = int(orderer['quantity'])
-							sizes = orderer['sizes']
-							others = orderer['others']
-							callfor = orderer['callfor']
-							price = 0
+						if len(sizes) > 0:
+							for size in sizes:
+								if size["selected"] == True:
+									price = quantity * float(size["price"])
+						else:
+							price = quantity * float(product.price)
 
-							if len(sizes) > 0:
-								for size in sizes:
-									if size["selected"] == True:
-										price = quantity * float(size["price"])
-							else:
-								price = quantity * float(product.price)
+						for other in others:
+							if other["selected"] == True:
+								price += float(other["price"])
 
-							for other in others:
-								if other["selected"] == True:
-									price += float(other["price"])
-
-							if len(callfor) > 0:
-								for info in callfor:
-									user_charges[str(info["userid"])]["charge"] += price
-							else:
-								user_charges[round]["charge"] += price
+						if len(callfor) > 0:
+							for info in callfor:
+								user_charges[str(info["userid"])]["charge"] += price
+						else:
+							user_charges[round]["charge"] += price
 
 			orders["charges"] = user_charges
 
@@ -1816,15 +1866,12 @@ def diner_is_removable():
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
 
 	if schedule != None:
-		orders = json.loads(schedule.orders)
-		groups = orders["groups"]
+		orders = schedule.orders
 
-		for rounds in groups:
-			for k in rounds:
-				if (k != "status" and k != "id") and (userid == k):
-					user = User.query.filter_by(id=userid).first()
+		if "\"" + userid + "\"" in orders:
+			user = User.query.filter_by(id=userid).first()
 
-					return { "removable": False, "username": user.username }
+			return { "removable": False, "username": user.username }
 
 		return { "removable": True }
 	else:
