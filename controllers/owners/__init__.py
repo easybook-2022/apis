@@ -32,6 +32,7 @@ mycursor = mydb.cursor()
 migrate = Migrate(app, db)
 stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
 test_sms = True
+run_stripe = True
 
 account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
 auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
@@ -287,12 +288,12 @@ def query(sql, output):
 		return results
 
 def getRanStr():
-		strid = ""
+	strid = ""
 
-		for k in range(6):
-			strid += str(randint(0, 9))
+	for k in range(6):
+		strid += str(randint(0, 9))
 
-		return strid
+	return strid
 
 @app.route("/", methods=["GET"])
 def welcome_owners():
@@ -513,10 +514,11 @@ def add_bankaccount():
 	if location != None:
 		accountid = location.accountId
 
-		stripe.Account.create_external_account(
-			accountid,
-			external_account=banktoken
-		)
+		if run_stripe == True:
+			stripe.Account.create_external_account(
+				accountid,
+				external_account=banktoken
+			)
 
 		return { "msg": "Added a bank account" }
 	else:
@@ -537,15 +539,16 @@ def update_bankaccount():
 	if location != None:
 		accountid = location.accountId
 
-		stripe.Account.delete_external_account(
-			accountid,
-			oldbanktoken
-		)
+		if run_stripe == True:
+			stripe.Account.delete_external_account(
+				accountid,
+				oldbanktoken
+			)
 
-		stripe.Account.create_external_account(
-			accountid,
-			external_account=banktoken
-		)
+			stripe.Account.create_external_account(
+				accountid,
+				external_account=banktoken
+			)
 
 		return { "msg": "Updated a bank account" }
 	else:
@@ -578,23 +581,24 @@ def get_bankaccounts(id):
 
 	location = Location.query.filter_by(id=id).first()
 	accountid = location.accountId
-
-	accounts = stripe.Account.list_external_accounts(
-		accountid,
-		object="bank_account"
-	)
-	datas = accounts.data
 	bankaccounts = []
 
-	for k, data in enumerate(datas):
-		bankaccounts.append({
-			"key": "bankaccount-" + str(k),
-			"id": str(k),
-			"bankid": data.id,
-			"bankname": data.bank_name,
-			"number": "****" + str(data.last4),
-			"default": data.default_for_currency
-		})
+	if run_stripe == True:
+		accounts = stripe.Account.list_external_accounts(
+			accountid,
+			object="bank_account"
+		)
+		datas = accounts.data
+
+		for k, data in enumerate(datas):
+			bankaccounts.append({
+				"key": "bankaccount-" + str(k),
+				"id": str(k),
+				"bankid": data.id,
+				"bankname": data.bank_name,
+				"number": "****" + str(data.last4),
+				"default": data.default_for_currency
+			})
 
 	return { "bankaccounts": bankaccounts, "msg": "get bank accounts" }
 
@@ -610,11 +614,12 @@ def set_bankaccountdefault():
 	if location != None:
 		accountid = location.accountId
 
-		stripe.Account.modify_external_account(
-			accountid,
-			bankid,
-			default_for_currency=True
-		)
+		if run_stripe == True:
+			stripe.Account.modify_external_account(
+				accountid,
+				bankid,
+				default_for_currency=True
+			)
 
 		return { "msg": "Bank account set as default" }
 	else:
@@ -635,24 +640,25 @@ def get_bankaccount_info():
 	if location != None:
 		accountid = location.accountId
 
-		accounts = stripe.Account.retrieve(accountid)
-		datas = accounts.external_accounts.data
+		if run_stripe == True:
+			accounts = stripe.Account.retrieve(accountid)
+			datas = accounts.external_accounts.data
 
-		for data in datas:
-			if data.id == bankid:
-				routing_number = data.routing_number
+			for data in datas:
+				if data.id == bankid:
+					routing_number = data.routing_number
 
-				transit = routing_number[4:]
-				institution = routing_number[1:4]
+					transit = routing_number[4:]
+					institution = routing_number[1:4]
 
-				info = {
-					"account_holder_name": data.account_holder_name,
-					"last4": data.last4,
-					"transit_number": transit,
-					"institution_number": institution
-				}
+					info = {
+						"account_holder_name": data.account_holder_name,
+						"last4": data.last4,
+						"transit_number": transit,
+						"institution_number": institution
+					}
 
-				return { "bankaccountInfo": info }
+					return { "bankaccountInfo": info }
 
 		msg = "Bank doesn't exist"
 	else:
@@ -672,10 +678,11 @@ def delete_bankaccount():
 	if location != None:
 		accountid = location.accountId
 
-		stripe.Account.delete_external_account(
-			accountid,
-			bankid
-		)
+		if run_stripe == True:
+			stripe.Account.delete_external_account(
+				accountid,
+				bankid
+			)
 
 		return { "msg": "Bank account deleted" }
 	else:

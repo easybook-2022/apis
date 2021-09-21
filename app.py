@@ -277,20 +277,20 @@ class Transaction(db.Model):
 		return '<Transaction %r>' % self.groupId
 
 app.wsgi_app = DispatcherMiddleware(None, {
-	'/dev': dev_controller,
-	'/users': users_controller,
-	'/owners': owners_controller,
-	'/locations': locations_controller,
-	'/menus': menus_controller,
-	'/products': products_controller,
-	'/carts': carts_controller,
-	'/services': services_controller,
-	'/schedules': schedules_controller,
-	'/transactions': transactions_controller
+	'/flask/dev': dev_controller,
+	'/flask/users': users_controller,
+	'/flask/owners': owners_controller,
+	'/flask/locations': locations_controller,
+	'/flask/menus': menus_controller,
+	'/flask/products': products_controller,
+	'/flask/carts': carts_controller,
+	'/flask/services': services_controller,
+	'/flask/schedules': schedules_controller,
+	'/flask/transactions': transactions_controller
 })
 
 app.wsgi_app = SharedDataMiddleware(app.wsgi_app, {
-    '/static': os.path.join(os.path.dirname(__file__), 'static')
+    '/flask/static': os.path.join(os.path.dirname(__file__), 'static')
 })
 
 if __name__ == "__main__":

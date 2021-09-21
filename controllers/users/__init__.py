@@ -32,6 +32,7 @@ mycursor = mydb.cursor()
 migrate = Migrate(app, db)
 stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
 test_sms = True
+run_stripe = True
 
 account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
 auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
@@ -336,7 +337,7 @@ def login():
 			msg = "User doesn't exist"
 	else:
 		if cellnumber == '':
-			msg = "Phone number is blank"
+			msg = "Cell number is blank"
 		else:
 			msg = "Password is blank"
 
@@ -378,10 +379,15 @@ def register():
 				if user == None:
 					password = generate_password_hash(password)
 
-					customer = stripe.Customer.create(
-						phone=cellnumber
-					)
-					info = json.dumps({"customerId": customer.id, "status": "required"})
+					if run_stripe == True:
+						customer = stripe.Customer.create(
+							phone=cellnumber
+						)
+						customerid = customer.id
+					else:
+						customerid = "null"
+
+					info = json.dumps({"customerId": customerid, "status": "required"})
 
 					user = User(cellnumber, password, '', '', info)
 					db.session.add(user)
@@ -396,9 +402,9 @@ def register():
 			msg = "Password needs to be atleast 6 characters long"
 	else:
 		if cellnumber == '':
-			msg = "Phone number is blank"
+			msg = "Cell number is blank"
 		elif password == '':
-			msg = "Passwod is blank"
+			msg = "Password is blank"
 		else:
 			msg = "Please confirm your password"
 
@@ -419,10 +425,11 @@ def setup():
 		user.username = username
 		user.profile = profile.filename
 
-		stripe.Customer.modify(
-			customerid,
-			name=username
-		)
+		if run_stripe == True:
+			stripe.Customer.modify(
+				customerid,
+				name=username
+			)
 
 		profile.save(os.path.join('static', profile.filename))
 
@@ -465,11 +472,12 @@ def update():
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
-		stripe.Customer.modify(
-			customerid,
-			phone=cellnumber,
-			name=username
-		)
+		if run_stripe == True:
+			stripe.Customer.modify(
+				customerid,
+				phone=cellnumber,
+				name=username
+			)
 
 		db.session.commit()
 
@@ -504,10 +512,11 @@ def add_paymentmethod():
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
-		stripe.Customer.create_source(
-			customerid,
-			source=cardtoken
-		)
+		if run_stripe == True:
+			stripe.Customer.create_source(
+				customerid,
+				source=cardtoken
+			)
 
 		info["status"] = "filled"
 
@@ -533,15 +542,16 @@ def update_paymentmethod():
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
-		stripe.Customer.delete_source(
-			customerid,
-			oldcardtoken
-		)
+		if run_stripe == True:
+			stripe.Customer.delete_source(
+				customerid,
+				oldcardtoken
+			)
 
-		stripe.Customer.create_source(
-			customerid,
-			source=cardtoken
-		)
+			stripe.Customer.create_source(
+				customerid,
+				source=cardtoken
+			)
 
 		return { "msg": "Updated a payment method" }
 	else:
@@ -556,26 +566,27 @@ def get_payment_methods(id):
 	if user != None:
 		info = json.loads(user.info)
 		customerid = info["customerId"]
-
-		customer = stripe.Customer.retrieve(customerid)
-		default_card = customer.default_source
-
-		cards = stripe.Customer.list_sources(
-			customerid,
-			object="card"
-		)
-		datas = cards.data
 		cards = []
 
-		for k, data in enumerate(datas):
-			cards.append({
-				"key": "card-" + str(k),
-				"id": str(k),
-				"cardid": data.id,
-				"cardname": data.brand,
-				"default": data.id == default_card,
-				"number": "****" + str(data.last4)
-			})
+		if run_stripe == True:
+			customer = stripe.Customer.retrieve(customerid)
+			default_card = customer.default_source
+
+			cards = stripe.Customer.list_sources(
+				customerid,
+				object="card"
+			)
+			datas = cards.data
+
+			for k, data in enumerate(datas):
+				cards.append({
+					"key": "card-" + str(k),
+					"id": str(k),
+					"cardid": data.id,
+					"cardname": data.brand,
+					"default": data.id == default_card,
+					"number": "****" + str(data.last4)
+				})
 
 		return { "cards": cards }
 	else:
@@ -596,10 +607,11 @@ def set_paymentmethoddefault():
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
-		stripe.Customer.modify(
-			customerid,
-			default_source=cardid
-		)
+		if run_stripe == True:
+			stripe.Customer.modify(
+				customerid,
+				default_source=cardid
+			)
 
 		return { "msg": "Payment method set as default" }
 	else:
@@ -620,10 +632,13 @@ def get_paymentmethod_info():
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
-		card = stripe.Customer.retrieve_source(
-			customerid,
-			cardid
-		)
+		if run_stripe == True:
+			card = stripe.Customer.retrieve_source(
+				customerid,
+				cardid
+			)
+		else:
+			card = { "exp_month": 11, "exp_year": 2023, "last4": "7890" }
 
 		info = {
 			"exp_month": card.exp_month,
@@ -650,10 +665,11 @@ def delete_paymentmethod():
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
-		stripe.Customer.delete_source(
-			customerid,
-			cardid
-		)
+		if run_stripe == True:
+			stripe.Customer.delete_source(
+				customerid,
+				cardid
+			)
 
 		return { "msg": "Payment method deleted"}
 	else:
@@ -1052,12 +1068,16 @@ def select_user(id):
 	if user != None:
 		info = json.loads(user.info)
 		customerid = info["customerId"]
-		customer = stripe.Customer.list_sources(
-			customerid,
-			object="card",
-			limit=1
-		)
-		cards = len(customer.data)
+
+		if run_stripe == True:
+			customer = stripe.Customer.list_sources(
+				customerid,
+				object="card",
+				limit=1
+			)
+			cards = len(customer.data)
+		else:
+			cards = 5
 
 		return { "username": user.username, "cards": cards }
 	else:
@@ -1134,7 +1154,7 @@ def reset_password():
 				msg = "Password needs to be atleast 6 characters long"
 		else:
 			if password == '':
-				msg = "Passwod is blank"
+				msg = "Password is blank"
 			else:
 				msg = "Please confirm your password"
 	else:

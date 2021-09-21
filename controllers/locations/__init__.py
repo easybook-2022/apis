@@ -29,6 +29,7 @@ mydb = mysql.connector.connect(
 )
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
+run_stripe = True
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -314,60 +315,65 @@ def setup_location():
 		location = Location.query.filter_by(phonenumber=phonenumber).first()
 
 		if location == None:
-			# create a connected account
-			connectedaccount = stripe.Account.create(
-				type="custom",
-				country="CA",
-				business_type="company",
-				business_profile={
-					"name": name
-				},
-				company={
-					"address": {
+			if run_stripe == True:
+				# create a connected account
+				connectedaccount = stripe.Account.create(
+					type="custom",
+					country="CA",
+					business_type="company",
+					business_profile={
+						"name": name
+					},
+					company={
+						"address": {
+							"city": city,
+							"line1": addressOne,
+							"line2": addressTwo,
+							"postal_code": postalcode,
+							"state": province 
+						},
+						"name": name,
+						"phone": phonenumber,
+					},
+					capabilities={
+						"transfers": {"requested": True},
+						"card_payments": {"requested": True}
+					},
+					tos_acceptance={
+						"date": time,
+						"ip": str(ipAddress)
+					}
+				)
+				stripe.Account.create_person(
+					connectedaccount.id,
+					first_name=name,
+					last_name=" ",
+					address={
 						"city": city,
 						"line1": addressOne,
 						"line2": addressTwo,
 						"postal_code": postalcode,
 						"state": province 
 					},
-					"name": name,
-					"phone": phonenumber,
-				},
-				capabilities={
-					"transfers": {"requested": True},
-					"card_payments": {"requested": True}
-				},
-				tos_acceptance={
-					"date": time,
-					"ip": str(ipAddress)
-				}
-			)
-			stripe.Account.create_person(
-				connectedaccount.id,
-				first_name=name,
-				last_name=" ",
-				address={
-					"city": city,
-					"line1": addressOne,
-					"line2": addressTwo,
-					"postal_code": postalcode,
-					"state": province 
-				},
-				dob={
-					"day": 30,
-					"month": 7,
-					"year": 1996
-				},
-				relationship={
-					"representative": True
-				}
-			)
+					dob={
+						"day": 30,
+						"month": 7,
+						"year": 1996
+					},
+					relationship={
+						"representative": True
+					}
+				)
+
+				accountid = connectedaccount.id
+			else:
+				accountid = 1
 
 			location = Location(
 				name, addressOne, addressTwo, 
 				city, province, postalcode, phonenumber, logo.filename,
 				longitude, latitude, '["' + str(ownerid) + '"]',
-				'', '', connectedaccount.id, "unlist"
+				'', '', accountid, "unlist"
 			)
 			db.session.add(location)
 			db.session.commit()
@@ -420,42 +426,43 @@ def update_location():
 			if fileexist == True:
 				logo = request.files['logo']
 
-			person = stripe.Account.list_persons(accountid)
-			personid = person.data[0].id
+			if run_stripe == True:
+				person = stripe.Account.list_persons(accountid)
+				personid = person.data[0].id
 
-			stripe.Account.modify(
-				accountid,
-				business_profile={
-					"name": name
-				},
-				company={
-					"address": {
+				stripe.Account.modify(
+					accountid,
+					business_profile={
+						"name": name
+					},
+					company={
+						"address": {
+							"city": city,
+							"line1": addressOne,
+							"line2": addressTwo,
+							"postal_code": postalcode,
+							"state": province 
+						},
+						"name": name,
+						"phone": phonenumber,
+					},
+					tos_acceptance={
+						"date": time,
+						"ip": str(ipAddress)
+					}
+				)
+				stripe.Account.modify_person(
+					accountid,
+					personid,
+					first_name=name,
+					address={
 						"city": city,
 						"line1": addressOne,
 						"line2": addressTwo,
 						"postal_code": postalcode,
 						"state": province 
-					},
-					"name": name,
-					"phone": phonenumber,
-				},
-				tos_acceptance={
-					"date": time,
-					"ip": str(ipAddress)
-				}
-			)
-			stripe.Account.modify_person(
-				accountid,
-				personid,
-				first_name=name,
-				address={
-					"city": city,
-					"line1": addressOne,
-					"line2": addressTwo,
-					"postal_code": postalcode,
-					"state": province 
-				}
-			)
+					}
+				)
 
 			location.name = name
 			location.addressOne = addressOne
@@ -574,7 +581,6 @@ def set_hours():
 def get_locations():
 	content = request.get_json()
 
-	userid = content['userid']
 	longitude = float(content['longitude'])
 	latitude = float(content['latitude'])
 	name = content['locationName']
@@ -584,157 +590,25 @@ def get_locations():
 		longitude = float(longitude)
 		latitude = float(latitude)
 
-		user = User.query.filter_by(id=userid).first()
-
-		if user != None:
-			locations = [
-				{ "key": "0", "service": "restaurant", "header": "Restaurant(s)", "locations": [], "loading": True, "index": 0, "max": 0 },
-				{ "key": "1", "service": "hair", "header": "Hair Salon(s)", "locations": [], "loading": True, "index": 0, "max": 0 },
-				{ "key": "2", "service": "nail", "header": "Nail Salon(s)", "locations": [], "loading": True, "index": 0, "max": 0 }
-			]
-			orderQuery = "and name like '%" + name + "%' " if name != "" else ""
-			orderQuery += "order by ST_Distance_Sphere(point(" + str(longitude) + ", " + str(latitude) + "), point(longitude, latitude))"
-
-			point1 = (longitude, latitude)
-
-			# get restaurants
-			sql = "select * from location where type = 'restaurant' and state = 'listed' " + orderQuery + " limit 0, 10"
-			maxsql = "select count(*) as num from location where type = 'restaurant' and state = 'listed' " + orderQuery
-			datas = query(sql, True)
-			maxdatas = query(maxsql, True)[0]["num"]
-			for data in datas:
-				lon2 = float(data['longitude'])
-				lat2 = float(data['latitude'])
-
-				point2 = (lon2, lat2)
-				distance = haversine(point1, point2)
-
-				if distance < 1:
-					distance *= 1000
-					distance = str(round(distance, 1)) + " m"
-				else:
-					distance = str(round(distance, 1)) + " km"
-
-				hours = json.loads(data['hours'])
-
-				locations[0]["locations"].append({
-					"key": "l-" + str(data['id']),
-					"id": data['id'],
-					"logo": data['logo'],
-					"nav": "restaurantprofile",
-					"name": data['name'],
-					"distance": distance,
-					"opentime": hours[day]["opentime"],
-					"closetime": hours[day]["closetime"]
-				})
-
-			locations[0]["index"] += len(datas)
-
-			# get hair salons
-			sql = "select * from location where type = 'hair' and state = 'listed' " + orderQuery + " limit 0, 10"
-			maxsql = "select count(*) as num from location where type = 'hair' and state = 'listed' " + orderQuery
-			datas = query(sql, True)
-			maxdatas = query(maxsql, True)[0]["num"]
-			for data in datas:
-				lon2 = float(data['longitude'])
-				lat2 = float(data['latitude'])
-
-				point2 = (lon2, lat2)
-				distance = haversine(point1, point2)
-
-				if distance < 1:
-					distance *= 1000
-					distance = str(round(distance, 1)) + " m"
-				else:
-					distance = str(round(distance, 1)) + " km"
-
-				hours = json.loads(data['hours'])
-
-				locations[1]["locations"].append({
-					"key": "l-" + str(data['id']),
-					"id": data['id'],
-					"logo": data['logo'],
-					"nav": "salonprofile",
-					"name": data['name'],
-					"distance": distance,
-					"opentime": hours[day]["opentime"],
-					"closetime": hours[day]["closetime"]
-				})
-
-			locations[1]["index"] += len(datas)
-
-			# get nail salons
-			sql = "select * from location where type = 'nail' and state = 'listed' " + orderQuery + " limit 0, 10"
-			maxsql = "select count(*) as num from location where type = 'nail' and state = 'listed' " + orderQuery
-			datas = query(sql, True)
-			maxdatas = query(maxsql, True)[0]["num"]
-			for data in datas:
-				lon2 = float(data['longitude'])
-				lat2 = float(data['latitude'])
-
-				point2 = (lon2, lat2)
-				distance = haversine(point1, point2)
-
-				if distance < 1:
-					distance *= 1000
-					distance = str(round(distance, 1)) + " m"
-				else:
-					distance = str(round(distance, 1)) + " km"
-
-				hours = json.loads(data['hours'])
-
-				locations[2]["locations"].append({
-					"key": "l-" + str(data['id']),
-					"id": data['id'],
-					"logo": data['logo'],
-					"nav": "salonprofile",
-					"name": data['name'],
-					"distance": distance,
-					"opentime": hours[day]["opentime"],
-					"closetime": hours[day]["closetime"]
-				})
-
-			locations[2]["index"] += len(datas)
-			
-			return { "locations": locations }
-		else:
-			msg = "User doesn't exist"
-	else:
-		msg = "Coordinates is unknown"
-
-	return { "errormsg": msg }
-
-@app.route("/get_more_locations", methods=["POST"])
-def get_more_locations():
-	content = request.get_json()
-
-	userid = content['userid']
-	longitude = float(content['longitude'])
-	latitude = float(content['latitude'])
-	name = content['locationName']
-	type = content['type']
-	index = str(content['index'])
-	day = content['day']
-
-	user = User.query.filter_by(id=userid).first()
-
-	if user != None:
-		locations = []
+		locations = [
+			{ "key": "0", "service": "restaurant", "header": "Restaurant(s)", "locations": [], "loading": True, "index": 0, "max": 0 },
+			{ "key": "1", "service": "hair", "header": "Hair Salon(s)", "locations": [], "loading": True, "index": 0, "max": 0 },
+			{ "key": "2", "service": "nail", "header": "Nail Salon(s)", "locations": [], "loading": True, "index": 0, "max": 0 }
+		]
 		orderQuery = "and name like '%" + name + "%' " if name != "" else ""
-		orderQuery += "order by st_distance_sphere(point(" + str(longitude) + ", " + str(latitude) + "), point(longitude, latitude))"
-		lon1 = longitude
-		lat1 = latitude
+		orderQuery += "order by ST_Distance_Sphere(point(" + str(longitude) + ", " + str(latitude) + "), point(longitude, latitude))"
 
-		# get locations
-		sql = "select * from location where type = '" + type + "' and state = 'listed' " + orderQuery + " limit " + index + ", 10"
-		maxsql = "select count(*) as num from location where type = '" + type + "' and state = 'listed' " + orderQuery
+		point1 = (longitude, latitude)
+
+		# get restaurants
+		sql = "select * from location where type = 'restaurant' and state = 'listed' " + orderQuery + " limit 0, 10"
+		maxsql = "select count(*) as num from location where type = 'restaurant' and state = 'listed' " + orderQuery
 		datas = query(sql, True)
 		maxdatas = query(maxsql, True)[0]["num"]
 		for data in datas:
 			lon2 = float(data['longitude'])
 			lat2 = float(data['latitude'])
 
-			point1 = (lon1, lat1)
 			point2 = (lon2, lat2)
 			distance = haversine(point1, point2)
 
@@ -746,19 +620,142 @@ def get_more_locations():
 
 			hours = json.loads(data['hours'])
 
-			locations.append({
+			locations[0]["locations"].append({
 				"key": "l-" + str(data['id']),
 				"id": data['id'],
 				"logo": data['logo'],
-				"nav": ("restaurant" if type == "restaurant" else "salon") + "profile",
+				"nav": "restaurantprofile",
 				"name": data['name'],
 				"distance": distance,
 				"opentime": hours[day]["opentime"],
 				"closetime": hours[day]["closetime"]
 			})
 
-		return { "newlocations": locations, "index": len(datas), "max": maxdatas }
+		locations[0]["index"] += len(datas)
 
+		# get hair salons
+		sql = "select * from location where type = 'hair' and state = 'listed' " + orderQuery + " limit 0, 10"
+		maxsql = "select count(*) as num from location where type = 'hair' and state = 'listed' " + orderQuery
+		datas = query(sql, True)
+		maxdatas = query(maxsql, True)[0]["num"]
+		for data in datas:
+			lon2 = float(data['longitude'])
+			lat2 = float(data['latitude'])
+
+			point2 = (lon2, lat2)
+			distance = haversine(point1, point2)
+
+			if distance < 1:
+				distance *= 1000
+				distance = str(round(distance, 1)) + " m"
+			else:
+				distance = str(round(distance, 1)) + " km"
+
+			hours = json.loads(data['hours'])
+
+			locations[1]["locations"].append({
+				"key": "l-" + str(data['id']),
+				"id": data['id'],
+				"logo": data['logo'],
+				"nav": "salonprofile",
+				"name": data['name'],
+				"distance": distance,
+				"opentime": hours[day]["opentime"],
+				"closetime": hours[day]["closetime"]
+			})
+
+		locations[1]["index"] += len(datas)
+
+		# get nail salons
+		sql = "select * from location where type = 'nail' and state = 'listed' " + orderQuery + " limit 0, 10"
+		maxsql = "select count(*) as num from location where type = 'nail' and state = 'listed' " + orderQuery
+		datas = query(sql, True)
+		maxdatas = query(maxsql, True)[0]["num"]
+		for data in datas:
+			lon2 = float(data['longitude'])
+			lat2 = float(data['latitude'])
+
+			point2 = (lon2, lat2)
+			distance = haversine(point1, point2)
+
+			if distance < 1:
+				distance *= 1000
+				distance = str(round(distance, 1)) + " m"
+			else:
+				distance = str(round(distance, 1)) + " km"
+
+			hours = json.loads(data['hours'])
+
+			locations[2]["locations"].append({
+				"key": "l-" + str(data['id']),
+				"id": data['id'],
+				"logo": data['logo'],
+				"nav": "salonprofile",
+				"name": data['name'],
+				"distance": distance,
+				"opentime": hours[day]["opentime"],
+				"closetime": hours[day]["closetime"]
+			})
+
+		locations[2]["index"] += len(datas)
+		
+		return { "locations": locations }
+	else:
+		msg = "Coordinates is unknown"
+
+	return { "errormsg": msg }
+
+@app.route("/get_more_locations", methods=["POST"])
+def get_more_locations():
+	content = request.get_json()
+
+	longitude = float(content['longitude'])
+	latitude = float(content['latitude'])
+	name = content['locationName']
+	type = content['type']
+	index = str(content['index'])
+	day = content['day']
+
+	locations = []
+	orderQuery = "and name like '%" + name + "%' " if name != "" else ""
+	orderQuery += "order by st_distance_sphere(point(" + str(longitude) + ", " + str(latitude) + "), point(longitude, latitude))"
+	lon1 = longitude
+	lat1 = latitude
+
+	# get locations
+	sql = "select * from location where type = '" + type + "' and state = 'listed' " + orderQuery + " limit " + index + ", 10"
+	maxsql = "select count(*) as num from location where type = '" + type + "' and state = 'listed' " + orderQuery
+	datas = query(sql, True)
+	maxdatas = query(maxsql, True)[0]["num"]
+	for data in datas:
+		lon2 = float(data['longitude'])
+		lat2 = float(data['latitude'])
+
+		point1 = (lon1, lat1)
+		point2 = (lon2, lat2)
+		distance = haversine(point1, point2)
+
+		if distance < 1:
+			distance *= 1000
+			distance = str(round(distance, 1)) + " m"
+		else:
+			distance = str(round(distance, 1)) + " km"
+
+		hours = json.loads(data['hours'])
+
+		locations.append({
+			"key": "l-" + str(data['id']),
+			"id": data['id'],
+			"logo": data['logo'],
+			"nav": ("restaurant" if type == "restaurant" else "salon") + "profile",
+			"name": data['name'],
+			"distance": distance,
+			"opentime": hours[day]["opentime"],
+			"closetime": hours[day]["closetime"]
+		})
+
+	return { "newlocations": locations, "index": len(datas), "max": maxdatas }
+	
 @app.route("/get_location_profile", methods=["POST"])
 def get_location_profile():
 	content = request.get_json()
@@ -865,12 +862,16 @@ def make_reservation():
 	if user != None:
 		info = json.loads(user.info)
 		customerid = info['customerId']
-		customer = stripe.Customer.list_sources(
-			customerid,
-			object="card",
-			limit=1
-		)
-		cards = len(customer.data)
+
+		if run_stripe == True:
+			customer = stripe.Customer.list_sources(
+				customerid,
+				object="card",
+				limit=1
+			)
+			cards = len(customer.data)
+		else:
+			cards = 1
 
 		if cards > 0:
 			location = Location.query.filter_by(id=locationid).first()
@@ -986,8 +987,12 @@ def change_location_state(id):
 		numservices = Service.query.filter_by(locationId=id).count()
 
 		accountid = location.accountId
-		account = stripe.Account.list_external_accounts(accountid, object="bank_account", limit=1)
-		bankaccounts = len(account.data)
+
+		if run_stripe == True:
+			account = stripe.Account.list_external_accounts(accountid, object="bank_account", limit=1)
+			bankaccounts = len(account.data)
+		else:
+			bankaccounts = 1
 
 		if (state == "unlist" and ((numproducts > 0 or numservices > 0) and bankaccounts == 1)) or (state == "listed"):
 			location.state = "listed" if state == "unlist" else "unlist"

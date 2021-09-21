@@ -352,13 +352,14 @@ def get_transactions():
 						"type": "service"
 					})
 
-			transactions.append({
-				"key": "g-" + str(len(transactions)),
-				"id": str(len(transactions)),
-				"items": row,
-				"time": int(cart['time'])
-			})
-			row = []
+			if len(row) > 0:
+				transactions.append({
+					"key": "g-" + str(len(transactions)),
+					"id": str(len(transactions)),
+					"items": row,
+					"time": int(cart['time'])
+				})
+				row = []
 
 		return { "transactions": transactions }
 	else:

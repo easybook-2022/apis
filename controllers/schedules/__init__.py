@@ -30,6 +30,7 @@ mydb = mysql.connector.connect(
 )
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
+run_stripe = True
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -433,12 +434,16 @@ def request_appointment():
 	if user != None:
 		info = json.loads(user.info)
 		customerid = info['customerId']
-		customer = stripe.Customer.list_sources(
-			customerid,
-			object="card",
-			limit=1
-		)
-		cards = len(customer.data)
+
+		if run_stripe == True:
+			customer = stripe.Customer.list_sources(
+				customerid,
+				object="card",
+				limit=1
+			)
+			cards = len(customer.data)
+		else:
+			cards = 1
 
 		if cards > 0:
 			location = Location.query.filter_by(id=locationid).first()
@@ -580,12 +585,16 @@ def accept_reservation_joining():
 	if user != None:
 		info = json.loads(user.info)
 		customerid = info["customerId"]
-		customer = stripe.Customer.list_sources(
-			customerid,
-			object="card",
-			limit=1
-		)
-		cards = len(customer.data)
+
+		if run_stripe == True:
+			customer = stripe.Customer.list_sources(
+				customerid,
+				object="card",
+				limit=1
+			)
+			cards = len(customer.data)
+		else:
+			cards = 1
 
 		if cards > 0:
 			schedule = Schedule.query.filter_by(id=scheduleid).first()
@@ -686,14 +695,15 @@ def get_diners_payments():
 
 						customerid = info["customerId"]
 
-						stripe.Charge.create(
-							amount=int(charge * 100),
-							currency="cad",
-							customer=customerid,
-							transfer_data={
-								"destination": accountid
-							}
-						)
+						if run_stripe == True:
+							stripe.Charge.create(
+								amount=int(charge * 100),
+								currency="cad",
+								customer=customerid,
+								transfer_data={
+									"destination": accountid
+								}
+							)
 
 						charges[userid]["paid"] = True
 
@@ -783,12 +793,16 @@ def done_service():
 
 		if location != None and service != None:
 			accountid = location.accountId
-			account = stripe.Account.list_external_accounts(
-				accountid,
-				object="bank_account",
-				limit=1
-			)
-			bankaccounts = len(account.data)
+
+			if run_stripe == True:
+				account = stripe.Account.list_external_accounts(
+					accountid,
+					object="bank_account",
+					limit=1
+				)
+				bankaccounts = len(account.data)
+			else:
+				bankaccounts = 1
 
 			if bankaccounts > 0:
 				clientId = schedule.userId
@@ -799,14 +813,15 @@ def done_service():
 				price = float(service.price)
 
 				if info["paymentsent"] == True:
-					stripe.Charge.create(
-						amount=int(price * 100),
-						currency="cad",
-						customer=customerid,
-						transfer_data={
-							"destination": accountid
-						}
-					)
+					if run_stripe == True:
+						stripe.Charge.create(
+							amount=int(price * 100),
+							currency="cad",
+							customer=customerid,
+							transfer_data={
+								"destination": accountid
+							}
+						)
 
 					groupId = ""
 

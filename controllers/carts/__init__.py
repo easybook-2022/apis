@@ -30,6 +30,7 @@ mydb = mysql.connector.connect(
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
 stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
+run_stripe = True
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -399,12 +400,16 @@ def add_item_to_cart():
 	if user != None and product != None:
 		info = json.loads(user.info)
 		customerid = info["customerId"]
-		customer = stripe.Customer.list_sources(
-			customerid,
-			object="card",
-			limit=1
-		)
-		cards = len(customer.data)
+
+		if run_stripe == True:
+			customer = stripe.Customer.list_sources(
+				customerid,
+				object="card",
+				limit=1
+			)
+			cards = len(customer.data)
+		else:
+			cards = 1
 
 		if cards > 0 or len(callfor) > 0:
 			if product.price == '':
@@ -526,8 +531,12 @@ def receive_payment():
 
 	if user != None and location != None:
 		accountid = location.accountId
-		account = stripe.Account.list_external_accounts(accountid, object="bank_account", limit=1)
-		bankaccounts = len(account.data)
+
+		if run_stripe == True:
+			account = stripe.Account.list_external_accounts(accountid, object="bank_account", limit=1)
+			bankaccounts = len(account.data)
+		else:
+			bankaccounts = 1
 
 		if bankaccounts == 1:
 			username = user.username
@@ -595,14 +604,15 @@ def receive_payment():
 				userInfo = User.query.filter_by(id=info).first()
 				customerid = json.loads(userInfo.info)["customerId"]
 
-				stripe.Charge.create(
-					amount=int(charges[info] * 100),
-					currency="cad",
-					customer=customerid,
-					transfer_data={
-						"destination": location.accountId
-					}
-				)
+				if run_stripe == True:
+					stripe.Charge.create(
+						amount=int(charges[info] * 100),
+						currency="cad",
+						customer=customerid,
+						transfer_data={
+							"destination": location.accountId
+						}
+					)
 
 			return { "msg": "Order delivered and payment made" }
 		else:
