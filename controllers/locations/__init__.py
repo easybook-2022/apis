@@ -37,7 +37,7 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	info = db.Column(db.String(60))
+	info = db.Column(db.String(120))
 
 	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
@@ -53,12 +53,12 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
-	locationId = db.Column(db.Text)
+	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, locationId):
+	def __init__(self, cellnumber, password, info):
 		self.cellnumber = cellnumber
 		self.password = password
-		self.locationId = locationId
+		self.info = info
 
 	def __repr__(self):
 		return '<Owner %r>' % self.cellnumber
@@ -378,7 +378,9 @@ def setup_location():
 			db.session.add(location)
 			db.session.commit()
 
-			owner.locationId = location.id
+			info = json.loads(owner.info)
+			info["locationId"] = location.id
+			owner.info = json.dumps(info)
 
 			db.session.commit()
 
@@ -393,7 +395,7 @@ def setup_location():
 	else:
 		msg = "Owner doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/update_location", methods=["POST"])
 def update_location():
@@ -416,7 +418,8 @@ def update_location():
 	owner = Owner.query.filter_by(id=ownerid).first()
 
 	if owner != None:
-		locationid = owner.locationId
+		info = json.loads(owner.info)
+		locationid = info["locationId"]
 
 		location = Location.query.filter_by(id=locationid).first()
 
@@ -494,11 +497,11 @@ def update_location():
 	else:
 		msg = "Owner doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/fetch_num_requests/<id>")
 def fetch_num_requests(id):
-	numRequests = query("select count(*) as num from schedule where locationId = " + str(id) + " and status = 'requested'", True)[0]["num"]
+	numRequests = query("select count(*) as num from schedule where locationId = " + str(id) + " and (status = 'requested' or status = 'change')", True)[0]["num"]
 
 	return { "numRequests": numRequests }
 
@@ -549,7 +552,7 @@ def set_type():
 	else:
 		msg = "Owner doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/set_hours", methods=["POST"])
 def set_hours():
@@ -575,16 +578,18 @@ def set_hours():
 	else:
 		msg = "Owner doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/get_locations", methods=["POST"])
 def get_locations():
 	content = request.get_json()
 
-	longitude = float(content['longitude'])
-	latitude = float(content['latitude'])
+	longitude = content['longitude']
+	latitude = content['latitude']
 	name = content['locationName']
 	day = content['day']
+	msg = ""
+	status = ""
 
 	if longitude != None and latitude != None:
 		longitude = float(longitude)
@@ -702,8 +707,9 @@ def get_locations():
 		return { "locations": locations }
 	else:
 		msg = "Coordinates is unknown"
+		status = "unknowncoords"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_more_locations", methods=["POST"])
 def get_more_locations():
@@ -973,7 +979,7 @@ def get_info():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/change_location_state/<id>")
 def change_location_state(id):
@@ -1037,4 +1043,4 @@ def get_hours():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400

@@ -38,7 +38,7 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	info = db.Column(db.String(60))
+	info = db.Column(db.String(120))
 
 	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
@@ -54,12 +54,12 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
-	locationId = db.Column(db.Text)
+	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, locationId):
+	def __init__(self, cellnumber, password, info):
 		self.cellnumber = cellnumber
 		self.password = password
-		self.locationId = locationId
+		self.info = info
 
 	def __repr__(self):
 		return '<Owner %r>' % self.cellnumber
@@ -377,7 +377,7 @@ def get_cart_items(id):
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/add_item_to_cart", methods=["POST"])
 def add_item_to_cart():
@@ -451,7 +451,7 @@ def remove_item_from_cart(id):
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/checkout", methods=["POST"])
 def checkout():
@@ -484,7 +484,7 @@ def checkout():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/order_ready", methods=["POST"])
 def order_ready():
@@ -670,7 +670,7 @@ def edit_cart_item(id):
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/update_cart_item", methods=["POST"])
 def update_cart_item():
@@ -698,7 +698,7 @@ def update_cart_item():
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/edit_call_for/<id>")
 def edit_call_for(id):
@@ -773,7 +773,7 @@ def edit_call_for(id):
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/update_call_for", methods=["POST"])
 def update_call_for():
@@ -793,7 +793,7 @@ def update_call_for():
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/remove_call_for", methods=["POST"])
 def remove_call_for():
@@ -820,4 +820,4 @@ def remove_call_for():
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400

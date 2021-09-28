@@ -52,12 +52,12 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
-	locationId = db.Column(db.Text)
+	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, locationId):
+	def __init__(self, cellnumber, password, info):
 		self.cellnumber = cellnumber
 		self.password = password
-		self.locationId = locationId
+		self.info = info
 
 	def __repr__(self):
 		return '<Owner %r>' % self.cellnumber
@@ -365,4 +365,4 @@ def get_transactions():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400

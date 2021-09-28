@@ -36,7 +36,7 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	info = db.Column(db.String(60))
+	info = db.Column(db.String(120))
 
 	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
@@ -52,12 +52,12 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
-	locationId = db.Column(db.Text)
+	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, locationId):
+	def __init__(self, cellnumber, password, info):
 		self.cellnumber = cellnumber
 		self.password = password
-		self.locationId = locationId
+		self.info = info
 
 	def __repr__(self):
 		return '<Owner %r>' % self.cellnumber
@@ -334,7 +334,7 @@ def get_products():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/get_product_info/<id>")
 def get_product_info(id):
@@ -394,7 +394,7 @@ def get_product_info(id):
 	else:
 		msg = "Product doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/cancel_cart_order", methods=["POST"])
 def cancel_cart_order():
@@ -422,7 +422,7 @@ def cancel_cart_order():
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/confirm_cart_order", methods=["POST"])
 def confirm_cart_order():
@@ -450,7 +450,7 @@ def confirm_cart_order():
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/add_product", methods=["POST"])
 def add_product():
@@ -485,7 +485,7 @@ def add_product():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/update_product", methods=["POST"])
 def update_product():
@@ -531,7 +531,7 @@ def update_product():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/remove_product/<id>", methods=["POST"])
 def remove_product(id):

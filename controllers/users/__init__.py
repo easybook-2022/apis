@@ -5,6 +5,7 @@ import mysql.connector, pymysql.cursors, os, json, stripe
 from werkzeug.security import generate_password_hash, check_password_hash
 from random import randint
 from twilio.rest import Client
+from exponent_server_sdk import PushClient, PushMessage
 
 local = True
 
@@ -45,7 +46,7 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	info = db.Column(db.String(60))
+	info = db.Column(db.String(120))
 
 	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
@@ -61,12 +62,12 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
-	locationId = db.Column(db.Text)
+	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, locationId):
+	def __init__(self, cellnumber, password, info):
 		self.cellnumber = cellnumber
 		self.password = password
-		self.locationId = locationId
+		self.info = info
 
 	def __repr__(self):
 		return '<Owner %r>' % self.cellnumber
@@ -295,6 +296,25 @@ def getRanStr():
 
 	return strid
 
+def push(id, message, data):
+	user = User.query.filter_by(id=id).first()
+
+	info = json.loads(user.info)
+	pushtoken = info["pushtoken"]
+
+	response = PushClient().publish(
+		PushMessage(
+			to=pushtoken,
+			body="Push works for " + user.username,
+			data={
+				"username": user.username,
+				"for": "username"
+			}
+		)
+	)
+
+	return { "sent": True if response.status == "ok" else False }
+
 @app.route("/", methods=["GET"])
 def welcome_users():
 	datas = query("select * from user", True)
@@ -341,7 +361,7 @@ def login():
 		else:
 			msg = "Password is blank"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/verify/<cellnumber>")
 def verify(cellnumber):
@@ -361,7 +381,7 @@ def verify(cellnumber):
 	else:
 		msg = "Cell number already used"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -387,7 +407,7 @@ def register():
 					else:
 						customerid = "null"
 
-					info = json.dumps({"customerId": customerid, "status": "required"})
+					info = json.dumps({"customerId": customerid, "status": "required", "pushtoken": "" })
 
 					user = User(cellnumber, password, '', '', info)
 					db.session.add(user)
@@ -408,7 +428,7 @@ def register():
 		else:
 			msg = "Please confirm your password"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/setup", methods=["POST"])
 def setup():
@@ -439,7 +459,7 @@ def setup():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/update", methods=["POST"])
 def update():
@@ -485,19 +505,48 @@ def update():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
+
+@app.route("/update_notification_token", methods=["POST"])
+def update_notification_token():
+	content = request.get_json()
+
+	userid = content['userid']
+	token = content['token']
+
+	user = User.query.filter_by(id=userid).first()
+
+	if user != None:
+		info = json.loads(user.info)
+		info["pushtoken"] = token
+
+		user.info = json.dumps(info)
+
+		db.session.commit()
+
+		return { "msg": "Push token updated" }
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }, 400
 
 @app.route("/get_user_info/<id>")
 def get_user_info(id):
 	user = User.query.filter_by(id=id).first()
+	msg = ""
 
-	info = {
-		"username": user.username,
-		"cellnumber": user.cellnumber,
-		"profile": user.profile
-	}
+	if user != None:
+		info = {
+			"username": user.username,
+			"cellnumber": user.cellnumber,
+			"profile": user.profile
+		}
 
-	return { "userInfo": info }
+		return { "userInfo": info }
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }, 400
 
 @app.route("/add_paymentmethod", methods=["POST"])
 def add_paymentmethod():
@@ -557,7 +606,7 @@ def update_paymentmethod():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/get_payment_methods/<id>")
 def get_payment_methods(id):
@@ -572,11 +621,11 @@ def get_payment_methods(id):
 			customer = stripe.Customer.retrieve(customerid)
 			default_card = customer.default_source
 
-			cards = stripe.Customer.list_sources(
+			methods = stripe.Customer.list_sources(
 				customerid,
 				object="card"
 			)
-			datas = cards.data
+			datas = methods.data
 
 			for k, data in enumerate(datas):
 				cards.append({
@@ -592,7 +641,7 @@ def get_payment_methods(id):
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/set_paymentmethoddefault", methods=["POST"])
 def set_paymentmethoddefault():
@@ -617,7 +666,7 @@ def set_paymentmethoddefault():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/get_paymentmethod_info", methods=["POST"])
 def get_paymentmethod_info():
@@ -650,7 +699,7 @@ def get_paymentmethod_info():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/delete_paymentmethod", methods=["POST"])
 def delete_paymentmethod():
@@ -675,7 +724,7 @@ def delete_paymentmethod():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/get_notifications/<id>")
 def get_notifications(id):
@@ -849,7 +898,7 @@ def get_notifications(id):
 
 		# get reservation requests
 		sql = "select * from schedule where "
-		sql += "(userId = " + str(id) + " and (status = 'requested' or status = 'rebook' or status = 'cancel' or status = 'accepted'))"
+		sql += "(userId = " + str(id) + " and (status = 'requested' or status = 'rebook' or status = 'cancel' or status = 'accepted' or status = 'change'))"
 		sql += " or customers like '%{\"userid\": \"" + str(id) + "\", \"status\": \"waiting\"}%'"
 		sql += " or (status = 'accepted' and customers like '%{\"userid\": \"" + str(id) + "\", \"status\": \"confirmed\"}%')"
 		datas = query(sql, True)
@@ -918,7 +967,7 @@ def get_notifications(id):
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/get_num_updates", methods=["POST"])
 def get_num_updates():
@@ -950,7 +999,7 @@ def get_num_updates():
 
 		# get reservation requests
 		sql = "select count(*) as num from schedule where "
-		sql += "(userId = " + str(userid) + " and (status = 'requested' or status = 'rebook' or status = 'cancel' or status = 'accepted'))"
+		sql += "(userId = " + str(userid) + " and (status = 'requested' or status = 'rebook' or status = 'cancel' or status = 'accepted' or status = 'change'))"
 		sql += " or customers like '%{\"userid\": \"" + str(userid) + "\", \"status\": \"waiting\"}%'"
 		sql += " or (status = 'accepted' and customers like '%{\"userid\": \"" + str(userid) + "\", \"status\": \"confirmed\"}%')"
 		num += query(sql, True)[0]["num"]
@@ -959,7 +1008,7 @@ def get_num_updates():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/search_friends", methods=["POST"])
 def search_friends():
@@ -1005,7 +1054,7 @@ def search_friends():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/search_diners", methods=["POST"])
 def search_diners():
@@ -1059,7 +1108,7 @@ def search_diners():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/select_user/<id>")
 def select_user(id):
@@ -1083,7 +1132,7 @@ def select_user(id):
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/request_user_payment_method/<id>")
 def request_user_payment_method(id):
@@ -1102,7 +1151,7 @@ def request_user_payment_method(id):
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/get_reset_code/<phonenumber>")
 def get_reset_code(phonenumber):
@@ -1122,7 +1171,7 @@ def get_reset_code(phonenumber):
 	else:
 		msg = "Owner doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/reset_password", methods=["POST"])
 def reset_password():
@@ -1160,4 +1209,4 @@ def reset_password():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400

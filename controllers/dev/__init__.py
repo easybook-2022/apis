@@ -5,6 +5,7 @@ import mysql.connector, pymysql.cursors, os, json, stripe
 from werkzeug.security import generate_password_hash, check_password_hash
 from random import randint
 from twilio.rest import Client
+from exponent_server_sdk import PushClient, PushMessage
 
 local = True
 
@@ -36,6 +37,7 @@ account_sid = "AC8c3cd78674e391f0834a086891304e52"
 auth_token = "b7f9e3b46ac445302a4a0710e95f44c1"
 mss = "MG376dcb41368d7deca0bda395f36bf2a7"
 client = Client(account_sid, auth_token)
+fee = 0.98
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -43,7 +45,7 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	info = db.Column(db.String(60))
+	info = db.Column(db.String(120))
 
 	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
@@ -59,12 +61,12 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
-	locationId = db.Column(db.Text)
+	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, locationId):
+	def __init__(self, cellnumber, password, info):
 		self.cellnumber = cellnumber
 		self.password = password
-		self.locationId = locationId
+		self.info = info
 
 	def __repr__(self):
 		return '<Owner %r>' % self.cellnumber
@@ -287,6 +289,14 @@ def query(sql, output):
 
 		return results
 
+def stripe_fee(amount, add):
+	if add == True:
+		amount = (amount + 0.30) / (1 - 0.029)
+	else:
+		amount = (amount * (1 - 0.029) - 0.30)
+
+	return amount
+
 @app.route("/")
 def welcome_dev():
 	num = str(randint(0, 9))
@@ -426,27 +436,51 @@ def reset():
 
 	return { "reset": True }
 
-@app.route("/charge/<id>")
-def charge(id):
-	user = User.query.filter_by(id=id).first()
+@app.route("/charge")
+def charge():
+	content = request.get_json()
 
-	if user != None:
+	userid = content['userid']
+	locationid = content['locationid']
+
+	user = User.query.filter_by(id=userid).first()
+	location = Location.query.filter_by(id=locationid).first()
+
+	if user != None and location != None:
 		info = json.loads(user.info)
 		customerid = info["customerId"]
-		amount = 2.00
+		amount = 100
 
-		stripe.Charge.create(
-			amount=int(amount * 100),
-			currency="cad",
+		data = stripe.PaymentMethod.list(
 			customer=customerid,
-			description="this is a test charge for user: " + user.username
+			type="card"
 		)
+		card = data.data[0].id
+		accountid = location.accountId
 
-		return { "msg": "charge of $ 2.00 works on " + user.username }
+		info = {
+
+		}
+
+		return { "info": info }
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
+
+@app.route("/refund", methods=["POST"])
+def refund():
+	content = request.get_json()
+
+	chargeid = content['chargeid']
+
+	balanceone = stripe.Balance.retrieve().available[0].amount / 100
+
+	info = {
+
+	}
+
+	return { "msg": "refund successful", "info": info }
 
 @app.route("/payout/<id>")
 def payout(id):
@@ -472,7 +506,36 @@ def payout(id):
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
+
+@app.route("/push/<id>")
+def push(id):
+	user = User.query.filter_by(id=id).first()
+	msg = ""
+
+	if user != None:
+		info = json.loads(user.info)
+		pushtoken = info["pushtoken"]
+
+		response = PushClient().publish(
+			PushMessage(
+				to=pushtoken,
+				body="Push works for " + user.username,
+				data={
+					"username": user.username,
+					"for": "username"
+				}
+			)
+		)
+
+		if response.status == "ok":
+			return { "msg": "push sent successfully" }
+
+		msg = "push failed to sent"
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }, 400
 
 @app.route("/twilio_test")
 def twilio_test():

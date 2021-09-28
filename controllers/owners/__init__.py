@@ -45,7 +45,7 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	info = db.Column(db.String(60))
+	info = db.Column(db.String(120))
 
 	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
@@ -61,12 +61,12 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
-	locationId = db.Column(db.Text)
+	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, locationId):
+	def __init__(self, cellnumber, password, info):
 		self.cellnumber = cellnumber
 		self.password = password
-		self.locationId = locationId
+		self.info = info
 
 	def __repr__(self):
 		return '<Owner %r>' % self.cellnumber
@@ -348,7 +348,7 @@ def login():
 		else:
 			msg = "Password is blank"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/verify/<cellnumber>")
 def verify(cellnumber):
@@ -368,7 +368,7 @@ def verify(cellnumber):
 	else:
 		msg = "Cell number already used"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/register", methods=["POST"])
 def register():
@@ -385,8 +385,9 @@ def register():
 
 				if len(data) == 0:
 					password = generate_password_hash(password)
+					info = {"locationId": ""}
 
-					owner = Owner(cellnumber, password, 0)
+					owner = Owner(cellnumber, password, json.dumps(info))
 					db.session.add(owner)
 					db.session.commit()
 
@@ -405,7 +406,7 @@ def register():
 		else:
 			msg = "Please confirm your password"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/add_owner", methods=["POST"])
 def add_owner():
@@ -427,9 +428,11 @@ def add_owner():
 					owner = Owner.query.filter_by(id=ownerid).first()
 
 					if owner != None:
-						locationId = owner.locationId
+						info = json.loads(owner.info)
+						locationId = info["locationId"]
 
-						owner = Owner(cellnumber, password, owner.locationId)
+						info = {"locationId": locationId}
+						owner = Owner(cellnumber, password, json.dumps(info))
 						db.session.add(owner)
 						db.session.commit()
 
@@ -458,10 +461,10 @@ def add_owner():
 		else:
 			msg = "Please confirm your password"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
-@app.route("/update_owner", methods=["POST"])
-def update_owner():
+@app.route("/update", methods=["POST"])
+def update():
 	content = request.get_json()
 
 	ownerid = content['ownerid']
@@ -502,6 +505,29 @@ def update_owner():
 	else:
 		return { "id": owner.id, "msg": "Owner's info updated" }
 
+@app.route("/update_notification_token", methods=["POST"])
+def update_notification_token():
+	content = request.get_json()
+
+	ownerid = content['ownerid']
+	token = content['token']
+
+	owner = User.query.filter_by(id=ownerid).first()
+
+	if owner != None:
+		info = json.loads(owner.info)
+		info["pushtoken"] = token
+
+		owner.info = json.dumps(info)
+
+		db.session.commit()
+
+		return { "msg": "Push token updated" }
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg }, 400
+
 @app.route("/add_bankaccount", methods=["POST"])
 def add_bankaccount():
 	content = request.get_json()
@@ -524,7 +550,7 @@ def add_bankaccount():
 	else:
 		msg = "Owner doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/update_bankaccount", methods=["POST"])
 def update_bankaccount():
@@ -554,7 +580,7 @@ def update_bankaccount():
 	else:
 		msg = "Owner doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/get_accounts/<id>")
 def get_accounts(id):
@@ -625,7 +651,7 @@ def set_bankaccountdefault():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/get_bankaccount_info", methods=["POST"])
 def get_bankaccount_info():
@@ -688,7 +714,7 @@ def delete_bankaccount():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/get_reset_code/<cellnumber>")
 def get_reset_code(cellnumber):
@@ -708,7 +734,7 @@ def get_reset_code(cellnumber):
 	else:
 		msg = "Owner doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/reset_password", methods=["POST"])
 def reset_password():
@@ -758,4 +784,4 @@ def reset_password():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400

@@ -38,7 +38,7 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	info = db.Column(db.String(60))
+	info = db.Column(db.String(120))
 
 	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
@@ -54,12 +54,12 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
-	locationId = db.Column(db.Text)
+	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, locationId):
+	def __init__(self, cellnumber, password, info):
 		self.cellnumber = cellnumber
 		self.password = password
-		self.locationId = locationId
+		self.info = info
 
 	def __repr__(self):
 		return '<Owner %r>' % self.cellnumber
@@ -291,7 +291,7 @@ def get_requests(id):
 	location = Location.query.filter_by(id=id).first()
 
 	if location != None:
-		datas = query("select * from schedule where locationId = " + str(id) + " and status = 'requested'", True)
+		datas = query("select * from schedule where locationId = " + str(id) + " and (status = 'requested' or status = 'change')", True)
 		requests = []
 
 		for data in datas:
@@ -313,14 +313,15 @@ def get_requests(id):
 				"image": service.image if service != None else location.logo,
 				"note": data['note'],
 				"diners": len(json.loads(data['customers'])) if data['locationType'] == 'restaurant' else False,
-				"tablenum": data['table']
+				"tablenum": data['table'],
+				"status": data['status']
 			})
 
 		return { "requests": requests }
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/get_appointment_info/<id>")
 def get_appointment_info(id):
@@ -344,7 +345,7 @@ def get_appointment_info(id):
 	else:
 		msg = "Appointment doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/get_reservation_info/<id>")
 def get_reservation_info(id):
@@ -391,7 +392,7 @@ def reschedule_appointment():
 	else:
 		msg = "Appointment doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/reschedule_reservation", methods=["POST"])
 def reschedule_reservation():
@@ -414,7 +415,7 @@ def reschedule_reservation():
 	else:
 		msg = "Reservation doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/request_appointment", methods=["POST"])
 def request_appointment():
@@ -424,6 +425,7 @@ def request_appointment():
 	locationid = content['locationid']
 	scheduleid = content['scheduleid']
 	serviceid = content['serviceid']
+	oldtime = content['oldtime']
 	time = content['time']
 	note = content['note']
 
@@ -454,16 +456,29 @@ def request_appointment():
 
 					if appointment == None:
 						service = Service.query.filter_by(id=serviceid).first()
-						info = json.dumps({"paymentsent": False,"customer_cancel": False,"salon_cancel": False})
+						info = json.dumps({"paymentsent": False})
 						appointment = Schedule(userid, locationid, service.menuId, serviceid, time, "requested", '', '', location.type, 1, note, '[]', '', info)
 
 						db.session.add(appointment)
 						db.session.commit()
 
-						return { "msg": "appointment added" }
+						return { "msg": "appointment added", "status": "new" }
 					else:
-						msg = "Appointment already made"
-						status = "existed"
+						if oldtime == 0:
+							return { 
+								"msg": "appoinement already made", 
+								"status": "existed",
+								"oldtime": int(appointment.time),
+								"note": appointment.note
+							}
+						else:
+							appointment.status = 'change'
+							appointment.time = time
+							appointment.note = note
+
+							db.session.commit()
+
+							return { "msg": "appointment updated", "status": "updated" }
 				else:
 					appointment = Schedule.query.filter_by(id=scheduleid).first()
 
@@ -506,7 +521,7 @@ def accept_request():
 	else:
 		msg = "Appointment doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/cancel_request", methods=["POST"])
 def cancel_request():
@@ -527,7 +542,7 @@ def cancel_request():
 	else:
 		msg = "Appointment doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/close_request/<id>")
 def close_request(id):
@@ -541,7 +556,7 @@ def close_request(id):
 	else:
 		msg = "Appointment doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/cancel_reservation_joining", methods=["POST"])
 def cancel_reservation_joining():
@@ -569,7 +584,7 @@ def cancel_reservation_joining():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/accept_reservation_joining", methods=["POST"])
 def accept_reservation_joining():
@@ -646,7 +661,7 @@ def add_diner():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/done_dining/<id>")
 def done_dining(id):
@@ -848,38 +863,15 @@ def done_service():
 
 	return { "errormsg": msg, "status": status }, 400
 
-@app.route("/cancel_service", methods=["POST"])
-def cancel_service():
-	content = request.get_json()
-
-	scheduleid = content['scheduleid']
-	type = content['type']
-
-	schedule = Schedule.query.filter_by(id=scheduleid).first()
+@app.route("/cancel_service/<id>")
+def cancel_service(id):
+	schedule = Schedule.query.filter_by(id=id).first()
 
 	if schedule != None:
-		info = json.loads(schedule.info)
-		salon_cancel = info['salon_cancel']
-		customer_cancel = info['customer_cancel']
-		delete_service = False
-
-		if type == "salon":
-			if customer_cancel == True:
-				delete_service = True
-		elif type == "customer":
-			if salon_cancel == True:
-				delete_service = True
-
-		if delete_service == True:
-			db.session.delete(schedule)
-		else:
-			info[type + '_cancel'] = True
-
-			schedule.info = json.dumps(info)
-
+		db.session.delete(schedule)
 		db.session.commit()
 
-		return { "msg": "appointment cancelled", "delete": delete_service }
+		return { "msg": "appointment cancelled" }
 	else:
 		msg = "Schedule doens't exist"
 
@@ -981,7 +973,7 @@ def search_customers():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/get_cart_orderers/<id>")
 def get_cart_orderers(id):
@@ -1211,7 +1203,7 @@ def get_schedule_info(id):
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/add_item_to_order", methods=["POST"])
 def add_item_to_order():
@@ -1290,7 +1282,7 @@ def add_item_to_order():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/see_dining_orders/<id>")
 def see_dining_orders(id):
@@ -1420,7 +1412,7 @@ def see_dining_orders(id):
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/edit_diners/<id>")
 def edit_diners(id):
@@ -1462,7 +1454,7 @@ def edit_diners(id):
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/get_dining_orders/<id>")
 def get_dining_orders(id):
@@ -1541,7 +1533,7 @@ def get_dining_orders(id):
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/deliver_round", methods=["POST"])
 def deliver_round():
@@ -1571,7 +1563,7 @@ def deliver_round():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/send_orders/<id>")
 def send_orders(id):
@@ -1681,7 +1673,7 @@ def edit_order():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/update_order", methods=["POST"])
 def update_order():
@@ -1722,7 +1714,7 @@ def update_order():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/delete_order", methods=["POST"])
 def delete_order():
@@ -1754,7 +1746,7 @@ def delete_order():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/add_diners", methods=["POST"])
 def add_diners():
@@ -1780,7 +1772,7 @@ def add_diners():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/edit_order_callfor", methods=["POST"])
 def edit_order_callfor():
@@ -1869,7 +1861,7 @@ def edit_order_callfor():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/diner_is_removable", methods=["POST"])
 def diner_is_removable():
@@ -1892,7 +1884,7 @@ def diner_is_removable():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/diner_is_selectable", methods=["POST"])
 def diner_is_selectable():
@@ -1920,7 +1912,7 @@ def diner_is_selectable():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/cancel_dining_order", methods=["POST"])
 def cancel_dining_order():
@@ -1953,7 +1945,7 @@ def cancel_dining_order():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/confirm_dining_order", methods=["POST"])
 def confirm_dining_order():
@@ -1983,7 +1975,7 @@ def confirm_dining_order():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
 
 @app.route("/update_order_callfor", methods=["POST"])
 def update_order_callfor():
@@ -2016,4 +2008,4 @@ def update_order_callfor():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg }, 400
