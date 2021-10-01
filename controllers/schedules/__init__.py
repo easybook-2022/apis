@@ -54,11 +54,15 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
+	username = db.Column(db.String(20))
+	profile = db.Column(db.String(25))
 	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, info):
+	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
 		self.password = password
+		self.username = username
+		self.profile = profile
 		self.info = info
 
 	def __repr__(self):
@@ -289,6 +293,8 @@ def welcome_schedules():
 @app.route("/get_requests/<id>")
 def get_requests(id):
 	location = Location.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		datas = query("select * from schedule where locationId = " + str(id) + " and (status = 'requested' or status = 'change')", True)
@@ -321,11 +327,13 @@ def get_requests(id):
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_appointment_info/<id>")
 def get_appointment_info(id):
 	schedule = Schedule.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		locationId = schedule.locationId
@@ -345,11 +353,13 @@ def get_appointment_info(id):
 	else:
 		msg = "Appointment doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_reservation_info/<id>")
 def get_reservation_info(id):
 	schedule = Schedule.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		locationId = schedule.locationId
@@ -371,7 +381,7 @@ def get_reservation_info(id):
 	else:
 		msg = "Reservation doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/reschedule_appointment", methods=["POST"])
 def reschedule_appointment():
@@ -381,6 +391,8 @@ def reschedule_appointment():
 	time = content['time']
 
 	schedule = Schedule.query.filter_by(id=appointmentid).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		schedule.status = "rebook"
@@ -392,7 +404,7 @@ def reschedule_appointment():
 	else:
 		msg = "Appointment doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/reschedule_reservation", methods=["POST"])
 def reschedule_reservation():
@@ -403,6 +415,8 @@ def reschedule_reservation():
 	table = content['table']
 
 	schedule = Schedule.query.filter_by(id=reservationid).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		schedule.status = "rebook"
@@ -415,7 +429,7 @@ def reschedule_reservation():
 	else:
 		msg = "Reservation doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/request_appointment", methods=["POST"])
 def request_appointment():
@@ -451,47 +465,45 @@ def request_appointment():
 			location = Location.query.filter_by(id=locationid).first()
 
 			if location != None:
-				if scheduleid == None:
-					appointment = Schedule.query.filter_by(userId=userid, serviceId=serviceid).first()
+				if scheduleid != None: # existing schedule
+					schedule = Schedule.query.filter_by(id=scheduleid, locationId=locationid).first()
 
-					if appointment == None:
-						service = Service.query.filter_by(id=serviceid).first()
-						info = json.dumps({"paymentsent": False})
-						appointment = Schedule(userid, locationid, service.menuId, serviceid, time, "requested", '', '', location.type, 1, note, '[]', '', info)
+					if schedule != None:
+						if schedule.status == 'accepted': # reschedule
+							if oldtime == 0: # get old time
+								return { 
+									"msg": "appointment already made", 
+									"status": "existed",
+									"oldtime": int(schedule.time),
+									"note": schedule.note
+								}
+							else:
+								schedule.status = 'change'
+								schedule.time = time
+								schedule.note = note
 
-						db.session.add(appointment)
-						db.session.commit()
+								db.session.commit()
 
-						return { "msg": "appointment added", "status": "new" }
-					else:
-						if oldtime == 0:
-							return { 
-								"msg": "appoinement already made", 
-								"status": "existed",
-								"oldtime": int(appointment.time),
-								"note": appointment.note
-							}
+								return { "msg": "appointment updated", "status": "updated" }
 						else:
-							appointment.status = 'change'
-							appointment.time = time
-							appointment.note = note
+							schedule.status = 'requested'
+							schedule.time = time
+							schedule.note = note
 
 							db.session.commit()
 
-							return { "msg": "appointment updated", "status": "updated" }
-				else:
-					appointment = Schedule.query.filter_by(id=scheduleid).first()
-
-					if appointment != None:
-						appointment.status = 'requested'
-						appointment.time = time
-						appointment.note = note
-
-						db.session.commit()
-
-						return { "msg": "appointment re-requested" }
+							return { "msg": "appointment re-requested", "status": "requested" }
 					else:
 						msg = "Appointment doesn't exist"
+				else: # new schedule
+					service = Service.query.filter_by(id=serviceid).first()
+					info = json.dumps({"paymentsent": False,"workerId":0})
+					appointment = Schedule(userid, locationid, service.menuId, serviceid, time, "requested", '', '', location.type, 1, note, '[]', '', info)
+
+					db.session.add(appointment)
+					db.session.commit()
+
+					return { "msg": "appointment added", "status": "new" }
 			else:
 				msg = "Location doesn't exist"
 		else:
@@ -510,6 +522,8 @@ def accept_request():
 	tablenum = content['tablenum']
 
 	appointment = Schedule.query.filter_by(id=requestid).first()
+	msg = ""
+	status = ""
 
 	if appointment != None:
 		appointment.status = "accepted"
@@ -521,7 +535,7 @@ def accept_request():
 	else:
 		msg = "Appointment doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/cancel_request", methods=["POST"])
 def cancel_request():
@@ -531,6 +545,8 @@ def cancel_request():
 	reason = content['reason']
 
 	appointment = Schedule.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if appointment != None:
 		appointment.status = "cancel"
@@ -538,25 +554,27 @@ def cancel_request():
 
 		db.session.commit()
 
-		return { "msg": "" }
+		return { "msg": "request cancelled" }
 	else:
 		msg = "Appointment doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/close_request/<id>")
 def close_request(id):
 	appointment = Schedule.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if appointment != None:
 		db.session.delete(appointment)
 		db.session.commit()
 
-		return { "msg": "success" }
+		return { "msg": "request deleted" }
 	else:
 		msg = "Appointment doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/cancel_reservation_joining", methods=["POST"])
 def cancel_reservation_joining():
@@ -566,6 +584,8 @@ def cancel_reservation_joining():
 	scheduleid = content['scheduleid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		diners = json.loads(schedule.customers)
@@ -584,7 +604,7 @@ def cancel_reservation_joining():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/accept_reservation_joining", methods=["POST"])
 def accept_reservation_joining():
@@ -647,6 +667,8 @@ def add_diner():
 	scheduleid = content['scheduleid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		diners = json.loads(schedule.customers)
@@ -661,7 +683,7 @@ def add_diner():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/done_dining/<id>")
 def done_dining(id):
@@ -688,6 +710,9 @@ def get_diners_payments():
 	time = content['time']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	msg = ""
+	status = ""
+	info = {}
 
 	if schedule != None:
 		location = Location.query.filter_by(id=schedule.locationId).first()
@@ -770,14 +795,16 @@ def get_diners_payments():
 											db.session.add(transaction)
 											db.session.commit()
 					else:
-						return { "errormsg": "Payment unconfirmed", "status": "paymentunconfirmed", "username": user.username }, 400
+						msg = "Payment unconfirmed"
+						status = "paymentunconfirmed"
+						info = { "username": user.username }
 
-				if "\"paid\": false" not in json.dumps(charges):
+				if msg == "" and "\"paid\": false" not in json.dumps(charges):
 					db.session.delete(schedule)
 
-				db.session.commit()
+					db.session.commit()
 
-				return { "msg": "payment received" }
+					return { "msg": "payment received" }
 			else:
 				msg = "Diner doesn't exist"
 		else:
@@ -785,7 +812,7 @@ def get_diners_payments():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status, "info": info }, 400
 
 @app.route("/done_service", methods=["POST"])
 def done_service():
@@ -793,6 +820,7 @@ def done_service():
 
 	scheduleid = content['scheduleid']
 	time = content['time']
+	ownerid = content['ownerid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
 	msg = ""
@@ -827,7 +855,7 @@ def done_service():
 				customerid = clientInfo["customerId"]
 				price = float(service.price)
 
-				if info["paymentsent"] == True:
+				if info["paymentsent"] == True and info["workerId"] == str(ownerid):
 					if run_stripe == True:
 						stripe.Charge.create(
 							amount=int(price * 100),
@@ -851,8 +879,12 @@ def done_service():
 
 					return { "msg": "Payment received", "clientName": client.username, "name": service.name, "price": service.price }
 				else:
-					msg = "Client hasn't sent payment yet"
-					status = "paymentunsent"
+					if info["paymentsent"] == False:
+						msg = "Client hasn't sent payment yet"
+						status = "paymentunsent"
+					else:
+						msg = "Only the worker of this client can receive payment"
+						status = "wrongworker"
 			else:
 				msg = "Please provide a bank account to receive payment"
 				status = "bankaccountrequired"
@@ -866,6 +898,8 @@ def done_service():
 @app.route("/cancel_service/<id>")
 def cancel_service(id):
 	schedule = Schedule.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		db.session.delete(schedule)
@@ -875,15 +909,43 @@ def cancel_service(id):
 	else:
 		msg = "Schedule doens't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
-@app.route("/send_service_payment/<id>")
-def send_service_payment(id):
+@app.route("/can_serve_diners/<id>")
+def can_serve_diners(id):
 	schedule = Schedule.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
+
+	if schedule != None:
+		info = json.loads(schedule.info)
+		info["dinersseated"] = True
+
+		schedule.info = json.dumps(info)
+
+		db.session.commit()
+
+		return { "msg": "Diners are seated" }
+	else:
+		msg = "Schedule doesn't exist"
+
+	return { "errormsg": msg, "status": status }, 400
+
+@app.route("/send_service_payment", methods=["POST"])
+def send_service_payment():
+	content = request.get_json()
+
+	scheduleid = content['scheduleid']
+	workerid = content['workerid']
+
+	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		info = json.loads(schedule.info)
 		info["paymentsent"] = True
+		info["workerId"] = str(workerid)
 
 		schedule.info = json.dumps(info)
 
@@ -893,7 +955,7 @@ def send_service_payment(id):
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/send_dining_payment", methods=["POST"])
 def send_dining_payment():
@@ -903,6 +965,8 @@ def send_dining_payment():
 	scheduleid = content['scheduleid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		orders = json.loads(schedule.orders)
@@ -916,7 +980,7 @@ def send_dining_payment():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_appointments/<id>")
 def get_appointments(id):
@@ -947,6 +1011,8 @@ def search_customers():
 	searchingusername = content['username']
 
 	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		datas = Schedule.query.filter_by(locationId=locationid).all()
@@ -973,7 +1039,7 @@ def search_customers():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_cart_orderers/<id>")
 def get_cart_orderers(id):
@@ -1073,6 +1139,8 @@ def see_user_orders():
 @app.route("/get_diners_orders/<id>")
 def get_diners_orders(id):
 	schedule = Schedule.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		orders = json.loads(schedule.orders)
@@ -1152,7 +1220,7 @@ def get_diners_orders(id):
 	else:
 		msg = "Reservation doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_reservations/<id>")
 def get_reservations(id):
@@ -1165,6 +1233,7 @@ def get_reservations(id):
 
 		# get number of making orders
 		orders = data.orders
+		info = json.loads(data.info)
 		newOrders = orders.replace("\"status\": \"making\"", "")
 		numMakings = (len(orders) - len(newOrders)) / len("\"status\": \"making\"")
 
@@ -1179,7 +1248,8 @@ def get_reservations(id):
 			"diners": len(json.loads(data.customers)),
 			"table": data.table,
 			"numMakings": numMakings,
-			"gettingPayment": False
+			"gettingPayment": False,
+			"seated": info["dinersseated"]
 		})
 
 	return { "reservations": reservations, "numreservations": len(reservations) }
@@ -1187,8 +1257,11 @@ def get_reservations(id):
 @app.route("/get_schedule_info/<id>")
 def get_schedule_info(id):
 	schedule = Schedule.query.filter_by(id=id, status="accepted").first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
+		info = json.loads(schedule.info)
 		location = Location.query.filter_by(id=schedule.locationId).first()
 
 		info = {
@@ -1196,14 +1269,15 @@ def get_schedule_info(id):
 			"locationId": schedule.locationId,
 			"time": schedule.time,
 			"table": schedule.table,
-			"numdiners": len(json.loads(schedule.customers)) + 1
+			"numdiners": len(json.loads(schedule.customers)) + 1,
+			"seated": info["dinersseated"] if "dinersseated" in info else None
 		}
 
-		return { "scheduleInfo": info, "msg": "" }
+		return { "scheduleInfo": info }
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/add_item_to_order", methods=["POST"])
 def add_item_to_order():
@@ -1234,6 +1308,7 @@ def add_item_to_order():
 
 	user = User.query.filter_by(id=userid).first()
 	msg = ""
+	status = ""
 
 	if user != None:
 		product = Product.query.filter_by(id=productid).first()
@@ -1282,18 +1357,22 @@ def add_item_to_order():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/see_dining_orders/<id>")
 def see_dining_orders(id):
 	schedule = Schedule.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		orderer = schedule.userId
-		data = json.loads(schedule.orders)
+		orders = json.loads(schedule.orders)
+		info = json.loads(schedule.info)
 
-		groups = data['groups']
-		donedining = data['donedining']
+		groups = orders['groups']
+		donedining = info['donedining']
+		dinersseated = info['dinersseated']
 		each_rounds = []
 		each_orderers = []
 		each_orders = []
@@ -1408,15 +1487,17 @@ def see_dining_orders(id):
 				each_round_num += 1
 				each_orderers = []
 
-		return { "rounds": each_rounds }
+		return { "rounds": each_rounds, "dinersseated": dinersseated }
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/edit_diners/<id>")
 def edit_diners(id):
 	schedule = Schedule.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		customers = json.loads(schedule.customers)
@@ -1454,11 +1535,13 @@ def edit_diners(id):
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_dining_orders/<id>")
 def get_dining_orders(id):
 	schedule = Schedule.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		data = query("select * from schedule where id = " + str(id) + " and orders like '%\"making\"%'", True)
@@ -1533,7 +1616,7 @@ def get_dining_orders(id):
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/deliver_round", methods=["POST"])
 def deliver_round():
@@ -1543,6 +1626,8 @@ def deliver_round():
 	roundid = content['roundid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		orders = json.loads(schedule.orders)
@@ -1563,7 +1648,7 @@ def deliver_round():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/send_orders/<id>")
 def send_orders(id):
@@ -1617,6 +1702,8 @@ def edit_order():
 	orderid = content['orderid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		orders = json.loads(schedule.orders)
@@ -1673,7 +1760,7 @@ def edit_order():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/update_order", methods=["POST"])
 def update_order():
@@ -1688,6 +1775,8 @@ def update_order():
 	note = content['note']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		orders = json.loads(schedule.orders)
@@ -1714,7 +1803,7 @@ def update_order():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/delete_order", methods=["POST"])
 def delete_order():
@@ -1724,6 +1813,8 @@ def delete_order():
 	orderid = content['orderid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		orders = json.loads(schedule.orders)
@@ -1746,7 +1837,7 @@ def delete_order():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/add_diners", methods=["POST"])
 def add_diners():
@@ -1756,6 +1847,8 @@ def add_diners():
 	newdiners = content['diners']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		booker = str(schedule.userId)
@@ -1772,7 +1865,7 @@ def add_diners():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/edit_order_callfor", methods=["POST"])
 def edit_order_callfor():
@@ -1782,6 +1875,8 @@ def edit_order_callfor():
 	orderid = content['orderid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		orders = json.loads(schedule.orders)
@@ -1861,7 +1956,7 @@ def edit_order_callfor():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/diner_is_removable", methods=["POST"])
 def diner_is_removable():
@@ -1871,6 +1966,8 @@ def diner_is_removable():
 	userid = str(content['userid'])
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		orders = schedule.orders
@@ -1884,7 +1981,7 @@ def diner_is_removable():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/diner_is_selectable", methods=["POST"])
 def diner_is_selectable():
@@ -1895,6 +1992,9 @@ def diner_is_selectable():
 
 	num = query("select count(*) as num from schedule where id = " + str(scheduleid) + " and customers like '%%'", True)[0]["num"]
 	user = User.query.filter_by(id=userid).first()
+	msg = ""
+	status = ""
+	info = {}
 
 	if user != None:
 		info = json.loads(user.info)
@@ -1906,13 +2006,16 @@ def diner_is_selectable():
 		if status == "filled" and isconfirmed == True:
 			return { "selectable": True, "username": user.username }
 
-		msg = "paymentrequired" if status == "required" else "unconfirmeddiner"
+		if status == "required":
+			msg = "paymentrequired"
+		else:
+			msg = "unconfirmeddiner"
 
-		return { "selectable": False, "username": user.username, "msg": msg }
+		info = { "selectable": False, "username": user.username }
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status, "info": info }, 400
 
 @app.route("/cancel_dining_order", methods=["POST"])
 def cancel_dining_order():
@@ -1922,6 +2025,8 @@ def cancel_dining_order():
 	ordererid = content['ordererid']
 
 	data = query("select orders from schedule where orders like '%\"" + str(orderid) + "\"%'", True)
+	msg = ""
+	status = ""
 
 	if len(data) == 1:
 		data = data[0]
@@ -1945,7 +2050,7 @@ def cancel_dining_order():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/confirm_dining_order", methods=["POST"])
 def confirm_dining_order():
@@ -1955,6 +2060,8 @@ def confirm_dining_order():
 	ordererid = content['ordererid']
 
 	data = query("select orders from schedule where orders like '%\"" + str(orderid) + "\"%'", True)
+	msg = ""
+	status = ""
 
 	if len(data) == 1:
 		data = data[0]
@@ -1975,7 +2082,7 @@ def confirm_dining_order():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/update_order_callfor", methods=["POST"])
 def update_order_callfor():
@@ -1986,6 +2093,8 @@ def update_order_callfor():
 	callfor = content['callfor']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	msg = ""
+	status = ""
 
 	if schedule != None:
 		orders = json.loads(schedule.orders)
@@ -2008,4 +2117,4 @@ def update_order_callfor():
 	else:
 		msg = "Schedule doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400

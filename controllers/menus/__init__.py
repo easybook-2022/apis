@@ -51,11 +51,15 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
+	username = db.Column(db.String(20))
+	profile = db.Column(db.String(25))
 	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, info):
+	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
 		self.password = password
+		self.username = username
+		self.profile = profile
 		self.info = info
 
 	def __repr__(self):
@@ -319,6 +323,8 @@ def get_menus():
 	parentMenuid = content['parentmenuid']
 
 	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		datas = query("select * from menu where locationId = " + str(locationid) + " and parentMenuId = '" + str(parentMenuid) + "'", True)
@@ -343,11 +349,13 @@ def get_menus():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/remove_menu/<id>")
 def remove_menu(id):
 	menu = Menu.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if menu != None:
 		# delete services and products from the menu
@@ -364,12 +372,16 @@ def remove_menu(id):
 		db.session.commit()
 
 		return { "msg": "deleted" }
+	else:
+		msg = "Menu doesn't exist"
 
-	return { "errormsg": "Menu doesn't exist" }
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_menu_info/<id>")
 def get_menu_info(id):
 	menu = Menu.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if menu != None:
 		name = menu.name
@@ -379,8 +391,10 @@ def get_menu_info(id):
 		info = { "name": name, "info": info, "image": image }
 
 		return { "info": info, "msg": "menu info" }
+	else:
+		msg = "Menu doesn't exist"
 
-	return { "errormsg": "Menu doesn't exist" }
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/save_menu", methods=["POST"])
 def save_menu():
@@ -390,6 +404,8 @@ def save_menu():
 	image = request.files['image']
 
 	menu = Menu.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if menu != None:
 		menu.name = name
@@ -410,7 +426,7 @@ def save_menu():
 	else:
 		msg = "Menu doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_appointments", methods=["GET"])
 def get_appointments():
@@ -424,6 +440,8 @@ def add_menu():
 	name = request.form['name']
 	info = request.form['info']
 	image = request.files['image']
+	msg = ""
+	status = ""
 
 	if name != '':
 		owner = Owner.query.filter_by(id=ownerid).first()
@@ -452,4 +470,4 @@ def add_menu():
 	else:
 		msg = "Name is blank"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400

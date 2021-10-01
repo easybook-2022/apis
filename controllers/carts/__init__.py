@@ -54,11 +54,15 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
+	username = db.Column(db.String(20))
+	profile = db.Column(db.String(25))
 	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, info):
+	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
 		self.password = password
+		self.username = username
+		self.profile = profile
 		self.info = info
 
 	def __repr__(self):
@@ -293,6 +297,8 @@ def get_num_items(id):
 @app.route("/get_cart_items/<id>")
 def get_cart_items(id):
 	user = User.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if user != None:
 		datas = Cart.query.filter_by(adder=user.id, status="listed").all()
@@ -377,7 +383,7 @@ def get_cart_items(id):
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/add_item_to_cart", methods=["POST"])
 def add_item_to_cart():
@@ -442,6 +448,8 @@ def add_item_to_cart():
 @app.route("/remove_item_from_cart/<id>")
 def remove_item_from_cart(id):
 	cartitem = Cart.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if cartitem != None:
 		db.session.delete(cartitem)
@@ -451,7 +459,7 @@ def remove_item_from_cart(id):
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/checkout", methods=["POST"])
 def checkout():
@@ -473,6 +481,8 @@ def checkout():
 	time = content['time']
 
 	user = User.query.filter_by(id=adder).first()
+	msg = ""
+	status = ""
 
 	if user != None:
 		username = user.username
@@ -484,7 +494,7 @@ def checkout():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/order_ready", methods=["POST"])
 def order_ready():
@@ -495,6 +505,8 @@ def order_ready():
 	ordernumber = content['ordernumber']
 
 	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		orders = Cart.query.filter_by(orderNumber=ordernumber).count()
@@ -513,7 +525,7 @@ def order_ready():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/receive_payment", methods=["POST"])
 def receive_payment():
@@ -624,6 +636,8 @@ def receive_payment():
 @app.route("/edit_cart_item/<id>")
 def edit_cart_item(id):
 	cartitem = Cart.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if cartitem != None:
 		product = Product.query.filter_by(id=cartitem.productId).first()
@@ -670,7 +684,7 @@ def edit_cart_item(id):
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/update_cart_item", methods=["POST"])
 def update_cart_item():
@@ -684,6 +698,8 @@ def update_cart_item():
 	note = content['note']
 
 	cartitem = Cart.query.filter_by(id=cartid).first()
+	msg = ""
+	status = ""
 
 	if cartitem != None:
 		cartitem.quantity = quantity
@@ -698,11 +714,13 @@ def update_cart_item():
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/edit_call_for/<id>")
 def edit_call_for(id):
 	cartitem = Cart.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if cartitem != None:
 		callfor = json.loads(cartitem.callfor)
@@ -773,7 +791,7 @@ def edit_call_for(id):
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/update_call_for", methods=["POST"])
 def update_call_for():
@@ -783,6 +801,8 @@ def update_call_for():
 	callfor = json.dumps(content['callfor'])
 
 	cartitem = Cart.query.filter_by(id=cartid).first()
+	msg = ""
+	status = ""
 
 	if cartitem != None:
 		cartitem.callfor = callfor
@@ -793,7 +813,7 @@ def update_call_for():
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/remove_call_for", methods=["POST"])
 def remove_call_for():
@@ -803,6 +823,8 @@ def remove_call_for():
 	callforid = content['callforid']
 
 	cartitem = Cart.query.filter_by(id=cartid).first()
+	msg = ""
+	status = ""
 
 	if cartitem != None:
 		callfor = json.loads(cartitem.callfor)
@@ -820,4 +842,4 @@ def remove_call_for():
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400

@@ -61,11 +61,15 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
+	username = db.Column(db.String(20))
+	profile = db.Column(db.String(25))
 	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, info):
+	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
 		self.password = password
+		self.username = username
+		self.profile = profile
 		self.info = info
 
 	def __repr__(self):
@@ -313,6 +317,8 @@ def login():
 
 	cellnumber = content['cellnumber']
 	password = content['password']
+	msg = ""
+	status = ""
 
 	if cellnumber != "" and password != "":
 		data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
@@ -348,13 +354,15 @@ def login():
 		else:
 			msg = "Password is blank"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/verify/<cellnumber>")
 def verify(cellnumber):
 	verifycode = getRanStr()
 
 	owner = Owner.query.filter_by(cellnumber=cellnumber).first()
+	msg = ""
+	status = ""
 
 	if owner == None:
 		if test_sms == False:
@@ -368,116 +376,171 @@ def verify(cellnumber):
 	else:
 		msg = "Cell number already used"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/register", methods=["POST"])
 def register():
-	content = request.get_json()
+	username = request.form['username']
+	cellnumber = request.form['cellnumber']
+	password = request.form['password']
+	confirmPassword = request.form['confirmPassword']
+	filepath = request.files.get('profile', False)
+	fileexist = False if filepath == False else True
+	msg = ""
 
-	cellnumber = content['cellnumber']
-	password = content['password']
-	confirmPassword = content['confirmPassword']
+	if fileexist == True:
+		profile = request.files['profile']
+	else:
+		msg = "Please provide a profile for identification"
 
-	if cellnumber != "" and password != "" and confirmPassword != "":
+	if username == "":
+		msg = "Please provide a username for identification"
+
+	if cellnumber == "":
+		msg = "Cell number is blank"
+	else:
+		data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
+
+		if len(data) > 0:
+			msg = "Owner already exist"
+
+	if password != "" and confirmPassword != "":
 		if len(password) >= 6:
-			if password == confirmPassword:
-				data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
-
-				if len(data) == 0:
-					password = generate_password_hash(password)
-					info = {"locationId": ""}
-
-					owner = Owner(cellnumber, password, json.dumps(info))
-					db.session.add(owner)
-					db.session.commit()
-
-					return { "id": owner.id }
-				else:
-					msg = "Owner already exist"
-			else:
+			if password != confirmPassword:
 				msg = "Password is mismatch"
 		else:
 			msg = "Password needs to be atleast 6 characters long"
 	else:
-		if cellnumber == "":
-			msg = "Phone number is blank"
-		elif password == "":
+		if password == "":
 			msg = "Passwod is blank"
 		else:
 			msg = "Please confirm your password"
 
-	return { "errormsg": msg }, 400
+	if msg == "":
+		profile.save(os.path.join('static', profile.filename))
+
+		password = generate_password_hash(password)
+		info = json.dumps({"locationId": ""})
+
+		owner = Owner(cellnumber, password, username, profile.filename, info)
+		db.session.add(owner)
+		db.session.commit()
+
+		return { "id": owner.id }
+
+	return { "errormsg": msg }
 
 @app.route("/add_owner", methods=["POST"])
 def add_owner():
-	content = request.get_json()
+	ownerid = request.form['ownerid']
+	cellnumber = request.form['cellnumber']
+	username = request.form['username']
+	password = request.form['password']
+	confirmPassword = request.form['confirmPassword']
+	filepath = request.files.get('profile', False)
+	fileexist = False if filepath == False else True
 
-	ownerid = content['ownerid']
-	cellnumber = content['cellnumber']
-	password = content['password']
-	confirmPassword = content['confirmPassword']
+	if fileexist == True:
+		profile = request.files['profile']
 
-	if cellnumber != "" and password != "" and confirmPassword != "":
-		if len(password) >= 6:
-			if password == confirmPassword:
-				data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
+	data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
+	msg = ""
+	status = ""
 
-				if len(data) == 0:
-					password = generate_password_hash(password)
+	if len(data) == 0:
+		owner = Owner.query.filter_by(id=ownerid).first()
 
-					owner = Owner.query.filter_by(id=ownerid).first()
+		if owner != None:
+			if fileexist == True:
+				if owner.profile != None:
+					oldprofile = owner.profile
 
-					if owner != None:
-						info = json.loads(owner.info)
-						locationId = info["locationId"]
+					if oldprofile != "" and os.path.exists("static/" + oldprofile):
+						os.remove("static/" + oldprofile)
 
-						info = {"locationId": locationId}
-						owner = Owner(cellnumber, password, json.dumps(info))
-						db.session.add(owner)
-						db.session.commit()
-
-						location = Location.query.filter_by(id=locationId).first()
-						owners = json.loads(location.owners)
-						owners.append(str(owner.id))
-
-						location.owners = json.dumps(owners)
-
-						db.session.commit()
-
-						return { "id": owner.id, "msg": "New owner added by an owner" }
-					else:
-						msg = "Owner doesn't exist"
-				else:
-					msg = "Owner already exist"
+				profile.save(os.path.join('static', profile.filename))
+				profile = profile.filename
 			else:
-				msg = "Password is mismatch"
-		else:
-			msg = "Password needs to be atleast 6 characters long"
-	else:
-		if cellnumber == "":
-			msg = "Phone number is blank"
-		elif password == "":
-			msg = "Please confirm your password"
-		else:
-			msg = "Please confirm your password"
+				msg = "Please provide a profile for identification"
 
-	return { "errormsg": msg }, 400
+			if username == "":
+				msg = "Please provide a username for identification"
+
+			if cellnumber == "":
+				msg = "Cell number is blank"
+
+			if password != "" and confirmPassword != "":
+				if len(password) >= 6:
+					if password != confirmPassword:
+						msg = "Password is mismatch"
+				else:
+					msg = "Password needs to be atleast 6 characters long"
+			else:
+				if password == "":
+					msg = "Please confirm your password"
+				else:
+					msg = "Please confirm your password"
+
+			if msg == "":
+				info = json.loads(owner.info)
+				locationId = info["locationId"]
+
+				info = {"locationId": locationId}
+
+				password = generate_password_hash(password)
+				owner = Owner(cellnumber, password, username, profile, json.dumps(info))
+				db.session.add(owner)
+				db.session.commit()
+
+				location = Location.query.filter_by(id=locationId).first()
+				owners = json.loads(location.owners)
+				owners.append(str(owner.id))
+
+				location.owners = json.dumps(owners)
+
+				db.session.commit()
+
+				return { "id": owner.id, "msg": "New owner added by an owner" }
+		else:
+			msg = "Owner doesn't exist"
+	else:
+		msg = "Owner already exist"
+
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/update", methods=["POST"])
 def update():
-	content = request.get_json()
+	ownerid = request.form['ownerid']
+	username = request.form['username']
+	cellnumber = request.form['cellnumber']
+	password = request.form['password']
+	confirmPassword = request.form['confirmPassword']
+	filepath = request.files.get('profile', False)
+	fileexist = False if filepath == False else True
 
-	ownerid = content['ownerid']
-	cellnumber = content['cellnumber']
-	password = content['password']
-	confirmPassword = content['confirmPassword']
-	errormsg = ""
+	if fileexist == True:
+		profile = request.files['profile']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
+	msg = ""
+	status = ""
 
 	if owner != None:
+		if username != "":
+			owner.username = username
+
 		if cellnumber != "":
 			owner.cellnumber = cellnumber
+
+		if fileexist == True:
+			if owner.profile != None:
+				oldprofile = owner.profile
+
+				if oldprofile != "" and os.path.exists("static/" + oldprofile):
+					os.remove("static/" + oldprofile)
+
+			profile.save(os.path.join('static', profile.filename))
+			owner.profile = profile.filename
 
 		if password != "" or confirmPassword != "":
 			if password != "" and confirmPassword != "":
@@ -487,24 +550,23 @@ def update():
 
 						owner.password = password
 					else:
-						errormsg = "Password is mismatch"
+						msg = "Password is mismatch"
 				else:
-					errormsg = "Password needs to be atleast 6 characters long"
+					msg = "Password needs to be atleast 6 characters long"
 			else:
 				if password == "":
-					errormsg = "Please confirm your password"
+					msg = "Please confirm your password"
 				else:
-					errormsg = "Please confirm your password"
+					msg = "Please confirm your password"
 
 		db.session.commit()
-	else:
-		errormsg = "Owner doesn't exist"
 
-	if errormsg != "":
-		return { "errormsg": errormsg }
-	else:
 		return { "id": owner.id, "msg": "Owner's info updated" }
+	else:
+		msg = "Owner doesn't exist"
 
+	return { "errormsg": msg, "status": status }, 400
+		
 @app.route("/update_notification_token", methods=["POST"])
 def update_notification_token():
 	content = request.get_json()
@@ -513,6 +575,8 @@ def update_notification_token():
 	token = content['token']
 
 	owner = User.query.filter_by(id=ownerid).first()
+	msg = ""
+	status = ""
 
 	if owner != None:
 		info = json.loads(owner.info)
@@ -526,7 +590,7 @@ def update_notification_token():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/add_bankaccount", methods=["POST"])
 def add_bankaccount():
@@ -536,6 +600,8 @@ def add_bankaccount():
 	banktoken = content['banktoken']
 
 	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		accountid = location.accountId
@@ -550,7 +616,7 @@ def add_bankaccount():
 	else:
 		msg = "Owner doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/update_bankaccount", methods=["POST"])
 def update_bankaccount():
@@ -561,6 +627,8 @@ def update_bankaccount():
 	banktoken = content['banktoken']
 
 	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		accountid = location.accountId
@@ -580,7 +648,7 @@ def update_bankaccount():
 	else:
 		msg = "Owner doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_accounts/<id>")
 def get_accounts(id):
@@ -596,7 +664,9 @@ def get_accounts(id):
 		accounts.append({
 			"key": "account-" + str(owner), 
 			"id": owner, 
-			"cellnumber": info.cellnumber
+			"cellnumber": info.cellnumber,
+			"username": info.username,
+			"profile": info.profile
 		})
 
 	return { "accounts": accounts }
@@ -636,6 +706,8 @@ def set_bankaccountdefault():
 	bankid = content['bankid']
 
 	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		accountid = location.accountId
@@ -651,7 +723,7 @@ def set_bankaccountdefault():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_bankaccount_info", methods=["POST"])
 def get_bankaccount_info():
@@ -662,6 +734,7 @@ def get_bankaccount_info():
 
 	location = Location.query.filter_by(id=locationid).first()
 	msg = ""
+	status = ""
 
 	if location != None:
 		accountid = location.accountId
@@ -690,7 +763,7 @@ def get_bankaccount_info():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/delete_bankaccount", methods=["POST"])
 def delete_bankaccount():
@@ -700,6 +773,8 @@ def delete_bankaccount():
 	bankid = content['bankid']
 
 	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		accountid = location.accountId
@@ -714,11 +789,13 @@ def delete_bankaccount():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_reset_code/<cellnumber>")
 def get_reset_code(cellnumber):
 	owner = Owner.query.filter_by(cellnumber=cellnumber).first()
+	msg = ""
+	status = ""
 
 	if owner != None:
 		code = getRanStr()
@@ -734,7 +811,7 @@ def get_reset_code(cellnumber):
 	else:
 		msg = "Owner doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/reset_password", methods=["POST"])
 def reset_password():
@@ -745,6 +822,8 @@ def reset_password():
 	confirmPassword = content['confirmPassword']
 
 	owner = Owner.query.filter_by(cellnumber=cellnumber).first()
+	msg = ""
+	status = ""
 
 	if owner != None:
 		if password != '' and confirmPassword != '':
@@ -784,4 +863,4 @@ def reset_password():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400

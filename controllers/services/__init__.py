@@ -51,11 +51,15 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
+	username = db.Column(db.String(20))
+	profile = db.Column(db.String(25))
 	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, info):
+	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
 		self.password = password
+		self.username = username
+		self.profile = profile
 		self.info = info
 
 	def __repr__(self):
@@ -289,6 +293,8 @@ def get_services():
 	menuid = content['menuid']
 
 	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		datas = Service.query.filter_by(locationId=locationid, menuId=menuid).all()
@@ -310,11 +316,13 @@ def get_services():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_service_info/<id>")
 def get_service_info(id):
 	service = Service.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if service != None:
 		info = {
@@ -329,7 +337,7 @@ def get_service_info(id):
 	else:
 		msg = "Service doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/add_service", methods=["POST"])
 def add_service():
@@ -342,6 +350,8 @@ def add_service():
 	duration = request.form['duration']
 
 	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		data = query("select * from service where locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "' and name = '" + name + "'", True)
@@ -360,7 +370,7 @@ def add_service():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/update_service", methods=["POST"])
 def update_service():
@@ -374,6 +384,8 @@ def update_service():
 	duration = request.form['duration']
 
 	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		service = Service.query.filter_by(id=serviceid, locationId=locationid, menuId=menuid).first()
@@ -402,7 +414,7 @@ def update_service():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/remove_service/<id>")
 def remove_service(id):

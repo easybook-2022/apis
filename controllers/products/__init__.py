@@ -52,11 +52,15 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
+	username = db.Column(db.String(20))
+	profile = db.Column(db.String(25))
 	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, info):
+	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
 		self.password = password
+		self.username = username
+		self.profile = profile
 		self.info = info
 
 	def __repr__(self):
@@ -290,6 +294,8 @@ def get_products():
 	menuid = content['menuid']
 
 	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		datas = query("select * from product where menuId = '" + str(menuid) + "'", True)
@@ -334,13 +340,15 @@ def get_products():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_product_info/<id>")
 def get_product_info(id):
 	content = request.get_json()
 
 	product = Product.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if product != None:
 		datas = json.loads(product.options)
@@ -394,7 +402,7 @@ def get_product_info(id):
 	else:
 		msg = "Product doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/cancel_cart_order", methods=["POST"])
 def cancel_cart_order():
@@ -404,6 +412,8 @@ def cancel_cart_order():
 	cartid = content['cartid']
 
 	data = query("select * from cart where id = " + str(cartid) + " and callfor like '%\"userid\": " + str(userid) + ", \"status\": \"waiting\"%'", True)
+	msg = ""
+	status = ""
 
 	if len(data) > 0:
 		data = data[0]
@@ -422,7 +432,7 @@ def cancel_cart_order():
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/confirm_cart_order", methods=["POST"])
 def confirm_cart_order():
@@ -432,6 +442,8 @@ def confirm_cart_order():
 	id = content['id']
 
 	data = query("select * from cart where id = " + str(id) + " and callfor like '%\"userid\": " + str(userid) + ", \"status\": \"waiting\"%'", True)
+	msg = ""
+	status = ""
 
 	if len(data) > 0:
 		data = data[0]
@@ -450,7 +462,7 @@ def confirm_cart_order():
 	else:
 		msg = "Cart item doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/add_product", methods=["POST"])
 def add_product():
@@ -465,6 +477,8 @@ def add_product():
 	price = request.form['price']
 
 	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		data = query("select * from product where locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "' and name = '" + name + "'", True)
@@ -485,7 +499,7 @@ def add_product():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/update_product", methods=["POST"])
 def update_product():
@@ -501,6 +515,8 @@ def update_product():
 	price = request.form['price']
 
 	location = Location.query.filter_by(id=locationid).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		product = Product.query.filter_by(id=productid, locationId=locationid, menuId=menuid).first()
@@ -531,11 +547,13 @@ def update_product():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/remove_product/<id>", methods=["POST"])
 def remove_product(id):
 	product = Product.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if product != None:
 		image = product.image
@@ -546,6 +564,8 @@ def remove_product(id):
 		db.session.delete(product)
 		db.session.commit()
 
-		return { "msg": "" }
+		return { "msg": "product deleted" }
+	else:
+		msg = "Product doesn't exist"
 
-	return { "errormsg": "Product doesn't exist" }
+	return { "errormsg": msg, "status": status }, 400

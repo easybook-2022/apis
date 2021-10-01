@@ -52,11 +52,15 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
+	username = db.Column(db.String(20))
+	profile = db.Column(db.String(25))
 	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, info):
+	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
 		self.password = password
+		self.username = username
+		self.profile = profile
 		self.info = info
 
 	def __repr__(self):
@@ -290,6 +294,8 @@ def get_transactions():
 	cartIndex = content['cartIndex']
 
 	user = User.query.filter_by(id=userid).first()
+	msg = ""
+	status = ""
 
 	if user != None:
 		transactions = []
@@ -365,4 +371,4 @@ def get_transactions():
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400

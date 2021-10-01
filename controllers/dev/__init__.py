@@ -37,7 +37,7 @@ account_sid = "AC8c3cd78674e391f0834a086891304e52"
 auth_token = "b7f9e3b46ac445302a4a0710e95f44c1"
 mss = "MG376dcb41368d7deca0bda395f36bf2a7"
 client = Client(account_sid, auth_token)
-fee = 0.98
+fee = 0.95
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -61,11 +61,15 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
+	username = db.Column(db.String(20))
+	profile = db.Column(db.String(25))
 	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, info):
+	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
 		self.password = password
+		self.username = username
+		self.profile = profile
 		self.info = info
 
 	def __repr__(self):
@@ -457,34 +461,76 @@ def charge():
 		)
 		card = data.data[0].id
 		accountid = location.accountId
+		price = 34.99
 
-		info = {
+		chargeAmount = round(stripe_fee(price, True), 2)
+		transferAmount = round(price * fee, 2)
+		info = {}
+		ids = {}
 
-		}
+		charge = stripe.Charge.create(
+			amount=int(chargeAmount * 100),
+			currency='cad',
+			customer=customerid,
+			transfer_group=user.username
+		)
+		info["chargeAmount"] = charge.amount / 100
+		ids["chargeid"] = charge.id
+		
+		transfer = stripe.Transfer.create(
+			amount=int(transferAmount * 100),
+			currency="cad",
+			destination=accountid,
+			transfer_group=user.username
+		)
+		ids["transferid"] = transfer.id
+		info["transferAmount"] = transfer.amount / 100
 
-		return { "info": info }
+		return { "info": info, "ids": ids }
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/refund", methods=["POST"])
 def refund():
 	content = request.get_json()
 
 	chargeid = content['chargeid']
+	transferid = content['transferid']
+	info = {}
 
-	balanceone = stripe.Balance.retrieve().available[0].amount / 100
+	charge = stripe.Charge.retrieve(chargeid)
+	transfer = stripe.Transfer.retrieve(transferid)
+
+	reverseTransferAmount = transfer.amount
+	refundAmount = transfer.amount
+
+	reverseTransfer = stripe.Transfer.create_reversal(
+		transfer.id,
+		amount=reverseTransferAmount
+	)
+	info["reverseTransfer"] = reverseTransferAmount
+
+	refund = stripe.Refund.create(
+		charge=chargeid,
+		amount=int(stripe_fee(reverseTransferAmount, True))
+	)
 
 	info = {
-
+		"ids": {
+			"transferid": None,
+			"chargeid": None
+		}
 	}
 
-	return { "msg": "refund successful", "info": info }
+	return { "info": info }
 
 @app.route("/payout/<id>")
 def payout(id):
 	location = Location.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
 
 	if location != None:
 		data = stripe.Balance.retrieve()
@@ -506,12 +552,13 @@ def payout(id):
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/push/<id>")
 def push(id):
 	user = User.query.filter_by(id=id).first()
 	msg = ""
+	status = ""
 
 	if user != None:
 		info = json.loads(user.info)
@@ -535,7 +582,7 @@ def push(id):
 	else:
 		msg = "User doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/twilio_test")
 def twilio_test():
@@ -550,7 +597,5 @@ def twilio_test():
 		messaging_service_sid=mss,
 		to='+16479263868'
 	)
-
-	print(message)
 
 	return { "message": message.sid }

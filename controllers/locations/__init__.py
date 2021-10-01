@@ -53,11 +53,15 @@ class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
+	username = db.Column(db.String(20))
+	profile = db.Column(db.String(25))
 	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, info):
+	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
 		self.password = password
+		self.username = username
+		self.profile = profile
 		self.info = info
 
 	def __repr__(self):
@@ -310,6 +314,8 @@ def setup_location():
 	ipAddress = request.form['ipAddress']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
+	msg = ""
+	status = ""
 
 	if owner != None:
 		location = Location.query.filter_by(phonenumber=phonenumber).first()
@@ -379,7 +385,7 @@ def setup_location():
 			db.session.commit()
 
 			info = json.loads(owner.info)
-			info["locationId"] = location.id
+			info["locationId"] = str(location.id)
 			owner.info = json.dumps(info)
 
 			db.session.commit()
@@ -395,7 +401,7 @@ def setup_location():
 	else:
 		msg = "Owner doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/update_location", methods=["POST"])
 def update_location():
@@ -416,6 +422,8 @@ def update_location():
 	fileexist = False if filepath == False else True
 
 	owner = Owner.query.filter_by(id=ownerid).first()
+	msg = ""
+	status = ""
 
 	if owner != None:
 		info = json.loads(owner.info)
@@ -497,7 +505,7 @@ def update_location():
 	else:
 		msg = "Owner doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/fetch_num_requests/<id>")
 def fetch_num_requests(id):
@@ -537,6 +545,8 @@ def set_type():
 	type = content['type']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
+	msg = ""
+	status = ""
 
 	if owner != None:
 		location = Location.query.filter_by(id=locationid).first()
@@ -552,7 +562,7 @@ def set_type():
 	else:
 		msg = "Owner doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/set_hours", methods=["POST"])
 def set_hours():
@@ -578,7 +588,7 @@ def set_hours():
 	else:
 		msg = "Owner doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_locations", methods=["POST"])
 def get_locations():
@@ -848,7 +858,7 @@ def get_location_profile():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/make_reservation", methods=["POST"])
 def make_reservation():
@@ -857,6 +867,7 @@ def make_reservation():
 	userid = content['userid']
 	locationid = content['locationid']
 	scheduleid = content['scheduleid']
+	oldtime = content['oldtime']
 	time = content['time']
 	customers = content['diners']
 	note = content['note']
@@ -883,47 +894,59 @@ def make_reservation():
 			location = Location.query.filter_by(id=locationid).first()
 
 			if location != None:
-				if scheduleid == None:
+				if scheduleid != None: # existing schedule
 					schedule = Schedule.query.filter_by(userId=userid, locationId=locationid).first()
 
-					if schedule == None:
-						charges = { str(str(userid)): {
+					if schedule != None:
+						if schedule.status == 'accepted': # reschedule
+							if oldtime == 0: # get old time
+								return {
+									"msg": "reservation already made",
+									"status": "existed",
+									"oldtime": int(schedule.time),
+									"note": schedule.note
+								}
+							else:
+								schedule.status = 'change'
+								schedule.time = time
+								schedule.note = note
+
+								db.session.commit()
+
+								return { "msg": "reservation updated", "status": "updated" }
+						else:
+							schedule.status = 'requested'
+							schedule.time = time
+							schedule.note = note
+
+							db.session.commit()
+
+							return { "msg": "reservation re-requested", "status": "requested" }
+					else:
+						msg = "Schedule doesn't exist"
+				else: # new schedule
+					charges = { str(str(userid)): {
+						"charge": 0.00,
+						"paymentsent": False,
+						"paid": False
+					}}
+
+					for customer in customers:
+						charges[customer["userid"]] = {
 							"charge": 0.00,
 							"paymentsent": False,
 							"paid": False
-						}}
+						}
 
-						for customer in customers:
-							charges[customer["userid"]] = {
-								"charge": 0.00,
-								"paymentsent": False,
-								"paid": False
-							}
+					orders = json.dumps({"groups": [], "charges": charges })
+					info = json.dumps({"donedining": False, "dinersseated": False})
 
-						orders = json.dumps({"groups":[],"donedining":False,"charges":charges})
+					schedule = Schedule(userid, locationid, "", "", time, "requested", '', '', location.type, json.dumps(customers), note, orders, '', json.dumps(info))
 
-						schedule = Schedule(userid, locationid, "", "", time, "requested", '', '', location.type, json.dumps(customers), note, orders, '', '{}')
+					db.session.add(schedule)
+					db.session.commit()
 
-						db.session.add(schedule)
-						db.session.commit()
-
-						return { "msg": "reservation added" }
-					else:
-						msg = "Reservation already made"
-						status = "existed"
-				else:
-					schedule = Schedule.query.filter_by(id=scheduleid).first()
-
-					if schedule != None:
-						schedule.status = 'requested'
-						schedule.time = time
-						schedule.note = note
-
-						db.session.commit()
-
-						return { "msg": "reservation re-requested" }
-					else:
-						msg = "Schedule doesn't exist"
+					return { "msg": "reservation added", "status": "new" }
 			else:
 				msg = "Location doesn't exist"
 		else:
@@ -979,7 +1002,7 @@ def get_info():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/change_location_state/<id>")
 def change_location_state(id):
@@ -1043,4 +1066,38 @@ def get_hours():
 	else:
 		msg = "Location doesn't exist"
 
-	return { "errormsg": msg }, 400
+	return { "errormsg": msg, "status": status }, 400
+
+@app.route("/get_workers/<id>")
+def get_workers(id):
+	schedule = Schedule.query.filter_by(id=id).first()
+	msg = ""
+	status = ""
+
+	if schedule != None:
+		locationId = schedule.locationId
+		datas = query("select * from owner where info like '%\"locationId\": \"" + str(locationId) + "\"%'", True)
+		owners = []
+		row = []
+
+		for data in datas:
+			row.append({
+				"key": "worker-" + str(data['id']),
+				"id": data['id'],
+				"username": data['username'],
+				"profile": data["profile"],
+				"selected": False
+			})
+
+			if len(row) >= 4:
+				owners.append({ "key": str(len(owners)), "row": row })
+				row = []
+
+		if len(row) > 0:
+			owners.append({ "key": str(len(owners)), "row": row })
+
+		return { "msg": "get workers", "owners": owners }
+	else:
+		msg = "Schedule doesn't exist"
+
+	return { "errormsg": msg, "status": status }, 400
