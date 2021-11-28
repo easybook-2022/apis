@@ -1,4 +1,4 @@
-#!/Users/geottuse/Desktop/Dropbox/github-repos/done/easygo/backend/env/bin/python3
+#!/Users/geottuse/Desktop/Dropbox/github-repos/done/easygo/apis/env/bin/python3.9
 # -*- coding: utf-8 -*-
 import re
 import sys

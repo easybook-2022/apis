@@ -1,16 +1,30 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, json, pymysql.cursors, os
-from random import randint
+import mysql.connector, pymysql.cursors, stripe, json, os
+from twilio.rest import Client
+from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
+from random import randint
 
 local = True
+test_stripe = True
 
 host = 'localhost'
 user = 'geottuse'
 password = 'G3ottu53?'
 database = 'easygo'
+server_url = "0.0.0.0"
+local_url = "192.168.0.172"
+apphost = server_url if local == False else local_url
+stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz" if test_stripe == True else "sk_live_AeoXx4kxjfETP2fTR7IkdTYC"
+test_sms = True
+fee = 0.98
+
+account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
+auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
+mss = "MG376dcb41368d7deca0bda395f36bf2a7"
+client = Client(account_sid, auth_token)
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://' + user + ':' + password + '@' + host + '/' + database
@@ -21,12 +35,7 @@ app.config['MYSQL_PASSWORD'] = password
 app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
-mydb = mysql.connector.connect(
-	host=host,
-	user=user,
-	password=password,
-	database=database
-)
+mydb = mysql.connector.connect(host=host, user=user, password=password, database=database)
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
 
@@ -36,7 +45,7 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	info = db.Column(db.String(120))
+	info = db.Column(db.String(155))
 
 	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
@@ -81,12 +90,12 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	accountId = db.Column(db.String(25))
+	info = db.Column(db.String(100))
 
 	def __init__(
 		self, 
 		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
-		longitude, latitude, owners, type, hours, accountId
+		longitude, latitude, owners, type, hours, info
 	):
 		self.name = name
 		self.addressOne = addressOne
@@ -101,7 +110,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
-		self.accountId = accountId
+		self.info = info
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -161,7 +170,7 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
-	info = db.Column(db.String(80))
+	info = db.Column(db.String(75))
 
 	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
@@ -237,7 +246,7 @@ class Cart(db.Model):
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
-		
+
 class Transaction(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	groupId = db.Column(db.String(20))
@@ -248,7 +257,7 @@ class Transaction(db.Model):
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
-	sizes = db.Column(db.String(150))
+	sizes = db.Column(db.String(200))
 	time = db.Column(db.String(15))
 
 	def __init__(self, groupId, locationId, productId, serviceId, adder, callfor, options, others, sizes, time):
@@ -282,9 +291,93 @@ def query(sql, output):
 
 		return results
 
-@app.route("/", methods=["GET"])
-def welcome_item():
-	return { "msg": "welcome to items of easygo" }
+def trialInfo(id, time): # days before over | cardrequired | trialover
+	user = User.query.filter_by(id=id).first()
+	info = json.loads(user.info)
+
+	customerid = info['customerId']
+
+	stripeCustomer = stripe.Customer.list_sources(
+		customerid,
+		object="card",
+		limit=1
+	)
+	cards = len(stripeCustomer.data)
+	status = ""
+	days = 0
+
+	if "trialstart" in info:
+		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
+			if cards == 0:
+				del info["trialstart"]
+
+				user.info = json.dumps(info)
+
+				db.session.commit()
+
+				status = "cardrequired"
+			else:
+				status = "trialover"
+		else:
+			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
+			status = "notover"
+	else:
+		if cards > 0:
+			status = "cardrequired"
+		else:
+			status = "trialover"
+
+	return { "days": days, "status": status }
+
+def getRanStr():
+	strid = ""
+
+	for k in range(6):
+		strid += str(randint(0, 9))
+
+	return strid
+
+def stripeFee(amount, add):
+	if add == True:
+		amount = (amount + 0.30) / (1 - 0.029)
+	else:
+		amount = (amount * (1 - 0.029) - 0.30)
+
+	return amount
+
+def calcTax(amount):
+	pst = 0.08 * amount
+	hst = 0.05 * amount
+
+	return pst + hst
+
+def pushInfo(to, title, body, data):
+	return PushMessage(to=to, title=title, body=body, data=data)
+
+def push(messages):
+	if type(messages) == type([]):
+		resp = PushClient().publish_multiple(messages)
+
+		for info in resp:
+			if info.status != "ok":
+				return { "status": "failed" }
+	else:
+		resp = PushClient().publish(messages)
+
+		if resp.status != "ok":
+			return { "status": "failed" }
+
+	return { "status": "ok" }
+
+@app.route("/welcome_products", methods=["GET"])
+def welcome_products():
+	datas = Product.query.all()
+	products = []
+
+	for data in datas:
+		products.append(data.id)
+
+	return { "msg": "welcome to products of easygo", "products": products }
 
 @app.route("/get_products", methods=["POST"])
 def get_products():
@@ -411,24 +504,33 @@ def cancel_cart_order():
 	userid = content['userid']
 	cartid = content['cartid']
 
-	data = query("select * from cart where id = " + str(cartid) + " and callfor like '%\"userid\": " + str(userid) + ", \"status\": \"waiting\"%'", True)
+	sql = "select * from cart where id = " + str(cartid) + " and "
+	sql += "("
+	sql += "callfor like '%\"userid\": \"" + str(userid) + "\", \"status\": \"waiting\"%'"
+	sql += " or "
+	sql += "callfor like '%\"status\": \"waiting\", \"userid\": \"" + str(userid) + "\"%'"
+	sql += ")"
+
+	data = query(sql, True)
 	msg = ""
 	status = ""
 
 	if len(data) > 0:
 		data = data[0]
 
+		receiver = ["user" + str(data['adder'])]
 		callfor = json.loads(data['callfor'])
 
 		for k, info in enumerate(callfor):
-			if info['userid'] == int(userid):
+			if info['userid'] == userid:
 				del callfor[k]
 
-		callfor = json.dumps(callfor)
+		if len(callfor) > 0:
+			query("update cart set callfor = '" + json.dumps(callfor) + "' where id = " + str(cartid), False)
+		else:
+			query("delete from cart where id = " + str(cartid), False)
 
-		query("update cart set callfor = '" + callfor + "' where id = " + str(cartid), False)
-
-		return { "msg": "Orderer deleted" }
+		return { "msg": "Orderer deleted", "receiver": receiver }
 	else:
 		msg = "Cart item doesn't exist"
 
@@ -441,24 +543,30 @@ def confirm_cart_order():
 	userid = content['userid']
 	id = content['id']
 
-	data = query("select * from cart where id = " + str(id) + " and callfor like '%\"userid\": " + str(userid) + ", \"status\": \"waiting\"%'", True)
+	sql = "select * from cart where id = " + str(id) + " and "
+	sql += "("
+	sql += "callfor like '%\"userid\": \"" + str(userid) + "\", \"status\": \"waiting\"%'"
+	sql += " or "
+	sql += "callfor like '%\"status\": \"waiting\", \"userid\": \"" + str(userid) + "\"%'"
+	sql += ")"
+
+	data = query(sql, True)
 	msg = ""
 	status = ""
 
 	if len(data) > 0:
 		data = data[0]
 
+		receiver = ["user" + str(data['adder'])]
 		callfor = json.loads(data['callfor'])
 
 		for info in callfor:
-			if info['userid'] == int(userid):
+			if info['userid'] == userid:
 				info['status'] = 'confirmed'
 
-		callfor = json.dumps(callfor)
+		query("update cart set callfor = '" + json.dumps(callfor) + "' where id = " + str(id), False)
 
-		query("update cart set callfor = '" + callfor + "' where id = " + str(id), False)
-
-		return { "msg": "Order confirmed" }
+		return { "msg": "Order confirmed", "receiver": receiver }
 	else:
 		msg = "Cart item doesn't exist"
 
@@ -470,11 +578,13 @@ def add_product():
 	menuid = request.form['menuid']
 	name = request.form['name']
 	info = request.form['info']
-	image = request.files['image']
+	imagepath = request.files.get('image', False)
+	imageexist = False if imagepath == False else True
 	options = request.form['options']
 	others = request.form['others']
 	sizes = request.form['sizes']
 	price = request.form['price']
+	permission = request.form['permission']
 
 	location = Location.query.filter_by(id=locationid).first()
 	msg = ""
@@ -486,14 +596,23 @@ def add_product():
 		if len(data) == 0:
 			price = price if len(sizes) > 0 else ""
 
-			product = Product(locationid, menuid, name, info, image.filename, options, others, sizes, price)
+			imagename = ""
+			if imageexist == True:
+				image = request.files['image']
+				imagename = image.filename
 
-			image.save(os.path.join('static', image.filename))
+				image.save(os.path.join('static', imagename))
+			else:
+				if permission == "true":
+					msg = "Please take a good photo"
 
-			db.session.add(product)
-			db.session.commit()
+			if msg == "":
+				product = Product(locationid, menuid, name, info, imagename, options, others, sizes, price)
 
-			return { "id": product.id }
+				db.session.add(product)
+				db.session.commit()
+
+				return { "id": product.id }
 		else:
 			msg = "Product already exist"
 	else:
@@ -508,11 +627,13 @@ def update_product():
 	productid = request.form['productid']
 	name = request.form['name']
 	info = request.form['info']
-	image = request.files['image']
+	imagepath = request.files.get('image', False)
+	imageexist = False if imagepath == False else True
 	options = request.form['options']
 	others = request.form['others']
 	sizes = request.form['sizes']
 	price = request.form['price']
+	permission = request.form['permission']
 
 	location = Location.query.filter_by(id=locationid).first()
 	msg = ""
@@ -529,19 +650,25 @@ def update_product():
 			product.others = others
 			product.sizes = sizes
 
-			oldimage = product.image
+			if imageexist == True:
+				image = request.files['image']
+				newimagename = image.filename
+				oldimage = product.image
 
-			if oldimage != image.filename:
-				if oldimage != "" and os.path.exists("static/" + oldimage):
-					os.remove("static/" + oldimage)
+				if oldimage != newimagename:
+					if oldimage != "" and os.path.exists("static/" + oldimage):
+						os.remove("static/" + oldimage)
 
-				image.save(os.path.join('static', image.filename))
+					image.save(os.path.join('static', newimagename))
+					product.image = newimagename
+			else:
+				if permission == "true":
+					msg = "Please take a good photo"
 
-				product.image = image.filename
+			if msg == "":
+				db.session.commit()
 
-			db.session.commit()
-
-			return { "msg": "product updated", "id": product.id }
+				return { "msg": "product updated", "id": product.id }
 		else:
 			msg = "Product doesn't exist"
 	else:

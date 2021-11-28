@@ -1,15 +1,30 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, json, pymysql.cursors, os
+import mysql.connector, pymysql.cursors, stripe, json, os
+from twilio.rest import Client
+from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
+from random import randint
 
 local = True
+test_stripe = True
 
 host = 'localhost'
 user = 'geottuse'
 password = 'G3ottu53?'
 database = 'easygo'
+server_url = "0.0.0.0"
+local_url = "192.168.0.172"
+apphost = server_url if local == False else local_url
+stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz" if test_stripe == True else "sk_live_AeoXx4kxjfETP2fTR7IkdTYC"
+test_sms = True
+fee = 0.98
+
+account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
+auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
+mss = "MG376dcb41368d7deca0bda395f36bf2a7"
+client = Client(account_sid, auth_token)
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://' + user + ':' + password + '@' + host + '/' + database
@@ -20,12 +35,7 @@ app.config['MYSQL_PASSWORD'] = password
 app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
-mydb = mysql.connector.connect(
-	host=host,
-	user=user,
-	password=password,
-	database=database
-)
+mydb = mysql.connector.connect(host=host, user=user, password=password, database=database)
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
 
@@ -35,7 +45,7 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	info = db.Column(db.String(120))
+	info = db.Column(db.String(155))
 
 	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
@@ -80,12 +90,12 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	accountId = db.Column(db.String(25))
+	info = db.Column(db.String(100))
 
 	def __init__(
 		self, 
 		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
-		longitude, latitude, owners, type, hours, accountId
+		longitude, latitude, owners, type, hours, info
 	):
 		self.name = name
 		self.addressOne = addressOne
@@ -100,7 +110,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
-		self.accountId = accountId
+		self.info = info
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -160,7 +170,7 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
-	info = db.Column(db.String(80))
+	info = db.Column(db.String(75))
 
 	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
@@ -247,7 +257,7 @@ class Transaction(db.Model):
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
-	sizes = db.Column(db.String(150))
+	sizes = db.Column(db.String(200))
 	time = db.Column(db.String(15))
 
 	def __init__(self, groupId, locationId, productId, serviceId, adder, callfor, options, others, sizes, time):
@@ -281,39 +291,93 @@ def query(sql, output):
 
 		return results
 
-@app.route("/", methods=["GET"])
+def trialInfo(id, time): # days before over | cardrequired | trialover
+	user = User.query.filter_by(id=id).first()
+	info = json.loads(user.info)
+
+	customerid = info['customerId']
+
+	stripeCustomer = stripe.Customer.list_sources(
+		customerid,
+		object="card",
+		limit=1
+	)
+	cards = len(stripeCustomer.data)
+	status = ""
+	days = 0
+
+	if "trialstart" in info:
+		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
+			if cards == 0:
+				del info["trialstart"]
+
+				user.info = json.dumps(info)
+
+				db.session.commit()
+
+				status = "cardrequired"
+			else:
+				status = "trialover"
+		else:
+			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
+			status = "notover"
+	else:
+		if cards > 0:
+			status = "cardrequired"
+		else:
+			status = "trialover"
+
+	return { "days": days, "status": status }
+
+def getRanStr():
+	strid = ""
+
+	for k in range(6):
+		strid += str(randint(0, 9))
+
+	return strid
+
+def stripeFee(amount, add):
+	if add == True:
+		amount = (amount + 0.30) / (1 - 0.029)
+	else:
+		amount = (amount * (1 - 0.029) - 0.30)
+
+	return amount
+
+def calcTax(amount):
+	pst = 0.08 * amount
+	hst = 0.05 * amount
+
+	return pst + hst
+
+def pushInfo(to, title, body, data):
+	return PushMessage(to=to, title=title, body=body, data=data)
+
+def push(messages):
+	if type(messages) == type([]):
+		resp = PushClient().publish_multiple(messages)
+
+		for info in resp:
+			if info.status != "ok":
+				return { "status": "failed" }
+	else:
+		resp = PushClient().publish(messages)
+
+		if resp.status != "ok":
+			return { "status": "failed" }
+
+	return { "status": "ok" }
+
+@app.route("/welcome_menus", methods=["GET"])
 def welcome_menus():
-	return { "msg": "welcome to menus of easygo" }
+	datas = Menu.query.all()
+	menus = []
 
-@app.route("/request_appointment", methods=["POST"])
-def request_appointment():
-	menuid = "29c9d9fsdkjfslkf-sdjfldsjf"
+	for data in datas:
+		menus.append(data.id)
 
-	return { "menuid": menuid, "action": "request appointment" }
-
-@app.route("/cancel_purchase", methods=["POST"])
-def cancel_purchase():
-	orderid = "dsjfkldsjdsfsd9fsdjfkdsjf"
-
-	return { "orderid": orderid, "action": "cancel purchase" }
-
-@app.route("/confirm_purchase", methods=["POST"])
-def confirm_purchase():
-	orderid = "sdjfklsdsdsdfidsfsddkjf"
-
-	return { "orderid": orderid, "action": "confirm purchase" }
-
-@app.route("/cancel_request", methods=["POST"])
-def cancel_request():
-	menuid = "29c9d9fsdkjfslkf-sdjfldsjf"
-
-	return { "menuid": menuid, "action": "cancel request" }
-
-@app.route("/confirm_request", methods=["POST"])
-def confirm_request():
-	menuid = "29c9d9fsdkjfslkf-sdjfldsjf"
-
-	return { "menuid": menuid, "action": "confirm request" }
+	return { "msg": "welcome to menus of easygo", "menus": menus }
 
 @app.route("/get_menus", methods=["POST"])
 def get_menus():
@@ -401,7 +465,9 @@ def save_menu():
 	id = request.form['id']
 	name = request.form['name']
 	info = request.form['info']
-	image = request.files['image']
+	imagepath = request.files.get('image', False)
+	imageexist = False if imagepath == False else True
+	permission = request.form['permission']
 
 	menu = Menu.query.filter_by(id=id).first()
 	msg = ""
@@ -411,14 +477,17 @@ def save_menu():
 		menu.name = name
 		menu.info = info
 
-		oldimage = menu.image
+		if imageexist == True:
+			image = request.files['image']
+			newimagename = image.filename
+			oldimage = menu.image
 
-		if image.filename != oldimage:
-			if oldimage != "" and os.path.exists("static/" + oldimage):
-				os.remove("static/" + oldimage)
+			if newimagename != oldimage:
+				if oldimage != "" and os.path.exists("static/" + oldimage):
+					os.remove("static/" + oldimage)
 
-			image.save(os.path.join('static', image.filename))
-			menu.image = image.filename
+				image.save(os.path.join('static', newimagename))
+				menu.image = newimagename
 
 		db.session.commit()
 
@@ -428,10 +497,6 @@ def save_menu():
 
 	return { "errormsg": msg, "status": status }, 400
 
-@app.route("/get_appointments", methods=["GET"])
-def get_appointments():
-	return { "appointments": [] }
-
 @app.route("/add_menu", methods=["POST"])
 def add_menu():
 	ownerid = request.form['ownerid']
@@ -439,7 +504,9 @@ def add_menu():
 	parentMenuid = request.form['parentmenuid']
 	name = request.form['name']
 	info = request.form['info']
-	image = request.files['image']
+	imagepath = request.files.get('image', False)
+	imageexist = False if imagepath == False else True
+	permission = request.form['permission']
 	msg = ""
 	status = ""
 
@@ -453,14 +520,23 @@ def add_menu():
 				data = query("select * from menu where locationId = " + str(locationid) + " and (parentMenuId = '" + str(parentMenuid) + "' and name = '" + name + "')", True)
 
 				if len(data) == 0:
-					menu = Menu(locationid, parentMenuid, name, info, image.filename)
+					imagename = ""
+					if imageexist == True:
+						image = request.files['image']
+						imagename = image.filename
 
-					db.session.add(menu)
-					db.session.commit()
+						image.save(os.path.join("static", imagename))
+					else:
+						if permission == "true":
+							msg = "Take a good picture of your menu"
+					
+					if msg == "":
+						menu = Menu(locationid, parentMenuid, name, info, imagename)
 
-					image.save(os.path.join("static", image.filename))
-
-					return { "id": menu.id }
+						db.session.add(menu)
+						db.session.commit()
+						
+						return { "id": menu.id }
 				else:
 					msg = "Menu already exist"
 			else:

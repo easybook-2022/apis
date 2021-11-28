@@ -1,16 +1,31 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, os, math, json, stripe, socket
-from haversine import haversine, Unit
+import mysql.connector, pymysql.cursors, stripe, json, os
+from twilio.rest import Client
+from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
+from random import randint
+from haversine import haversine
 
 local = True
+test_stripe = True
 
 host = 'localhost'
 user = 'geottuse'
 password = 'G3ottu53?'
 database = 'easygo'
+server_url = "0.0.0.0"
+local_url = "192.168.0.172"
+apphost = server_url if local == False else local_url
+stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz" if test_stripe == True else "sk_live_AeoXx4kxjfETP2fTR7IkdTYC"
+test_sms = True
+fee = 0.98
+
+account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
+auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
+mss = "MG376dcb41368d7deca0bda395f36bf2a7"
+client = Client(account_sid, auth_token)
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://' + user + ':' + password + '@' + host + '/' + database
@@ -21,15 +36,9 @@ app.config['MYSQL_PASSWORD'] = password
 app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
-mydb = mysql.connector.connect(
-	host=host,
-	user=user,
-	password=password,
-	database=database
-)
+mydb = mysql.connector.connect(host=host, user=user, password=password, database=database)
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
-run_stripe = True
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -37,7 +46,7 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	info = db.Column(db.String(120))
+	info = db.Column(db.String(155))
 
 	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
@@ -82,13 +91,12 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	accountId = db.Column(db.String(25))
-	state = db.Column(db.String(6))
+	info = db.Column(db.String(100))
 
 	def __init__(
 		self, 
 		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
-		longitude, latitude, owners, type, hours, accountId, state
+		longitude, latitude, owners, type, hours, info
 	):
 		self.name = name
 		self.addressOne = addressOne
@@ -103,8 +111,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
-		self.accountId = accountId
-		self.state = state
+		self.info = info
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -164,7 +171,7 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
-	info = db.Column(db.String(80))
+	info = db.Column(db.String(75))
 
 	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
@@ -251,7 +258,7 @@ class Transaction(db.Model):
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
-	sizes = db.Column(db.String(150))
+	sizes = db.Column(db.String(200))
 	time = db.Column(db.String(15))
 
 	def __init__(self, groupId, locationId, productId, serviceId, adder, callfor, options, others, sizes, time):
@@ -285,15 +292,91 @@ def query(sql, output):
 
 		return results
 
-@app.route("/", methods=["GET"])
+def trialInfo(id, time): # days before over | cardrequired | trialover
+	user = User.query.filter_by(id=id).first()
+	info = json.loads(user.info)
+
+	customerid = info['customerId']
+
+	stripeCustomer = stripe.Customer.list_sources(
+		customerid,
+		object="card",
+		limit=1
+	)
+	cards = len(stripeCustomer.data)
+	status = ""
+	days = 0
+
+	if "trialstart" in info:
+		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
+			if cards == 0:
+				del info["trialstart"]
+
+				user.info = json.dumps(info)
+
+				db.session.commit()
+
+				status = "cardrequired"
+			else:
+				status = "trialover"
+		else:
+			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
+			status = "notover"
+	else:
+		if cards > 0:
+			status = "cardrequired"
+		else:
+			status = "trialover"
+
+	return { "days": days, "status": status }
+
+def getRanStr():
+	strid = ""
+
+	for k in range(6):
+		strid += str(randint(0, 9))
+
+	return strid
+
+def stripeFee(amount, add):
+	if add == True:
+		amount = (amount + 0.30) / (1 - 0.029)
+	else:
+		amount = (amount * (1 - 0.029) - 0.30)
+
+	return amount
+
+def calcTax(amount):
+	pst = 0.08 * amount
+	hst = 0.05 * amount
+
+	return pst + hst
+
+def pushInfo(to, title, body, data):
+	return PushMessage(to=to, title=title, body=body, data=data)
+
+def push(messages):
+	if type(messages) == type([]):
+		resp = PushClient().publish_multiple(messages)
+
+		for info in resp:
+			if info.status != "ok":
+				return { "status": "failed" }
+	else:
+		resp = PushClient().publish(messages)
+
+		if resp.status != "ok":
+			return { "status": "failed" }
+
+	return { "status": "ok" }
+
+@app.route("/welcome_locations", methods=["GET"])
 def welcome_locations():
-	datas = query("select * from location", True)
+	datas = Location.query.all()
 	locations = []
 
 	for data in datas:
-		locations.append({
-			"id": data["id"]
-		})
+		locations.append(data.id)
 
 	return { "msg": "welcome to locations of easygo", "locations": locations }
 
@@ -306,22 +389,35 @@ def setup_location():
 	city = request.form['city']
 	province = request.form['province']
 	postalcode = request.form['postalcode']
-	logo = request.files['logo']
+	logopath = request.files.get('logo', False)
+	logoexist = False if logopath == False else True
 	longitude = request.form['longitude']
 	latitude = request.form['latitude']
 	ownerid = request.form['ownerid']
 	time = request.form['time']
 	ipAddress = request.form['ipAddress']
+	permission = request.form['permission']
+	trialtime = int(request.form['trialtime'])
 
 	owner = Owner.query.filter_by(id=ownerid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if owner != None:
 		location = Location.query.filter_by(phonenumber=phonenumber).first()
 
 		if location == None:
-			if run_stripe == True:
+			logoname = ""
+			if logoexist == True:
+				logo = request.files['logo']
+				logoname = logo.filename
+
+				logo.save(os.path.join('static', logoname))
+			else:
+				if permission == "true":
+					errormsg = "Please take a good photo of your store"
+
+			if errormsg == "":
 				# create a connected account
 				connectedaccount = stripe.Account.create(
 					type="custom",
@@ -372,36 +468,30 @@ def setup_location():
 				)
 
 				accountid = connectedaccount.id
-			else:
-				accountid = 1
 
-			location = Location(
-				name, addressOne, addressTwo, 
-				city, province, postalcode, phonenumber, logo.filename,
-				longitude, latitude, '["' + str(ownerid) + '"]',
-				'', '', accountid, "unlist"
-			)
-			db.session.add(location)
-			db.session.commit()
+				locationInfo = json.dumps({"accountId": str(accountid), "listed": False, "cut": 100, "trialstart": trialtime })
+				location = Location(
+					name, addressOne, addressTwo, 
+					city, province, postalcode, phonenumber, logoname,
+					longitude, latitude, '["' + str(ownerid) + '"]',
+					'', '', locationInfo
+				)
+				db.session.add(location)
+				db.session.commit()
 
-			info = json.loads(owner.info)
-			info["locationId"] = str(location.id)
-			owner.info = json.dumps(info)
+				ownerInfo = json.loads(owner.info)
+				ownerInfo["locationId"] = str(location.id)
+				owner.info = json.dumps(ownerInfo)
 
-			db.session.commit()
+				db.session.commit()
 
-			logo.save(os.path.join('static', logo.filename))
-
-		if os.path.isfile('static/' + logo.filename):
-			return { "msg": "location setup", "id": location.id }
+				return { "msg": "location setup", "id": location.id }
 		else:
-			logo.save(os.path.join('static', logo.filename))
-
-			msg = "Logo cannot be saved"
+			errormsg = "Location phone number already taken"
 	else:
-		msg = "Owner doesn't exist"
+		errormsg = "Owner doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/update_location", methods=["POST"])
 def update_location():
@@ -412,68 +502,65 @@ def update_location():
 	city = request.form['city']
 	province = request.form['province']
 	postalcode = request.form['postalcode']
+	logopath = request.files.get('logo', False)
+	logoexist = False if logopath == False else True
 	longitude = request.form['longitude']
 	latitude = request.form['latitude']
 	ownerid = request.form['ownerid']
 	time = request.form['time']
 	ipAddress = request.form['ipAddress']
-
-	filepath = request.files.get('logo', False)
-	fileexist = False if filepath == False else True
+	permission = request.form['permission']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if owner != None:
-		info = json.loads(owner.info)
-		locationid = info["locationId"]
+		ownerInfo = json.loads(owner.info)
+		locationid = ownerInfo["locationId"]
 
 		location = Location.query.filter_by(id=locationid).first()
 
 		if location != None:
-			accountid = location.accountId
+			locationInfo = json.loads(location.info)
+			accountid = locationInfo["accountId"]
 
-			if fileexist == True:
-				logo = request.files['logo']
+			person = stripe.Account.list_persons(accountid)
+			personid = person.data[0].id
 
-			if run_stripe == True:
-				person = stripe.Account.list_persons(accountid)
-				personid = person.data[0].id
-
-				stripe.Account.modify(
-					accountid,
-					business_profile={
-						"name": name
-					},
-					company={
-						"address": {
-							"city": city,
-							"line1": addressOne,
-							"line2": addressTwo,
-							"postal_code": postalcode,
-							"state": province 
-						},
-						"name": name,
-						"phone": phonenumber,
-					},
-					tos_acceptance={
-						"date": time,
-						"ip": str(ipAddress)
-					}
-				)
-				stripe.Account.modify_person(
-					accountid,
-					personid,
-					first_name=name,
-					address={
+			stripe.Account.modify(
+				accountid,
+				business_profile={
+					"name": name
+				},
+				company={
+					"address": {
 						"city": city,
 						"line1": addressOne,
 						"line2": addressTwo,
 						"postal_code": postalcode,
 						"state": province 
-					}
-				)
+					},
+					"name": name,
+					"phone": phonenumber,
+				},
+				tos_acceptance={
+					"date": time,
+					"ip": str(ipAddress)
+				}
+			)
+			stripe.Account.modify_person(
+				accountid,
+				personid,
+				first_name=name,
+				address={
+					"city": city,
+					"line1": addressOne,
+					"line2": addressTwo,
+					"postal_code": postalcode,
+					"state": province 
+				}
+			)
 
 			location.name = name
 			location.addressOne = addressOne
@@ -485,37 +572,37 @@ def update_location():
 			location.longitude = longitude
 			location.latitude = latitude
 
-			if fileexist == True:
+			if logoexist == True:
 				logo = request.files['logo']
+				newlogoname = logo.filename
 				oldlogo = location.logo
 
-				if logo.filename != oldlogo:
-					location.logo = logo.filename
-
+				if newlogoname != oldlogo:
 					if oldlogo != "" and os.path.exists("static/" + oldlogo):
 						os.remove("static/" + oldlogo)
 
-					logo.save(os.path.join('static', logo.filename))
+					logo.save(os.path.join('static', newlogoname))
+					location.logo = newlogoname
 
 			db.session.commit()
 
 			return { "msg": "location updated", "id": location.id }
 		else:
-			msg = "Location doesn't exist"
+			errormsg = "Location doesn't exist"
 	else:
-		msg = "Owner doesn't exist"
+		errormsg = "Owner doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/fetch_num_requests/<id>")
 def fetch_num_requests(id):
-	numRequests = query("select count(*) as num from schedule where locationId = " + str(id) + " and (status = 'requested' or status = 'change')", True)[0]["num"]
+	numRequests = query("select count(*) as num from schedule where locationId = " + str(id) + " and (status = 'requested' or status = 'change' or status = 'accepted')", True)[0]["num"]
 
 	return { "numRequests": numRequests }
 
 @app.route("/fetch_num_appointments/<id>")
 def fetch_num_appointments(id):
-	numAppointments = query("select count(*) as num from schedule where locationId = " + str(id) + " and status = 'accepted'", True)[0]["num"]
+	numAppointments = query("select count(*) as num from schedule where locationId = " + str(id) + " and status = 'confirmed'", True)[0]["num"]
 
 	return { "numAppointments": numAppointments }
 
@@ -532,7 +619,7 @@ def fetch_num_cartorderers(id):
 
 @app.route("/fetch_num_reservations/<id>")
 def fetch_num_reservations(id):
-	numReservations = Schedule.query.filter_by(locationId=id, status='accepted').count()
+	numReservations = Schedule.query.filter_by(locationId=id, status='confirmed').count()
 
 	return { "numReservations": numReservations }
 
@@ -545,7 +632,7 @@ def set_type():
 	type = content['type']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if owner != None:
@@ -558,11 +645,11 @@ def set_type():
 
 			return { "msg": "" }
 		else:
-			msg = "Location doesn't exist"
+			errormsg = "Location doesn't exist"
 	else:
-		msg = "Owner doesn't exist"
+		errormsg = "Owner doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/set_hours", methods=["POST"])
 def set_hours():
@@ -584,11 +671,11 @@ def set_hours():
 
 			return { "msg": "hours updated" }
 		else:
-			msg = "Location doesn't exist"
+			errormsg = "Location doesn't exist"
 	else:
-		msg = "Owner doesn't exist"
+		errormsg = "Owner doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_locations", methods=["POST"])
 def get_locations():
@@ -598,7 +685,7 @@ def get_locations():
 	latitude = content['latitude']
 	name = content['locationName']
 	day = content['day']
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if longitude != None and latitude != None:
@@ -616,8 +703,8 @@ def get_locations():
 		point1 = (longitude, latitude)
 
 		# get restaurants
-		sql = "select * from location where type = 'restaurant' and state = 'listed' " + orderQuery + " limit 0, 10"
-		maxsql = "select count(*) as num from location where type = 'restaurant' and state = 'listed' " + orderQuery
+		sql = "select * from location where type = 'restaurant' and info like '%\"listed\": true%' " + orderQuery + " limit 0, 10"
+		maxsql = "select count(*) as num from location where type = 'restaurant' and info like '%\"listed\": true%' " + orderQuery
 		datas = query(sql, True)
 		maxdatas = query(maxsql, True)[0]["num"]
 		for data in datas:
@@ -649,8 +736,8 @@ def get_locations():
 		locations[0]["index"] += len(datas)
 
 		# get hair salons
-		sql = "select * from location where type = 'hair' and state = 'listed' " + orderQuery + " limit 0, 10"
-		maxsql = "select count(*) as num from location where type = 'hair' and state = 'listed' " + orderQuery
+		sql = "select * from location where type = 'hair' and info like '%\"listed\": true%' " + orderQuery + " limit 0, 10"
+		maxsql = "select count(*) as num from location where type = 'hair' and info like '%\"listed\": true%' " + orderQuery
 		datas = query(sql, True)
 		maxdatas = query(maxsql, True)[0]["num"]
 		for data in datas:
@@ -682,8 +769,8 @@ def get_locations():
 		locations[1]["index"] += len(datas)
 
 		# get nail salons
-		sql = "select * from location where type = 'nail' and state = 'listed' " + orderQuery + " limit 0, 10"
-		maxsql = "select count(*) as num from location where type = 'nail' and state = 'listed' " + orderQuery
+		sql = "select * from location where type = 'nail' and info like '%\"listed\": true%' " + orderQuery + " limit 0, 10"
+		maxsql = "select count(*) as num from location where type = 'nail' and info like '%\"listed\": true%' " + orderQuery
 		datas = query(sql, True)
 		maxdatas = query(maxsql, True)[0]["num"]
 		for data in datas:
@@ -716,10 +803,10 @@ def get_locations():
 		
 		return { "locations": locations }
 	else:
-		msg = "Coordinates is unknown"
+		errormsg = "Coordinates is unknown"
 		status = "unknowncoords"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_more_locations", methods=["POST"])
 def get_more_locations():
@@ -739,8 +826,8 @@ def get_more_locations():
 	lat1 = latitude
 
 	# get locations
-	sql = "select * from location where type = '" + type + "' and state = 'listed' " + orderQuery + " limit " + index + ", 10"
-	maxsql = "select count(*) as num from location where type = '" + type + "' and state = 'listed' " + orderQuery
+	sql = "select * from location where type = '" + type + "' and info like '%\"listed\": true%' " + orderQuery + " limit " + index + ", 10"
+	maxsql = "select count(*) as num from location where type = '" + type + "' and info like '%\"listed\": true%' " + orderQuery
 	datas = query(sql, True)
 	maxdatas = query(maxsql, True)[0]["num"]
 	for data in datas:
@@ -814,13 +901,13 @@ def get_location_profile():
 			distance = None
 
 		hours = [
-			{ "key": "0", "header": "Sunday", "opentime": { "hour": "00", "minute": "00", "period": "AM" }, "closetime": { "hour": "00", "minute": "00", "period": "AM" }},
-			{ "key": "1", "header": "Monday", "opentime": { "hour": "00", "minute": "00", "period": "AM" }, "closetime": { "hour": "00", "minute": "00", "period": "AM" }},
-			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "00", "minute": "00", "period": "AM" }, "closetime": { "hour": "00", "minute": "00", "period": "AM" }},
-			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "00", "minute": "00", "period": "AM" }, "closetime": { "hour": "00", "minute": "00", "period": "AM" }},
-			{ "key": "4", "header": "Thursday", "opentime": { "hour": "00", "minute": "00", "period": "AM" }, "closetime": { "hour": "00", "minute": "00", "period": "AM" }},
-			{ "key": "5", "header": "Friday", "opentime": { "hour": "00", "minute": "00", "period": "AM" }, "closetime": { "hour": "00", "minute": "00", "period": "AM" }},
-			{ "key": "6", "header": "Saturday", "opentime": { "hour": "00", "minute": "00", "period": "AM" }, "closetime": { "hour": "00", "minute": "00", "period": "AM" }}
+			{ "key": "0", "header": "Sunday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }},
+			{ "key": "1", "header": "Monday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }},
+			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }},
+			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }},
+			{ "key": "4", "header": "Thursday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }},
+			{ "key": "5", "header": "Friday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }},
+			{ "key": "6", "header": "Saturday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }}
 		]
 
 		if location.hours != '':
@@ -828,13 +915,38 @@ def get_location_profile():
 			day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
 			for k, info in enumerate(hours):
-				info["opentime"]["hour"] = data[day[k][:3]]["opentime"]["hour"]
-				info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
-				info["opentime"]["period"] = data[day[k][:3]]["opentime"]["period"]
+				openhour = int(data[day[k][:3]]["opentime"]["hour"])
+				closehour = int(data[day[k][:3]]["closetime"]["hour"])
 
-				info["closetime"]["hour"] = data[day[k][:3]]["closetime"]["hour"]
+				openperiod = "PM" if openhour > 12 else "AM"
+				openhour = int(openhour)
+
+				if openhour == 0:
+					openhour = "12"
+				elif openhour < 10:
+					openhour = "0" + str(openhour)
+				elif openhour > 12:
+					openhour -= 12
+					openhour = str(openhour)
+
+				closeperiod = "PM" if closehour > 12 else "AM"
+				closehour = int(closehour)
+
+				if closehour == 0:
+					closehour = "12"
+				elif closehour < 10:
+					closehour = "0" + str(closehour)
+				elif closehour > 12:
+					closehour -= 12
+					closehour = str(closehour)
+
+				info["opentime"]["hour"] = openhour
+				info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
+				info["opentime"]["period"] = openperiod
+
+				info["closetime"]["hour"] = closehour
 				info["closetime"]["minute"] = data[day[k][:3]]["closetime"]["minute"]
-				info["closetime"]["period"] = data[day[k][:3]]["closetime"]["period"]
+				info["closetime"]["period"] = closeperiod
 
 				hours[k] = info
 
@@ -856,9 +968,9 @@ def get_location_profile():
 
 		return { "locationInfo": info, "msg": msg }
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/make_reservation", methods=["POST"])
 def make_reservation():
@@ -873,89 +985,111 @@ def make_reservation():
 	note = content['note']
 
 	user = User.query.filter_by(id=userid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
 		info = json.loads(user.info)
 		customerid = info['customerId']
 
-		if run_stripe == True:
-			customer = stripe.Customer.list_sources(
-				customerid,
-				object="card",
-				limit=1
-			)
-			cards = len(customer.data)
-		else:
-			cards = 1
+		customer = stripe.Customer.list_sources(
+			customerid,
+			object="card",
+			limit=1
+		)
+		cards = len(customer.data)
 
 		if cards > 0:
 			location = Location.query.filter_by(id=locationid).first()
 
 			if location != None:
-				if scheduleid != None: # existing schedule
-					schedule = Schedule.query.filter_by(userId=userid, locationId=locationid).first()
+				info = json.loads(location.info)
 
-					if schedule != None:
-						if schedule.status == 'accepted': # reschedule
+				receivingUsers = []
+				receivingLocations = []
+
+				owners = query("select id from owner where info like '%\"locationId\": \"" + str(locationid) + "\"%'", True)
+				
+				for owner in owners:
+					receivingLocations.append("owner" + str(owner["id"]))
+
+				if scheduleid != None: # existing schedule
+					sql = "select * from schedule where locationId = " + str(locationid)
+					sql += " and (userId = " + str(userid) + " or customers like '%\"userid\": \"" + str(userid) + "\"%')"
+					data = query(sql, True)
+
+					if data != None:
+						schedule = data[0]
+
+						customers = json.loads(schedule["customers"])
+
+						for customer in customers:
+							receivingUsers.append("user" + str(customer["userid"]))
+
+						if schedule["status"] == 'accepted': # reschedule
 							if oldtime == 0: # get old time
 								return {
 									"msg": "reservation already made",
 									"status": "existed",
-									"oldtime": int(schedule.time),
-									"note": schedule.note
+									"oldtime": int(schedule["time"]),
+									"note": schedule["note"]
 								}
 							else:
-								schedule.status = 'change'
-								schedule.time = time
-								schedule.note = note
+								sql = "update schedule set status = 'change', time = '" + str(time) + "', "
+								sql += "note = '" + note + "', userId = " + str(userid) + " where id = " + str(schedule["id"])
 
-								db.session.commit()
+								query(sql, False)
 
-								return { "msg": "reservation updated", "status": "updated" }
+								return { "msg": "reservation updated", "status": "updated", "receivingUsers": receivingUsers, "receivingLocations": receivingLocations }
 						else:
-							schedule.status = 'requested'
-							schedule.time = time
-							schedule.note = note
+							schedule["status"] = 'requested'
+							schedule["time"] = time
+							schedule["note"] = note
 
-							db.session.commit()
+							sql = "update schedule set status = 'requested', time = '" + str(time) + "', "
+							sql += "note = '" + note + "', userId = " + str(userid) + " where id = " + str(schedule["id"])
 
-							return { "msg": "reservation re-requested", "status": "requested" }
+							query(sql, False)
+
+							return { "msg": "reservation re-requested", "status": "requested", "receivingUsers": receivingUsers, "receivingLocations": receivingLocations }
 					else:
-						msg = "Schedule doesn't exist"
+						errormsg = "Schedule doesn't exist"
 				else: # new schedule
+					for customer in customers:
+						receivingUsers.append("user" + str(customer["userid"]))
+
 					charges = { str(str(userid)): {
 						"charge": 0.00,
-						"paymentsent": False,
+						"allowpayment": False,
 						"paid": False
 					}}
 
 					for customer in customers:
 						charges[customer["userid"]] = {
 							"charge": 0.00,
-							"paymentsent": False,
+							"allowpayment": False,
 							"paid": False
 						}
+					customers.append({ "status": "waiting", "userid": str(userid) })
 
 					orders = json.dumps({"groups": [], "charges": charges })
-					info = json.dumps({"donedining": False, "dinersseated": False})
+					info = json.dumps({"donedining": False, "dinersseated": False, "cut": int(info["cut"]) })
 
-					schedule = Schedule(userid, locationid, "", "", time, "requested", '', '', location.type, json.dumps(customers), note, orders, '', json.dumps(info))
+					schedule = Schedule(userid, locationid, "", "", time, "requested", '', '', location.type, json.dumps(customers), note, orders, '', info)
 
 					db.session.add(schedule)
 					db.session.commit()
 
-					return { "msg": "reservation added", "status": "new" }
+					return { "msg": "reservation added", "status": "new", "receivingUsers": receivingUsers, "receivingLocations": receivingLocations }
 			else:
-				msg = "Location doesn't exist"
+				errormsg = "Location doesn't exist"
 		else:
-			msg = "A payment method is required"
+			errormsg = "A payment method is required"
 			status = "cardrequired"
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_info", methods=["POST"])
 def get_info():
@@ -967,6 +1101,7 @@ def get_info():
 	location = Location.query.filter_by(id=locationid).first()
 
 	if location != None:
+		locationInfo = json.loads(location.info)
 		addressOne = location.addressOne
 		addressTwo = location.addressTwo
 		city = location.city
@@ -977,7 +1112,7 @@ def get_info():
 		storeAddress = addressOne + " " + addressTwo + ", " + city + ", " + province + " " + postalcode
 		storeLogo = location.logo
 		locationType = 'salon' if location.type == 'nail' or location.type == 'hair' else 'restaurant'
-		locationState = location.state
+		locationListed = locationInfo["listed"]
 
 		num_menus = Menu.query.filter_by(locationId=locationid, parentMenuId=menuid).count()
 		num_services = Service.query.filter_by(locationId=locationid, menuId=menuid).count()
@@ -992,55 +1127,81 @@ def get_info():
 			menuInfo = menu.info
 
 		if num_menus > 0:
-			return { "msg": "menus", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType, "locationState": locationState }
+			return { "msg": "menus", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
 		elif num_services > 0:
-			return { "msg": "services", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType, "locationState": locationState }
+			return { "msg": "services", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
 		elif num_products > 0:
-			return { "msg": "products", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType, "locationState": locationState }
+			return { "msg": "products", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
 		else:
-			return { "msg": "", "menuName": menuName, "menuInfo": menuInfo, "storeName": storeName, "storeAddress": storeAddress, "storeLogo": storeLogo, "locationType": locationType, "locationState": locationState }
+			return { "msg": "", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/change_location_state/<id>")
 def change_location_state(id):
 	location = Location.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if location != None:
-		state = location.state
+		locationInfo = json.loads(location.info)
+		locationListed = locationInfo["listed"]
 		numproducts = Product.query.filter_by(locationId=id).count()
 		numservices = Service.query.filter_by(locationId=id).count()
 
-		accountid = location.accountId
+		accountid = locationInfo["accountId"]
 
-		if run_stripe == True:
-			account = stripe.Account.list_external_accounts(accountid, object="bank_account", limit=1)
-			bankaccounts = len(account.data)
-		else:
-			bankaccounts = 1
+		account = stripe.Account.list_external_accounts(accountid, object="bank_account", limit=1)
+		bankaccounts = len(account.data)
 
-		if (state == "unlist" and ((numproducts > 0 or numservices > 0) and bankaccounts == 1)) or (state == "listed"):
-			location.state = "listed" if state == "unlist" else "unlist"
+		if (locationListed == False and ((numproducts > 0 or numservices > 0) and bankaccounts == 1)) or (locationListed == True):
+			locationInfo["listed"] = False if locationInfo["listed"] == True else True
+			location.info = json.dumps(locationInfo)
 
 			db.session.commit()
 
-			return { "msg": "Change location state", "state": location.state }
+			return { "msg": "Change location state", "listed": locationInfo["listed"] }
 		else:
-			if state == "unlist":
+			if locationListed == False:
 				if numproducts == 0 and numservices == 0:
-					msg = "Menu setup required"
+					errormsg = "Menu setup required"
 					status = "menusetuprequired"
 				else:
-					msg = "Bank account required"
+					errormsg = "Bank account required"
 					status = "bankaccountrequired"
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/set_location_public/<id>")
+def set_location_public(id):
+	owner = Owner.query.filter_by(id=id).first()
+
+	if owner != None:
+		info = json.loads(owner.info)
+
+		locationId = info["locationId"]
+		location = Location.query.filter_by(id=locationId).first()
+
+		if location != None:
+			info = json.loads(location.info)
+
+			info["listed"] = True
+
+			location.info = json.dumps(info)
+
+			db.session.commit()
+
+			return { "msg": "Location listed publicly" }
+		else:
+			errormsg = "Location doesn't exist"
+	else:
+		errormsg = "Owner doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_hours", methods=["POST"])
 def get_hours():
@@ -1064,14 +1225,14 @@ def get_hours():
 
 		return { "openTime": openTime, "closeTime": closeTime, "scheduled": times }
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_workers/<id>")
 def get_workers(id):
 	schedule = Schedule.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -1079,25 +1240,80 @@ def get_workers(id):
 		datas = query("select * from owner where info like '%\"locationId\": \"" + str(locationId) + "\"%'", True)
 		owners = []
 		row = []
+		key = 0
 
 		for data in datas:
 			row.append({
-				"key": "worker-" + str(data['id']),
+				"key": "worker-" + str(key),
 				"id": data['id'],
 				"username": data['username'],
 				"profile": data["profile"],
 				"selected": False
 			})
+			key += 1
 
-			if len(row) >= 4:
+			if len(row) >= 3:
 				owners.append({ "key": str(len(owners)), "row": row })
 				row = []
 
-		if len(row) > 0:
+		if len(row) > 0 and len(row) < 3:
+			leftover = 3 - len(row)
+
+			for k in range(leftover):
+				row.append({ "key": "worker-" + str(key) })
+				key += 1
+
 			owners.append({ "key": str(len(owners)), "row": row })
 
 		return { "msg": "get workers", "owners": owners }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/search_workers", methods=["POST"])
+def search_workers():
+	content = request.get_json()
+
+	scheduleid = content['scheduleid']
+	username = content['username']
+
+	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	errormsg = ""
+	status = ""
+
+	if schedule != None:
+		locationId = str(schedule.locationId)
+		datas = query("select * from owner where username like '%" + username + "%' and info like '%\"locationId\": \"" + str(locationId) + "\"%'", True)
+		owners = []
+		row = []
+		key = 0
+
+		for data in datas:
+			row.append({
+				"key": "worker-" + str(key),
+				"id": data['id'],
+				"username": data['username'],
+				"profile": data["profile"],
+				"selected": False
+			})
+			key += 1
+
+			if len(row) == 3:
+				owners.append({ "key": str(len(owners)), "row": row })
+				row = []
+
+		if len(row) > 0 and len(row) < 3:
+			leftover = 3 - len(row)
+
+			for k in range(leftover):
+				row.append({ "key": "worker-" + str(key) })
+				key += 1
+
+			owners.append({ "key": str(len(owners)), "row": row })
+
+		return { "msg": "get searched workers", "owners": owners }
+	else:
+		errormsg = "Schedule doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400

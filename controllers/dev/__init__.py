@@ -1,18 +1,30 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, os, json, stripe
-from werkzeug.security import generate_password_hash, check_password_hash
-from random import randint
+import mysql.connector, pymysql.cursors, stripe, json, os
 from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
+from werkzeug.security import generate_password_hash, check_password_hash
+from random import randint
 
 local = True
+test_stripe = True
 
 host = 'localhost'
 user = 'geottuse'
 password = 'G3ottu53?'
 database = 'easygo'
+server_url = "0.0.0.0"
+local_url = "192.168.0.172"
+apphost = server_url if local == False else local_url
+stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz" if test_stripe == True else "sk_live_AeoXx4kxjfETP2fTR7IkdTYC"
+test_sms = True
+fee = 0.98
+
+account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
+auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
+mss = "MG376dcb41368d7deca0bda395f36bf2a7"
+client = Client(account_sid, auth_token)
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://' + user + ':' + password + '@' + host + '/' + database
@@ -23,21 +35,9 @@ app.config['MYSQL_PASSWORD'] = password
 app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
-mydb = mysql.connector.connect(
-	host=host,
-	user=user,
-	password=password,
-	database=database
-)
+mydb = mysql.connector.connect(host=host, user=user, password=password, database=database)
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
-stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
-
-account_sid = "AC8c3cd78674e391f0834a086891304e52"
-auth_token = "b7f9e3b46ac445302a4a0710e95f44c1"
-mss = "MG376dcb41368d7deca0bda395f36bf2a7"
-client = Client(account_sid, auth_token)
-fee = 0.95
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -45,7 +45,7 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	info = db.Column(db.String(120))
+	info = db.Column(db.String(155))
 
 	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
@@ -90,13 +90,12 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	accountId = db.Column(db.String(25))
-	state = db.Column(db.String(6))
+	info = db.Column(db.String(100))
 
 	def __init__(
 		self, 
 		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
-		longitude, latitude, owners, type, hours, accountId, state
+		longitude, latitude, owners, type, hours, info
 	):
 		self.name = name
 		self.addressOne = addressOne
@@ -111,8 +110,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
-		self.accountId = accountId
-		self.state = state
+		self.info = info
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -172,7 +170,7 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
-	info = db.Column(db.String(80))
+	info = db.Column(db.String(75))
 
 	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
@@ -259,7 +257,7 @@ class Transaction(db.Model):
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
-	sizes = db.Column(db.String(150))
+	sizes = db.Column(db.String(200))
 	time = db.Column(db.String(15))
 
 	def __init__(self, groupId, locationId, productId, serviceId, adder, callfor, options, others, sizes, time):
@@ -293,7 +291,53 @@ def query(sql, output):
 
 		return results
 
-def stripe_fee(amount, add):
+def trialInfo(id, time): # days before over | cardrequired | trialover
+	user = User.query.filter_by(id=id).first()
+	info = json.loads(user.info)
+
+	customerid = info['customerId']
+
+	stripeCustomer = stripe.Customer.list_sources(
+		customerid,
+		object="card",
+		limit=1
+	)
+	cards = len(stripeCustomer.data)
+	status = ""
+	days = 0
+
+	if "trialstart" in info:
+		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
+			if cards == 0:
+				del info["trialstart"]
+
+				user.info = json.dumps(info)
+
+				db.session.commit()
+
+				status = "cardrequired"
+			else:
+				status = "trialover"
+		else:
+			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
+			status = "notover"
+	else:
+		if cards > 0:
+			status = "cardrequired"
+		else:
+			status = "trialover"
+
+	return { "days": days, "status": status }
+
+def getRanStr():
+	strid = ""
+
+	for k in range(6):
+		strid += str(randint(0, 9))
+
+	return strid
+
+def stripeFee(amount, add):
 	if add == True:
 		amount = (amount + 0.30) / (1 - 0.029)
 	else:
@@ -301,7 +345,31 @@ def stripe_fee(amount, add):
 
 	return amount
 
-@app.route("/")
+def calcTax(amount):
+	pst = 0.08 * amount
+	hst = 0.05 * amount
+
+	return pst + hst
+
+def pushInfo(to, title, body, data):
+	return PushMessage(to=to, title=title, body=body, data=data)
+
+def push(messages):
+	if type(messages) == type([]):
+		resp = PushClient().publish_multiple(messages)
+
+		for info in resp:
+			if info.status != "ok":
+				return { "status": "failed" }
+	else:
+		resp = PushClient().publish(messages)
+
+		if resp.status != "ok":
+			return { "status": "failed" }
+
+	return { "status": "ok" }
+
+@app.route("/welcome_dev")
 def welcome_dev():
 	num = str(randint(0, 9))
 
@@ -316,7 +384,10 @@ def reset():
 		delete = True
 		info = json.loads(user['info'])
 
-		stripe.Customer.delete(info['customerId'])
+		try:
+			stripe.Customer.delete(info['customerId'])
+		except:
+			print("no id exist")
 
 		query("delete from user where id = " + str(user['id']), False)
 
@@ -337,9 +408,14 @@ def reset():
 	for location in locations:
 		delete = True
 		logo = location['logo']
-		accountid = location['accountId']
 
-		stripe.Account.delete(accountid)
+		locationInfo = json.loads(location['info'])
+		accountid = locationInfo['accountId']
+
+		try:
+			stripe.Account.delete(accountid)
+		except:
+			print("no id exist")
 
 		if logo != "" and os.path.exists("static/" + logo):
 			os.remove("static/" + logo)
@@ -428,103 +504,16 @@ def reset():
 			if file != "" and os.path.exists("static/" + file):
 				os.remove("static/" + file)
 
-	'''accounts = stripe.Account.list()
+	accounts = stripe.Account.list().data
+	customers = stripe.Customer.list().data
 
-	for account in accounts.data:
+	for account in accounts:
 		stripe.Account.delete(account.id)
 
-	customers = stripe.Customer.list()
-
-	for customer in customers.data:
-		stripe.Customer.delete(customer.id)'''
+	for customer in customers:
+		stripe.Customer.delete(customer.id)
 
 	return { "reset": True }
-
-@app.route("/charge")
-def charge():
-	content = request.get_json()
-
-	userid = content['userid']
-	locationid = content['locationid']
-
-	user = User.query.filter_by(id=userid).first()
-	location = Location.query.filter_by(id=locationid).first()
-
-	if user != None and location != None:
-		info = json.loads(user.info)
-		customerid = info["customerId"]
-		amount = 100
-
-		data = stripe.PaymentMethod.list(
-			customer=customerid,
-			type="card"
-		)
-		card = data.data[0].id
-		accountid = location.accountId
-		price = 34.99
-
-		chargeAmount = round(stripe_fee(price, True), 2)
-		transferAmount = round(price * fee, 2)
-		info = {}
-		ids = {}
-
-		charge = stripe.Charge.create(
-			amount=int(chargeAmount * 100),
-			currency='cad',
-			customer=customerid,
-			transfer_group=user.username
-		)
-		info["chargeAmount"] = charge.amount / 100
-		ids["chargeid"] = charge.id
-		
-		transfer = stripe.Transfer.create(
-			amount=int(transferAmount * 100),
-			currency="cad",
-			destination=accountid,
-			transfer_group=user.username
-		)
-		ids["transferid"] = transfer.id
-		info["transferAmount"] = transfer.amount / 100
-
-		return { "info": info, "ids": ids }
-	else:
-		msg = "User doesn't exist"
-
-	return { "errormsg": msg, "status": status }, 400
-
-@app.route("/refund", methods=["POST"])
-def refund():
-	content = request.get_json()
-
-	chargeid = content['chargeid']
-	transferid = content['transferid']
-	info = {}
-
-	charge = stripe.Charge.retrieve(chargeid)
-	transfer = stripe.Transfer.retrieve(transferid)
-
-	reverseTransferAmount = transfer.amount
-	refundAmount = transfer.amount
-
-	reverseTransfer = stripe.Transfer.create_reversal(
-		transfer.id,
-		amount=reverseTransferAmount
-	)
-	info["reverseTransfer"] = reverseTransferAmount
-
-	refund = stripe.Refund.create(
-		charge=chargeid,
-		amount=int(stripe_fee(reverseTransferAmount, True))
-	)
-
-	info = {
-		"ids": {
-			"transferid": None,
-			"chargeid": None
-		}
-	}
-
-	return { "info": info }
 
 @app.route("/payout/<id>")
 def payout(id):
@@ -538,7 +527,8 @@ def payout(id):
 		amount = 2.00
 
 		if balance > amount:
-			accountid = location.accountId
+			locationInfo = json.loads(location.info)
+			accountid = locationInfo["accountId"]
 
 			stripe.Transfer.create(
 				amount=int(amount * 100),
@@ -554,24 +544,142 @@ def payout(id):
 
 	return { "errormsg": msg, "status": status }, 400
 
-@app.route("/push/<id>")
-def push(id):
-	user = User.query.filter_by(id=id).first()
+@app.route("/charge")
+def charge():
+	def stripeFee(amount, add):
+		return (
+		    (amount + 0.30) / (1 - 0.029) 
+		    if add == True else 
+		    (amount * (1 - 0.029) - 0.30)
+		)
+	    
+	def tax(amount):
+	    pst = 0.08
+	    gst = 0.05
+	    
+	    pst = amount * pst
+	    gst = amount * gst
+	    
+	    tax = (pst + gst)
+	    
+	    return tax
+	    
+	amount = 80.99
+
+	appcut = 0.02
+	storecut = 0.98
+	appbalance = 0
+	connectedbalance = 0
+
+	test = True
+	accept = True
+	mobilepay = False
+
+	if test == False:
+	    if accept == True:
+	        taxamount = tax(0.10)
+	        
+	        appbalance = stripeFee(0.10)
+	        
+	    if mobilepay == True: # refund $0.10
+	        taxamount = tax(stripeFee(amount, True))
+	        
+	        connectedbalance = round(amount * storecut, 2)
+	        appbalance = round(amount * appcut, 2)
+	else:
+	    taxamount = tax(stripeFee(amount, True))
+	    connectedbalance = stripeFee(amount, True) + taxamount
+	    
+	    print("with fee: $" + str(connectedbalance))
+	    
+	    taxamount = tax(amount)
+	    connectedbalance = amount + taxamount
+	    
+	    print("without fee: $" + str(connectedbalance))
+	    
+	    
+	print("app balance: $" + str(round(appbalance, 2)))
+	print("salon balance: $" + str(round(connectedbalance, 2)))
+
+	return { "error": False }
+
+@app.route("/return_all")
+def return_all():
+	data = stripe.Charge.list().data
+	charges = []
+
+	for info in data:
+		try:
+			stripe.Refund.create(charge=info.id)
+		except:
+			charges.append(info.id)
+
+	data = stripe.Transfer.list().data
+	transfers = []
+
+	for info in data:
+		try:
+			stripe.Transfer.retrieve_reversal(
+				info.id,
+				amount=info.amount
+			)
+		except:
+			transfers.append(info.id)
+
+	return { "charges": charges, "transfers": transfers }
+
+@app.route("/test_deposit", methods=["POST"])
+def test_deposit():
+	content = request.get_json()
+
+	back = content['back']
+	time = int(content['time'])
+
+	users = User.query.all()
+
+	for user in users:
+		info = json.loads(user.info)
+
+		if back == True:
+			info["trialstart"] -= 1538104484348
+		else:
+			info["trialstart"] = time
+
+		user.info = json.dumps(info)
+
+	db.session.commit()
+
+	return { "error": False }
+
+@app.route("/push", methods=["POST"])
+def push():
+	content = request.get_json()
+
+	type = content['type']
+
+	if type == 'user':
+		userid = content['userid']
+		user = User.query.filter_by(id=userid).first()
+	else:
+		ownerid = content['ownerid']
+		user = Owner.query.filter_by(id=ownerid).first()
+
+	message = content['message']
+	data = content['data']
+
 	msg = ""
 	status = ""
 
 	if user != None:
 		info = json.loads(user.info)
-		pushtoken = info["pushtoken"]
+		pushtoken = info["pushToken"]
 
 		response = PushClient().publish(
 			PushMessage(
-				to=pushtoken,
-				body="Push works for " + user.username,
-				data={
-					"username": user.username,
-					"for": "username"
-				}
+				to="ExponentPushToken[aO_8AtDRjS7gpfSzMyh9DS]",
+				title="this is the title",
+				body=message,
+				data=data
 			)
 		)
 

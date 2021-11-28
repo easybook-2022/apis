@@ -1,16 +1,30 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, os, json, stripe
-from random import randint
+import mysql.connector, pymysql.cursors, stripe, json, os
+from twilio.rest import Client
+from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
+from random import randint
 
 local = True
+test_stripe = True
 
 host = 'localhost'
 user = 'geottuse'
 password = 'G3ottu53?'
 database = 'easygo'
+server_url = "0.0.0.0"
+local_url = "192.168.0.172"
+apphost = server_url if local == False else local_url
+stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz" if test_stripe == True else "sk_live_AeoXx4kxjfETP2fTR7IkdTYC"
+test_sms = True
+fee = 0.98
+
+account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
+auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
+mss = "MG376dcb41368d7deca0bda395f36bf2a7"
+client = Client(account_sid, auth_token)
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://' + user + ':' + password + '@' + host + '/' + database
@@ -21,16 +35,9 @@ app.config['MYSQL_PASSWORD'] = password
 app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
-mydb = mysql.connector.connect(
-	host=host,
-	user=user,
-	password=password,
-	database=database
-)
+mydb = mysql.connector.connect(host=host, user=user, password=password, database=database)
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
-stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
-run_stripe = True
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -38,7 +45,7 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	info = db.Column(db.String(120))
+	info = db.Column(db.String(155))
 
 	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
@@ -83,12 +90,12 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	accountId = db.Column(db.String(25))
+	info = db.Column(db.String(100))
 
 	def __init__(
 		self, 
 		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
-		longitude, latitude, owners, type, hours, accountId
+		longitude, latitude, owners, type, hours, info
 	):
 		self.name = name
 		self.addressOne = addressOne
@@ -103,7 +110,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
-		self.accountId = accountId
+		self.info = info
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -163,7 +170,7 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
-	info = db.Column(db.String(80))
+	info = db.Column(db.String(75))
 
 	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
@@ -250,7 +257,7 @@ class Transaction(db.Model):
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
-	sizes = db.Column(db.String(150))
+	sizes = db.Column(db.String(200))
 	time = db.Column(db.String(15))
 
 	def __init__(self, groupId, locationId, productId, serviceId, adder, callfor, options, others, sizes, time):
@@ -284,13 +291,97 @@ def query(sql, output):
 
 		return results
 
-@app.route("/", methods=["GET"])
-def welcome_users():
-	return { "msg": "welcome to carts of easygo" }
+def trialInfo(id, time): # days before over | cardrequired | trialover
+	user = User.query.filter_by(id=id).first()
+	info = json.loads(user.info)
+
+	customerid = info['customerId']
+
+	stripeCustomer = stripe.Customer.list_sources(
+		customerid,
+		object="card",
+		limit=1
+	)
+	cards = len(stripeCustomer.data)
+	status = ""
+	days = 0
+
+	if "trialstart" in info:
+		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
+			if cards == 0:
+				del info["trialstart"]
+
+				user.info = json.dumps(info)
+
+				db.session.commit()
+
+				status = "cardrequired"
+			else:
+				status = "trialover"
+		else:
+			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
+			status = "notover"
+	else:
+		if cards > 0:
+			status = "cardrequired"
+		else:
+			status = "trialover"
+
+	return { "days": days, "status": status }
+
+def getRanStr():
+	strid = ""
+
+	for k in range(6):
+		strid += str(randint(0, 9))
+
+	return strid
+
+def stripeFee(amount, add):
+	if add == True:
+		amount = (amount + 0.30) / (1 - 0.029)
+	else:
+		amount = (amount * (1 - 0.029) - 0.30)
+
+	return amount
+
+def calcTax(amount):
+	pst = 0.08 * amount
+	hst = 0.05 * amount
+
+	return pst + hst
+
+def pushInfo(to, title, body, data):
+	return PushMessage(to=to, title=title, body=body, data=data)
+
+def push(messages):
+	if type(messages) == type([]):
+		resp = PushClient().publish_multiple(messages)
+
+		for info in resp:
+			if info.status != "ok":
+				return { "status": "failed" }
+	else:
+		resp = PushClient().publish(messages)
+
+		if resp.status != "ok":
+			return { "status": "failed" }
+
+	return { "status": "ok" }
+
+@app.route("/welcome_carts", methods=["GET"])
+def welcome_carts():
+	datas = Cart.query.all()
+	carts = []
+
+	for data in datas:
+		carts.append(data.id)
+
+	return { "msg": "welcome to carts of easygo", "carts": carts }
 
 @app.route("/get_num_items/<id>")
 def get_num_items(id):
-	datas = query("select * from cart where adder = " + str(id) + " and status = 'listed'", True)
+	datas = query("select * from cart where adder = " + str(id) + " and status = 'unlisted'", True)
 
 	return { "numCartItems": len(datas) }
 
@@ -301,7 +392,7 @@ def get_cart_items(id):
 	status = ""
 
 	if user != None:
-		datas = Cart.query.filter_by(adder=user.id, status="listed").all()
+		datas = Cart.query.filter_by(adder=user.id, status="unlisted").all()
 		items = []
 		active = True if len(datas) > 0 else False
 
@@ -344,6 +435,9 @@ def get_cart_items(id):
 				if info['status'] == 'waiting' or info['status'] == 'payment':
 					active = False
 
+			if data.status == 'checkout':
+				active = False
+
 			for k, option in enumerate(options):
 				option['key'] = "option-" + str(k)
 
@@ -376,7 +470,8 @@ def get_cart_items(id):
 				"sizes": sizes,
 				"quantity": quantity,
 				"cost": cost,
-				"orderers": friends
+				"orderers": friends,
+				"status": data.status
 			})
 
 		return { "cartItems": items, "activeCheckout": active }
@@ -407,15 +502,12 @@ def add_item_to_cart():
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
-		if run_stripe == True:
-			customer = stripe.Customer.list_sources(
-				customerid,
-				object="card",
-				limit=1
-			)
-			cards = len(customer.data)
-		else:
-			cards = 1
+		customer = stripe.Customer.list_sources(
+			customerid,
+			object="card",
+			limit=1
+		)
+		cards = len(customer.data)
 
 		if cards > 0 or len(callfor) > 0:
 			if product.price == '':
@@ -436,7 +528,7 @@ def add_item_to_cart():
 		others = json.dumps(others)
 		sizes = json.dumps(sizes)
 
-		cartitem = Cart(product.locationId, productid, quantity, userid, callfor, options, others, sizes, note, "listed", "")
+		cartitem = Cart(product.locationId, productid, quantity, userid, callfor, options, others, sizes, note, "unlisted", "")
 
 		db.session.add(cartitem)
 		db.session.commit()
@@ -488,9 +580,35 @@ def checkout():
 		username = user.username
 		orderNumber = getRanStr()
 
-		query("update cart set status = 'checkout', orderNumber = '" + orderNumber + "' where adder = " + str(adder) + " and status = 'listed'", False)
+		cart = Cart.query.filter_by(adder=adder).first()
+		locationId = str(cart.locationId)
+		owners = query("select id, info from owner where info like '%\"locationId\": \"" + locationId + "\"%'", True)
+		receiver = []
+		pushids = []
 
-		return { "msg": "order sent" }
+		for owner in owners:
+			info = json.loads(owner["info"])
+
+			if info["pushToken"] != "":
+				pushids.append(info["pushToken"])
+
+			receiver.append("owner" + str(owner["id"]))
+
+		if len(pushids) > 0:
+			pushmessages = []
+			for pushid in pushids:
+				pushmessages.append(pushInfo(
+					pushid, 
+					"An order requested",
+					"A customer requested an order",
+					content
+				))
+
+			push(pushmessages)
+
+		query("update cart set status = 'checkout', orderNumber = '" + orderNumber + "' where adder = " + str(adder), False)
+
+		return { "msg": "order sent", "receiver": receiver }
 	else:
 		msg = "User doesn't exist"
 
@@ -517,9 +635,25 @@ def order_ready():
 			for data in datas:
 				data.status = "ready"
 
-			db.session.commit()
+			adderInfo = User.query.filter_by(id=userid).first()
+			adderInfo = json.loads(adderInfo.info)
+			
+			if adderInfo["pushToken"] != "":
+				resp = push(pushInfo(
+					adderInfo["pushToken"],
+					"Order ready",
+					"Your order: " + str(ordernumber) + " is ready for pick up",
+					content
+				))
+			else:
+				resp = { "status": "ok" }
 
-			return { "msg": "Order ready" }
+			if resp["status"] == "ok":
+				db.session.commit()
+
+				return { "msg": "Order ready" }
+
+			msg = "Push notification failed"
 		else:
 			msg = "Order doesn't exist"
 	else:
@@ -542,13 +676,11 @@ def receive_payment():
 	status = ""
 
 	if user != None and location != None:
-		accountid = location.accountId
+		locationInfo = json.loads(location.info)
+		accountid = locationInfo["accountId"]
 
-		if run_stripe == True:
-			account = stripe.Account.list_external_accounts(accountid, object="bank_account", limit=1)
-			bankaccounts = len(account.data)
-		else:
-			bankaccounts = 1
+		account = stripe.Account.list_external_accounts(accountid, object="bank_account", limit=1)
+		bankaccounts = len(account.data)
 
 		if bankaccounts == 1:
 			username = user.username
@@ -556,6 +688,7 @@ def receive_payment():
 			
 			datas = query("select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "' and status = 'ready'", True)
 			charges = {}
+			totalPaying = 0.00
 
 			for data in datas:
 				groupId = ""
@@ -592,17 +725,27 @@ def receive_payment():
 					for info in callfor:
 						friends.append(str(info['userid']))
 						friend = User.query.filter_by(id=info['userid']).first()
+						friendInfo = json.loads(friend.info)
 						friendid = str(info['userid'])
 
 						if friendid in charges:
-							charges[friendid] += float(cost)
+							charges[friendid]["charge"] += float(cost)
 						else:
-							charges[friendid] = float(cost)
+							charges[friendid] = {
+								"charge": float(cost),
+								"pushToken": friendInfo["pushToken"]
+							}
 				else:
+					userInfo = User.query.filter_by(id=userid).first()
+					info = json.loads(userInfo.info)
+
 					if userid in charges:
-						charges[userid] += float(cost)
+						charges[userid]["charge"] += float(cost)
 					else:
-						charges[userid] = float(cost)
+						charges[userid] = {
+							"charge": float(cost),
+							"pushToken": info["pushToken"]
+						}
 
 				for k in range(quantity):
 					transaction = Transaction(groupId, 0, product.id, 0, adder, json.dumps(friends), options, others, sizes, time)
@@ -613,19 +756,29 @@ def receive_payment():
 				query("delete from cart where id = " + str(data['id']), False)
 
 			for info in charges:
+				charge = charges[info]["charge"]
+				pushToken = charges[info]["pushToken"]
+
 				userInfo = User.query.filter_by(id=info).first()
 				customerid = json.loads(userInfo.info)["customerId"]
 
-				if run_stripe == True:
-					stripe.Charge.create(
-						amount=int(charges[info] * 100),
-						currency="cad",
-						customer=customerid,
-						transfer_data={
-							"destination": location.accountId
-						}
-					)
+				stripe.Charge.create(
+					amount=int(charge * 100),
+					currency="cad",
+					customer=customerid,
+					transfer_data={
+						"destination": accountid
+					}
+				)
 
+				if pushToken != "":
+					push(pushInfo(
+						pushToken,
+						"Payment sent",
+						"Your payment of " + str(charge) + " was charged",
+						content
+					))
+			
 			return { "msg": "Order delivered and payment made" }
 		else:
 			msg = "Bank account required"
@@ -831,7 +984,7 @@ def remove_call_for():
 		deleteindex = 0
 
 		for k, data in enumerate(callfor):
-			if data['userid'] == callforid:
+			if str(data['userid']) == str(callforid):
 				del callfor[k]
 
 		cartitem.callfor = json.dumps(callfor)

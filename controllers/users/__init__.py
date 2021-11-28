@@ -1,18 +1,30 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, os, json, stripe
-from werkzeug.security import generate_password_hash, check_password_hash
-from random import randint
+import mysql.connector, pymysql.cursors, stripe, json, os
 from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
+from werkzeug.security import generate_password_hash, check_password_hash
+from random import randint
 
 local = True
+test_stripe = True
 
 host = 'localhost'
 user = 'geottuse'
 password = 'G3ottu53?'
 database = 'easygo'
+server_url = "0.0.0.0"
+local_url = "192.168.0.172"
+apphost = server_url if local == False else local_url
+stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz" if test_stripe == True else "sk_live_AeoXx4kxjfETP2fTR7IkdTYC"
+test_sms = True
+fee = 0.98
+
+account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
+auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
+mss = "MG376dcb41368d7deca0bda395f36bf2a7"
+client = Client(account_sid, auth_token)
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://' + user + ':' + password + '@' + host + '/' + database
@@ -23,22 +35,9 @@ app.config['MYSQL_PASSWORD'] = password
 app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
-mydb = mysql.connector.connect(
-	host=host,
-	user=user,
-	password=password,
-	database=database
-)
+mydb = mysql.connector.connect(host=host, user=user, password=password, database=database)
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
-stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
-test_sms = True
-run_stripe = True
-
-account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
-auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
-mss = "MG376dcb41368d7deca0bda395f36bf2a7"
-client = Client(account_sid, auth_token)
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -46,7 +45,7 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	info = db.Column(db.String(120))
+	info = db.Column(db.String(155))
 
 	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
@@ -91,12 +90,12 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	accountId = db.Column(db.String(25))
+	info = db.Column(db.String(100))
 
 	def __init__(
 		self, 
 		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
-		longitude, latitude, owners, type, hours, accountId
+		longitude, latitude, owners, type, hours, info
 	):
 		self.name = name
 		self.addressOne = addressOne
@@ -111,7 +110,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
-		self.accountId = accountId
+		self.info = info
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -171,7 +170,7 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
-	info = db.Column(db.String(80))
+	info = db.Column(db.String(75))
 
 	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
@@ -258,7 +257,7 @@ class Transaction(db.Model):
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
-	sizes = db.Column(db.String(150))
+	sizes = db.Column(db.String(200))
 	time = db.Column(db.String(15))
 
 	def __init__(self, groupId, locationId, productId, serviceId, adder, callfor, options, others, sizes, time):
@@ -292,6 +291,44 @@ def query(sql, output):
 
 		return results
 
+def trialInfo(id, time): # days before over | cardrequired | trialover
+	user = User.query.filter_by(id=id).first()
+	info = json.loads(user.info)
+
+	customerid = info['customerId']
+
+	stripeCustomer = stripe.Customer.list_sources(
+		customerid,
+		object="card",
+		limit=1
+	)
+	cards = len(stripeCustomer.data)
+	status = ""
+	days = 0
+
+	if "trialstart" in info:
+		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
+			if cards == 0:
+				del info["trialstart"]
+
+				user.info = json.dumps(info)
+
+				db.session.commit()
+
+				status = "cardrequired"
+			else:
+				status = "trialover"
+		else:
+			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
+			status = "notover"
+	else:
+		if cards > 0:
+			status = "cardrequired"
+		else:
+			status = "trialover"
+
+	return { "days": days, "status": status }
+
 def getRanStr():
 	strid = ""
 
@@ -300,43 +337,56 @@ def getRanStr():
 
 	return strid
 
-def push(id, message, data):
-	user = User.query.filter_by(id=id).first()
+def stripeFee(amount, add):
+	if add == True:
+		amount = (amount + 0.30) / (1 - 0.029)
+	else:
+		amount = (amount * (1 - 0.029) - 0.30)
 
-	info = json.loads(user.info)
-	pushtoken = info["pushtoken"]
+	return amount
 
-	response = PushClient().publish(
-		PushMessage(
-			to=pushtoken,
-			body="Push works for " + user.username,
-			data={
-				"username": user.username,
-				"for": "username"
-			}
-		)
-	)
+def calcTax(amount):
+	pst = 0.08 * amount
+	hst = 0.05 * amount
 
-	return { "sent": True if response.status == "ok" else False }
+	return pst + hst
 
-@app.route("/", methods=["GET"])
+def pushInfo(to, title, body, data):
+	return PushMessage(to=to, title=title, body=body, data=data)
+
+def push(messages):
+	if type(messages) == type([]):
+		resp = PushClient().publish_multiple(messages)
+
+		for info in resp:
+			if info.status != "ok":
+				return { "status": "failed" }
+	else:
+		resp = PushClient().publish(messages)
+
+		if resp.status != "ok":
+			return { "status": "failed" }
+
+	return { "status": "ok" }
+
+@app.route("/welcome_users", methods=["GET"])
 def welcome_users():
-	datas = query("select * from user", True)
+	datas = User.query.all()
 	users = []
 
 	for data in datas:
-		users.append({
-			"id": data["id"]
-		})
+		users.append(data.id)
 
 	return { "msg": "welcome to users of easygo", "users": users }
 
 @app.route("/login", methods=["POST"])
-def login():
+def user_login():
 	content = request.get_json()
 
 	cellnumber = content['cellnumber']
 	password = content['password']
+	msg = ""
+	status = ""
 
 	if cellnumber != '' and password != '':
 		user = User.query.filter_by(cellnumber=cellnumber).first()
@@ -365,10 +415,10 @@ def login():
 		else:
 			msg = "Password is blank"
 
-	return { "errormsg": msg }
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/verify/<cellnumber>")
-def verify(cellnumber):
+def user_verify(cellnumber):
 	verifycode = getRanStr()
 
 	user = User.query.filter_by(cellnumber=cellnumber).first()
@@ -390,7 +440,7 @@ def verify(cellnumber):
 	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/register", methods=["POST"])
-def register():
+def user_register():
 	content = request.get_json()
 
 	cellnumber = content['cellnumber']
@@ -407,17 +457,14 @@ def register():
 				if user == None:
 					password = generate_password_hash(password)
 
-					if run_stripe == True:
-						customer = stripe.Customer.create(
-							phone=cellnumber
-						)
-						customerid = customer.id
-					else:
-						customerid = "null"
+					customer = stripe.Customer.create(
+						phone=cellnumber
+					)
+					customerid = customer.id
 
-					info = json.dumps({"customerId": customerid, "status": "required", "pushtoken": "" })
+					userInfo = json.dumps({"customerId": customerid, "paymentStatus": "required", "pushToken": ""})
 
-					user = User(cellnumber, password, '', '', info)
+					user = User(cellnumber, password, '', '', userInfo)
 					db.session.add(user)
 					db.session.commit()
 
@@ -442,7 +489,10 @@ def register():
 def setup():
 	userid = request.form['userid']
 	username = request.form['username']
-	profile = request.files['profile']
+	profilepath = request.files.get('profile', False)
+	profileexist = False if profilepath == False else True
+	permission = request.form['permission']
+	time = int(request.form['time'])
 
 	user = User.query.filter_by(id=userid).first()
 	msg = ""
@@ -453,74 +503,95 @@ def setup():
 		customerid = info["customerId"]
 
 		user.username = username
-		user.profile = profile.filename
 
-		if run_stripe == True:
+		if profileexist == True:
+			profile = request.files['profile']
+			profilename = profile.filename
+
+			profile.save(os.path.join('static', profilename))
+			user.profile = profilename
+		else:
+			if permission == "true":
+				msg = "Please take a photo of yourself for identification purpose"
+
+		info["trialstart"] = time
+		user.info = json.dumps(info)
+
+		if msg == "":
 			stripe.Customer.modify(
 				customerid,
 				name=username
 			)
+			
+			db.session.commit()
 
-		profile.save(os.path.join('static', profile.filename))
-
-		db.session.commit()
-
-		return { "msg": "" }
+			return { "msg": "User setup" }
 	else:
 		msg = "User doesn't exist"
 
 	return { "errormsg": msg, "status": status }, 400
 
-@app.route("/update", methods=["POST"])
-def update():
+@app.route("/update_user", methods=["POST"])
+def update_user():
 	userid = request.form['userid']
 	username = request.form['username']
 	cellnumber = request.form['cellnumber']
-	filepath = request.files.get('profile', False)
-	fileexist = False if filepath == False else True
-
-	if fileexist == True:
-		profile = request.files['profile']
+	profilepath = request.files.get('profile', False)
+	profileexist = False if profilepath == False else True
+	permission = request.form['permission']
 
 	user = User.query.filter_by(id=userid).first()
 	msg = ""
 	status = ""
 
 	if user != None:
-		if fileexist == True:
-			if user.profile != None:
-				oldprofile = user.profile
+		if profileexist == True:
+			profile = request.files['profile']
+			newprofilename = profile.filename
+			oldprofile = user.profile
 
-				if oldprofile != "" and os.path.exists("static/" + oldprofile):
-					os.remove("static/" + oldprofile)
+			if oldprofile != "" and os.path.exists("static/" + oldprofile):
+				os.remove("static/" + oldprofile)
 
-			profile.save(os.path.join('static', profile.filename))
+			profile.save(os.path.join('static', newprofilename))
+			user.profile = newprofilename
 
-			user.profile = profile.filename
+		exist_username = User.query.filter_by(username=username).count()
 
-		user.username = username
-		user.cellnumber = cellnumber
+		if exist_username == 0:
+			user.username = username
+		else:
+			msg = "This username is already taken"
+			status = "sameusername"
+
+		exist_cellnumber = User.query.filter_by(cellnumber=cellnumber).count()
+
+		if exist_cellnumber == 0:
+			user.cellnumber = cellnumber
+		else:
+			msg = "This cell number is already taken"
+			status = "samecellnumber"
 
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
-		if run_stripe == True:
+		if msg == "":
 			stripe.Customer.modify(
 				customerid,
 				phone=cellnumber,
 				name=username
 			)
 
-		db.session.commit()
+			db.session.commit()
 
-		return { "msg": "" }
+			return { "msg": "update successfully" }
 	else:
 		msg = "User doesn't exist"
 
 	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/update_notification_token", methods=["POST"])
-def update_notification_token():
+def user_update_notification_token():
 	content = request.get_json()
 
 	userid = content['userid']
@@ -532,7 +603,7 @@ def update_notification_token():
 
 	if user != None:
 		info = json.loads(user.info)
-		info["pushtoken"] = token
+		info["pushToken"] = token
 
 		user.info = json.dumps(info)
 
@@ -563,6 +634,22 @@ def get_user_info(id):
 
 	return { "errormsg": msg, "status": status }, 400
 
+@app.route("/get_trial_info", methods=["POST"])
+def get_trial_info():
+	content = request.get_json()
+
+	userid = str(content['userid'])
+	time = int(content['time'])
+
+	trialinfo = trialInfo(userid, time)
+	days = trialinfo["days"]
+	status = trialinfo["status"]
+
+	if status != "cardrequired":
+		return { "days": days, "status": status }
+
+	return { "errormsg": "", "status": status }, 400
+
 @app.route("/add_paymentmethod", methods=["POST"])
 def add_paymentmethod():
 	content = request.get_json()
@@ -576,13 +663,12 @@ def add_paymentmethod():
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
-		if run_stripe == True:
-			stripe.Customer.create_source(
-				customerid,
-				source=cardtoken
-			)
+		stripe.Customer.create_source(
+			customerid,
+			source=cardtoken
+		)
 
-		info["status"] = "filled"
+		info["paymentStatus"] = "filled"
 
 		user.info = json.dumps(info)
 
@@ -608,16 +694,15 @@ def update_paymentmethod():
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
-		if run_stripe == True:
-			stripe.Customer.delete_source(
-				customerid,
-				oldcardtoken
-			)
+		stripe.Customer.delete_source(
+			customerid,
+			oldcardtoken
+		)
 
-			stripe.Customer.create_source(
-				customerid,
-				source=cardtoken
-			)
+		stripe.Customer.create_source(
+			customerid,
+			source=cardtoken
+		)
 
 		return { "msg": "Updated a payment method" }
 	else:
@@ -636,25 +721,24 @@ def get_payment_methods(id):
 		customerid = info["customerId"]
 		cards = []
 
-		if run_stripe == True:
-			customer = stripe.Customer.retrieve(customerid)
-			default_card = customer.default_source
+		customer = stripe.Customer.retrieve(customerid)
+		default_card = customer.default_source
 
-			methods = stripe.Customer.list_sources(
-				customerid,
-				object="card"
-			)
-			datas = methods.data
+		methods = stripe.Customer.list_sources(
+			customerid,
+			object="card"
+		)
+		datas = methods.data
 
-			for k, data in enumerate(datas):
-				cards.append({
-					"key": "card-" + str(k),
-					"id": str(k),
-					"cardid": data.id,
-					"cardname": data.brand,
-					"default": data.id == default_card,
-					"number": "****" + str(data.last4)
-				})
+		for k, data in enumerate(datas):
+			cards.append({
+				"key": "card-" + str(k),
+				"id": str(k),
+				"cardid": data.id,
+				"cardname": data.brand,
+				"default": data.id == default_card,
+				"number": "****" + str(data.last4)
+			})
 
 		return { "cards": cards }
 	else:
@@ -677,11 +761,10 @@ def set_paymentmethoddefault():
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
-		if run_stripe == True:
-			stripe.Customer.modify(
-				customerid,
-				default_source=cardid
-			)
+		stripe.Customer.modify(
+			customerid,
+			default_source=cardid
+		)
 
 		return { "msg": "Payment method set as default" }
 	else:
@@ -704,13 +787,10 @@ def get_paymentmethod_info():
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
-		if run_stripe == True:
-			card = stripe.Customer.retrieve_source(
-				customerid,
-				cardid
-			)
-		else:
-			card = { "exp_month": 11, "exp_year": 2023, "last4": "7890" }
+		card = stripe.Customer.retrieve_source(
+			customerid,
+			cardid
+		)
 
 		info = {
 			"exp_month": card.exp_month,
@@ -739,13 +819,71 @@ def delete_paymentmethod():
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
-		if run_stripe == True:
-			stripe.Customer.delete_source(
-				customerid,
-				cardid
-			)
+		stripe.Customer.delete_source(
+			customerid,
+			cardid
+		)
 
 		return { "msg": "Payment method deleted"}
+	else:
+		msg = "User doesn't exist"
+
+	return { "errormsg": msg, "status": status }, 400
+
+@app.route("/get_num_updates", methods=["POST"])
+def get_num_updates():
+	content = request.get_json()
+
+	userid = str(content['userid'])
+	time = content['time']
+
+	user = User.query.filter_by(id=userid).first()
+	msg = ""
+	status = ""
+
+	if user != None:
+		num = 0
+
+		# cart orders called for self
+		sql = "select count(*) as num from cart where adder = " + userid + " and callfor = '[]' and not status = 'unlisted'"
+		num += query(sql, True)[0]["num"]
+
+		# cart orders called for other user(s)
+		sql = "select count(*) as num from cart where "
+		sql += "("
+		sql += "callfor like '%\"userid\": \"" + userid + "\", \"status\": \"waiting\"%'"
+		sql += " or "
+		sql += "callfor like '%\"status\": \"waiting\", \"userid\": \"" + userid + "\"%'"
+		sql += ") or "
+		sql += "(adder = " + userid + " and not callfor = '[]' and status = 'checkout') or "
+		sql += "(not callfor = '[]' and status = 'ready')"
+		num += query(sql, True)[0]["num"]
+
+		# dining orders called for user
+		sql = "select count(*) as num from schedule where "
+		sql += "("
+		sql += "orders like '%\"userid\": \"" + userid + "\", \"status\": \"confirmawaits\"%'"
+		sql += " or "
+		sql += "orders like '%\"status\": \"confirmawaits\", \"userid\": \"" + userid + "\"%'"
+		sql += ")"
+		num += query(sql, True)[0]["num"]
+
+		# requested payment method for order for
+		sql = "select count(*) as num from cart where "
+		sql += "("
+		sql += "callfor like '%\"userid\": \"" + userid + "\", \"status\": \"paymentrequested\"%'"
+		sql += " or "
+		sql += "callfor like '%\"status\": \"paymentrequested\", \"userid\": \"" + userid + "\"%'"
+		sql += ")"
+		num += query(sql, True)[0]["num"]
+
+		# get reservation requests
+		sql = "select count(*) as num from schedule where "
+		sql += "(userId = " + userid + " and (status = 'requested' or status = 'rebook' or status = 'cancel' or status = 'accepted' or status = 'change' or status = 'confirmed')) or "
+		sql += "(customers like '%\"userid\": \"" + userid + "\"%')"
+		num += query(sql, True)[0]["num"]
+
+		return { "numNotifications": num }
 	else:
 		msg = "User doesn't exist"
 
@@ -762,7 +900,7 @@ def get_notifications(id):
 		notifications = []
 
 		# cart orders called for self
-		sql = "select * from cart where adder = " + str(id)
+		sql = "select * from cart where adder = " + str(id) + " and callfor = '[]' and not status = 'unlisted'"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -773,13 +911,13 @@ def get_notifications(id):
 			sizes = json.loads(data['sizes'])
 
 			for k, option in enumerate(options):
-				option["key"] = "option-" + str(k)
+				option["key"] = "option-" + str(len(notifications)) + "-" + str(k)
 
 			for k, other in enumerate(others):
-				other["key"] = "other-" + str(k)
+				other["key"] = "other-" + str(len(notifications)) + "-" + str(k)
 
 			for k, size in enumerate(sizes):
-				size["key"] = "size-" + str(k)
+				size["key"] = "size-" + str(len(notifications)) + "-" + str(k)
 
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
@@ -798,7 +936,14 @@ def get_notifications(id):
 			})
 		
 		# cart orders called for other user(s)
-		sql = "select * from cart where callfor like '%\"userid\": \"" + str(id) + "\", \"status\": \"waiting\"%'"
+		sql = "select * from cart where "
+		sql += "("
+		sql += "callfor like '%\"userid\": \"" + str(id) + "\", \"status\": \"waiting\"%'"
+		sql += " or "
+		sql += "callfor like '%\"status\": \"waiting\", \"userid\": \"" + str(id) + "\"%'"
+		sql += ") or "
+		sql += "(adder = " + str(id) + " and not callfor = '[]' and status = 'checkout') or "
+		sql += "(not callfor = '[]' and status = 'ready')"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -820,13 +965,13 @@ def get_notifications(id):
 				})
 
 			for k, option in enumerate(options):
-				option["key"] = "option-" + str(k)
+				option["key"] = "option-" + str(len(notifications)) + "-" + str(k)
 
 			for k, other in enumerate(others):
-				other["key"] = "other-" + str(k)
+				other["key"] = "other-" + str(len(notifications)) + "-" + str(k)
 
 			for k, size in enumerate(sizes):
-				size["key"] = "size-" + str(k)
+				size["key"] = "size-" + str(len(notifications)) + "-" + str(k)
 
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
@@ -840,11 +985,18 @@ def get_notifications(id):
 				"quantity": int(data['quantity']),
 				"orderers": friends,
 				"adder": { "username": adder.username, "profile": adder.profile },
-				"price": int(data['quantity']) * float(product.price) if product.price != "" else ""
+				"price": int(data['quantity']) * float(product.price) if product.price != "" else "",
+				"status": data['status'],
+				"orderNumber": data['orderNumber']
 			})
 
 		# dining orders called for user
-		sql = "select * from schedule where orders like '%\"userid\": \"" + str(id) + "\", \"status\": \"confirmawaits\"%'"
+		sql = "select * from schedule where "
+		sql += "("
+		sql += "orders like '%\"userid\": \"" + str(id) + "\", \"status\": \"confirmawaits\"%'"
+		sql += " or "
+		sql += "orders like '%\"status\": \"confirmawaits\", \"userid\": \"" + str(id) + "\"%'"
+		sql += ")"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -863,6 +1015,15 @@ def get_notifications(id):
 								others = orderer['others']
 								sizes = orderer['sizes']
 
+								for k, option in enumerate(options):
+									option["key"] = "option-" + str(len(notifications)) + "-" + str(k)
+
+								for k, other in enumerate(others):
+									other["key"] = "other-" + str(len(notifications)) + "-" + str(k)
+
+								for k, size in enumerate(sizes):
+									size["key"] = "size-" + str(len(notifications)) + "-" + str(k)
+
 								notifications.append({
 									"key": "order-" + str(len(notifications)),
 									"type": "dining-order",
@@ -874,11 +1035,17 @@ def get_notifications(id):
 									"sizes": sizes,
 									"quantity": int(orderer['quantity']),
 									"adder": { "username": adder.username, "profile": adder.profile },
-									"price": int(orderer['quantity']) * float(product.price) if product.price != "" else ""
+									"price": int(orderer['quantity']) * float(product.price) if product.price != "" else "",
+									"status": "unlisted"
 								})
 
 		# get requested payment method to order for
-		sql = "select * from cart where callfor like '%\"userid\": \"" + str(id) + "\", \"status\": \"paymentrequested\"%'"
+		sql = "select * from cart where "
+		sql += "("
+		sql += "callfor like '%\"userid\": \"" + str(id) + "\", \"status\": \"paymentrequested\"%'"
+		sql += " or "
+		sql += "callfor like '%\"status\": \"paymentrequested\", \"userid\": \"" + str(id) + "\"%'"
+		sql += ")"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -900,13 +1067,13 @@ def get_notifications(id):
 				})
 
 			for k, option in enumerate(options):
-				option["key"] = "option-" + str(k)
+				option["key"] = "option-" + str(len(notifications)) + "-" + str(k)
 
 			for k, other in enumerate(others):
-				other["key"] = "other-" + str(k)
+				other["key"] = "other-" + str(len(notifications)) + "-" + str(k)
 
 			for k, size in enumerate(sizes):
-				size["key"] = "size-" + str(k)
+				size["key"] = "size-" + str(len(notifications)) + "-" + str(k)
 
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
@@ -923,11 +1090,10 @@ def get_notifications(id):
 				"price": int(data['quantity']) * float(product.price) if product.price != "" else ""
 			})
 
-		# get reservation requests
+		# get requests
 		sql = "select * from schedule where "
-		sql += "(userId = " + str(id) + " and (status = 'requested' or status = 'rebook' or status = 'cancel' or status = 'accepted' or status = 'change'))"
-		sql += " or customers like '%{\"userid\": \"" + str(id) + "\", \"status\": \"waiting\"}%'"
-		sql += " or (status = 'accepted' and customers like '%{\"userid\": \"" + str(id) + "\", \"status\": \"confirmed\"}%')"
+		sql += "(userId = " + str(id) + " and (status = 'requested' or status = 'rebook' or status = 'cancel' or status = 'accepted' or status = 'change' or status = 'confirmed')) or "
+		sql += "(customers like '%\"userid\": \"" + str(id) + "\"%')"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -942,6 +1108,7 @@ def get_notifications(id):
 
 			booker = User.query.filter_by(id=data['userId']).first()
 			confirm = False
+			chargedUser = False
 			info = json.loads(data['info'])
 
 			if data["locationType"] == 'restaurant':
@@ -951,20 +1118,18 @@ def get_notifications(id):
 					if customer['userid'] == id:
 						confirm = customer['status'] == 'confirmed'
 
-				if str(data['userId']) == id:
-					confirm = data["status"] == 'accepted'
-
 				customers = len(customers)
 			else:
 				customers = int(data['customers'])
+				chargedUser = info["chargedUser"]
 
 			if data["locationType"] != 'restaurant':
-				paymentSent = info["paymentsent"]
+				allowPayment = info["allowpayment"]
 			else:
 				orders = json.loads(data["orders"])
 				charges = orders["charges"]
+				allowPayment = charges[str(userId)]["allowpayment"] if str(userId) in charges else False
 
-				paymentSent = charges[str(userId)]["paymentsent"]
 
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
@@ -978,6 +1143,7 @@ def get_notifications(id):
 				"locationimage": location.logo,
 				"locationtype": location.type,
 				"serviceimage": service.image if service != None else "",
+				"serviceprice": float(service.price) if service != None else "",
 				"time": int(data['time']),
 				"action": data['status'],
 				"nextTime": int(data['nextTime']) if data['status'] == 'rebook' else 0,
@@ -987,54 +1153,12 @@ def get_notifications(id):
 				"bookerName": booker.username,
 				"diners": customers,
 				"confirm": confirm,
-				"paymentSent": paymentSent,
+				"chargedUser": chargedUser,
+				"allowPayment": allowPayment,
 				"seated": info["dinersseated"] if "dinersseated" in info else None
 			})
 
 		return { "notifications": notifications }
-	else:
-		msg = "User doesn't exist"
-
-	return { "errormsg": msg, "status": status }, 400
-
-@app.route("/get_num_updates", methods=["POST"])
-def get_num_updates():
-	content = request.get_json()
-
-	userid = content['userid']
-	time = content['time']
-
-	user = User.query.filter_by(id=userid).first()
-	msg = ""
-	status = ""
-
-	if user != None:
-		num = 0
-
-		# cart orders called for self
-		sql = "select count(*) as num from cart where adder = " + str(userid)
-		num += query(sql, True)[0]["num"]
-
-		# cart orders called for other user(s)
-		sql = "select count(*) as num from cart where callfor like '%\"userid\": \"" + str(userid) + "\", \"status\": \"waiting\"%'"
-		num += query(sql, True)[0]["num"]
-
-		# dining orders called for user
-		sql = "select count(*) as num from schedule where orders like '%\"userid\": \"" + str(userid) + "\", \"status\": \"confirmawaits\"%'"
-		num += query(sql, True)[0]["num"]
-
-		# requested payment method for order for
-		sql = "select count(*) as num from cart where callfor like '%\"userid\": \"" + str(userid) + "\", \"status\": \"paymentrequested\"%'"
-		num += query(sql, True)[0]["num"]
-
-		# get reservation requests
-		sql = "select count(*) as num from schedule where "
-		sql += "(userId = " + str(userid) + " and (status = 'requested' or status = 'rebook' or status = 'cancel' or status = 'accepted' or status = 'change'))"
-		sql += " or customers like '%{\"userid\": \"" + str(userid) + "\", \"status\": \"waiting\"}%'"
-		sql += " or (status = 'accepted' and customers like '%{\"userid\": \"" + str(userid) + "\", \"status\": \"confirmed\"}%')"
-		num += query(sql, True)[0]["num"]
-
-		return { "numNotifications": num }
 	else:
 		msg = "User doesn't exist"
 
@@ -1154,15 +1278,12 @@ def select_user(id):
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
-		if run_stripe == True:
-			customer = stripe.Customer.list_sources(
-				customerid,
-				object="card",
-				limit=1
-			)
-			cards = len(customer.data)
-		else:
-			cards = 5
+		customer = stripe.Customer.list_sources(
+			customerid,
+			object="card",
+			limit=1
+		)
+		cards = len(customer.data)
 
 		return { "username": user.username, "cards": cards }
 	else:
@@ -1179,7 +1300,7 @@ def request_user_payment_method(id):
 	if user != None:
 		info = json.loads(user.info)
 
-		info["status"] = "requested"
+		info["paymentStatus"] = "requested"
 
 		user.info = json.dumps(info)
 
@@ -1192,7 +1313,7 @@ def request_user_payment_method(id):
 	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_reset_code/<phonenumber>")
-def get_reset_code(phonenumber):
+def get_user_reset_code(phonenumber):
 	user = User.query.filter_by(cellnumber=phonenumber).first()
 	msg = ""
 	status = ""
@@ -1214,7 +1335,7 @@ def get_reset_code(phonenumber):
 	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/reset_password", methods=["POST"])
-def reset_password():
+def user_reset_password():
 	content = request.get_json()
 
 	cellnumber = content['cellnumber']

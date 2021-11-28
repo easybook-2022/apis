@@ -1,17 +1,30 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, json, pymysql.cursors, os, stripe
+import mysql.connector, pymysql.cursors, stripe, json, os
+from twilio.rest import Client
+from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
 from random import randint
-from twilio.rest import Client
 
 local = True
+test_stripe = True
 
 host = 'localhost'
 user = 'geottuse'
 password = 'G3ottu53?'
 database = 'easygo'
+server_url = "0.0.0.0"
+local_url = "192.168.0.172"
+apphost = server_url if local == False else local_url
+stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz" if test_stripe == True else "sk_live_AeoXx4kxjfETP2fTR7IkdTYC"
+test_sms = True
+fee = 0.98
+
+account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
+auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
+mss = "MG376dcb41368d7deca0bda395f36bf2a7"
+client = Client(account_sid, auth_token)
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://' + user + ':' + password + '@' + host + '/' + database
@@ -22,22 +35,9 @@ app.config['MYSQL_PASSWORD'] = password
 app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
-mydb = mysql.connector.connect(
-	host=host,
-	user=user,
-	password=password,
-	database=database
-)
+mydb = mysql.connector.connect(host=host, user=user, password=password, database=database)
 mycursor = mydb.cursor()
 migrate = Migrate(app, db)
-stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz"
-test_sms = True
-run_stripe = True
-
-account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
-auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
-mss = "MG376dcb41368d7deca0bda395f36bf2a7"
-client = Client(account_sid, auth_token)
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -45,7 +45,7 @@ class User(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
-	info = db.Column(db.String(120))
+	info = db.Column(db.String(155))
 
 	def __init__(self, cellnumber, password, username, profile, info):
 		self.cellnumber = cellnumber
@@ -90,12 +90,12 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	accountId = db.Column(db.String(25))
+	info = db.Column(db.String(100))
 
 	def __init__(
 		self, 
 		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
-		longitude, latitude, owners, type, hours, accountId
+		longitude, latitude, owners, type, hours, info
 	):
 		self.name = name
 		self.addressOne = addressOne
@@ -110,7 +110,7 @@ class Location(db.Model):
 		self.owners = owners
 		self.type = type
 		self.hours = hours
-		self.accountId = accountId
+		self.info = info
 
 	def __repr__(self):
 		return '<Location %r>' % self.name
@@ -170,7 +170,7 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
-	info = db.Column(db.String(80))
+	info = db.Column(db.String(75))
 
 	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
@@ -257,7 +257,7 @@ class Transaction(db.Model):
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
-	sizes = db.Column(db.String(150))
+	sizes = db.Column(db.String(200))
 	time = db.Column(db.String(15))
 
 	def __init__(self, groupId, locationId, productId, serviceId, adder, callfor, options, others, sizes, time):
@@ -291,6 +291,44 @@ def query(sql, output):
 
 		return results
 
+def trialInfo(id, time): # days before over | cardrequired | trialover
+	user = User.query.filter_by(id=id).first()
+	info = json.loads(user.info)
+
+	customerid = info['customerId']
+
+	stripeCustomer = stripe.Customer.list_sources(
+		customerid,
+		object="card",
+		limit=1
+	)
+	cards = len(stripeCustomer.data)
+	status = ""
+	days = 0
+
+	if "trialstart" in info:
+		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
+			if cards == 0:
+				del info["trialstart"]
+
+				user.info = json.dumps(info)
+
+				db.session.commit()
+
+				status = "cardrequired"
+			else:
+				status = "trialover"
+		else:
+			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
+			status = "notover"
+	else:
+		if cards > 0:
+			status = "cardrequired"
+		else:
+			status = "trialover"
+
+	return { "days": days, "status": status }
+
 def getRanStr():
 	strid = ""
 
@@ -299,20 +337,50 @@ def getRanStr():
 
 	return strid
 
-@app.route("/", methods=["GET"])
+def stripeFee(amount, add):
+	if add == True:
+		amount = (amount + 0.30) / (1 - 0.029)
+	else:
+		amount = (amount * (1 - 0.029) - 0.30)
+
+	return amount
+
+def calcTax(amount):
+	pst = 0.08 * amount
+	hst = 0.05 * amount
+
+	return pst + hst
+
+def pushInfo(to, title, body, data):
+	return PushMessage(to=to, title=title, body=body, data=data)
+
+def push(messages):
+	if type(messages) == type([]):
+		resp = PushClient().publish_multiple(messages)
+
+		for info in resp:
+			if info.status != "ok":
+				return { "status": "failed" }
+	else:
+		resp = PushClient().publish(messages)
+
+		if resp.status != "ok":
+			return { "status": "failed" }
+
+	return { "status": "ok" }
+
+@app.route("/welcome_owners", methods=["GET"])
 def welcome_owners():
-	datas = query("select * from owner", True)
+	datas = Owner.query.all()
 	owners = []
 
 	for data in datas:
-		owners.append({
-			"id": data["id"]
-		})
+		owners.append(data.id)
 
 	return { "msg": "welcome to owners of easygo", "owners": owners }
 
 @app.route("/login", methods=["POST"])
-def login():
+def owner_login():
 	content = request.get_json()
 
 	cellnumber = content['cellnumber']
@@ -330,9 +398,9 @@ def login():
 				ownerid = owner['id']
 
 				data = query("select * from location where owners like '%\"" + str(ownerid) + "\"%'", True)
-				logo = data[0]["logo"] if len(data) > 0 else ""
+				storeName = data[0]["name"] if len(data) > 0 else ""
 
-				if len(data) == 0 or logo == "":
+				if len(data) == 0 or storeName == "":
 					return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": "", "locationtype": "", "msg": "setup" }
 				else:
 					data = data[0]
@@ -357,7 +425,7 @@ def login():
 	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/verify/<cellnumber>")
-def verify(cellnumber):
+def owner_verify(cellnumber):
 	verifycode = getRanStr()
 
 	owner = Owner.query.filter_by(cellnumber=cellnumber).first()
@@ -379,19 +447,16 @@ def verify(cellnumber):
 	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/register", methods=["POST"])
-def register():
+def owner_register():
 	username = request.form['username']
 	cellnumber = request.form['cellnumber']
 	password = request.form['password']
 	confirmPassword = request.form['confirmPassword']
-	filepath = request.files.get('profile', False)
-	fileexist = False if filepath == False else True
+	profilepath = request.files.get('profile', False)
+	profileexist = False if profilepath == False else True
+	permission = request.form['permission']
 	msg = ""
-
-	if fileexist == True:
-		profile = request.files['profile']
-	else:
-		msg = "Please provide a profile for identification"
+	status = ""
 
 	if username == "":
 		msg = "Please provide a username for identification"
@@ -416,19 +481,27 @@ def register():
 		else:
 			msg = "Please confirm your password"
 
+	profilename = ""
+	if profileexist == True:
+		profile = request.files['profile']
+		profilename = profile.filename
+
+		profile.save(os.path.join('static', profilename))
+	else:
+		if permission == "true":
+			msg = "Please provide a profile for identification"
+	
 	if msg == "":
-		profile.save(os.path.join('static', profile.filename))
-
 		password = generate_password_hash(password)
-		info = json.dumps({"locationId": ""})
+		info = json.dumps({"locationId": "","pushToken": ""})
 
-		owner = Owner(cellnumber, password, username, profile.filename, info)
+		owner = Owner(cellnumber, password, username, profilename, info)
 		db.session.add(owner)
 		db.session.commit()
 
 		return { "id": owner.id }
 
-	return { "errormsg": msg }
+	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/add_owner", methods=["POST"])
 def add_owner():
@@ -437,11 +510,9 @@ def add_owner():
 	username = request.form['username']
 	password = request.form['password']
 	confirmPassword = request.form['confirmPassword']
-	filepath = request.files.get('profile', False)
-	fileexist = False if filepath == False else True
-
-	if fileexist == True:
-		profile = request.files['profile']
+	profilepath = request.files.get('profile', False)
+	profileexist = False if profilepath == False else True
+	permission = request.form['permission']
 
 	data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
 	msg = ""
@@ -451,18 +522,6 @@ def add_owner():
 		owner = Owner.query.filter_by(id=ownerid).first()
 
 		if owner != None:
-			if fileexist == True:
-				if owner.profile != None:
-					oldprofile = owner.profile
-
-					if oldprofile != "" and os.path.exists("static/" + oldprofile):
-						os.remove("static/" + oldprofile)
-
-				profile.save(os.path.join('static', profile.filename))
-				profile = profile.filename
-			else:
-				msg = "Please provide a profile for identification"
-
 			if username == "":
 				msg = "Please provide a username for identification"
 
@@ -477,18 +536,28 @@ def add_owner():
 					msg = "Password needs to be atleast 6 characters long"
 			else:
 				if password == "":
-					msg = "Please confirm your password"
+					msg = "Please enter a password"
 				else:
 					msg = "Please confirm your password"
 
-			if msg == "":
-				info = json.loads(owner.info)
-				locationId = info["locationId"]
+			profilename = ""
+			if profileexist == True:
+				profile = request.files['profile']
+				profilename = profile.filename
+				
+				profile.save(os.path.join('static', profilename))
+			else:
+				if permission == "true":
+					msg = "Please provide a profile for identification"
 
-				info = {"locationId": locationId}
+			if msg == "":
+				ownerInfo = json.loads(owner.info)
+				locationId = ownerInfo["locationId"]
+
+				info = {"locationId": locationId, "pushToken": ""}
 
 				password = generate_password_hash(password)
-				owner = Owner(cellnumber, password, username, profile, json.dumps(info))
+				owner = Owner(cellnumber, password, username, profilename, json.dumps(info))
 				db.session.add(owner)
 				db.session.commit()
 
@@ -508,18 +577,16 @@ def add_owner():
 
 	return { "errormsg": msg, "status": status }, 400
 
-@app.route("/update", methods=["POST"])
-def update():
+@app.route("/update_owner", methods=["POST"])
+def update_owner():
 	ownerid = request.form['ownerid']
 	username = request.form['username']
 	cellnumber = request.form['cellnumber']
 	password = request.form['password']
 	confirmPassword = request.form['confirmPassword']
-	filepath = request.files.get('profile', False)
-	fileexist = False if filepath == False else True
-
-	if fileexist == True:
-		profile = request.files['profile']
+	profilepath = request.files.get('profile', False)
+	profileexist = False if profilepath == False else True
+	permission = request.form['permission']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
 	msg = ""
@@ -532,15 +599,16 @@ def update():
 		if cellnumber != "":
 			owner.cellnumber = cellnumber
 
-		if fileexist == True:
-			if owner.profile != None:
-				oldprofile = owner.profile
+		if profileexist == True:
+			profile = request.files['profile']
+			newprofilename = profile.filename
+			oldprofile = owner.profile
 
-				if oldprofile != "" and os.path.exists("static/" + oldprofile):
-					os.remove("static/" + oldprofile)
+			if oldprofile != "" and os.path.exists("static/" + oldprofile):
+				os.remove("static/" + oldprofile)
 
-			profile.save(os.path.join('static', profile.filename))
-			owner.profile = profile.filename
+			profile.save(os.path.join('static', newprofilename))
+			owner.profile = newprofilename
 
 		if password != "" or confirmPassword != "":
 			if password != "" and confirmPassword != "":
@@ -555,7 +623,7 @@ def update():
 					msg = "Password needs to be atleast 6 characters long"
 			else:
 				if password == "":
-					msg = "Please confirm your password"
+					msg = "Please enter a password"
 				else:
 					msg = "Please confirm your password"
 
@@ -568,21 +636,21 @@ def update():
 	return { "errormsg": msg, "status": status }, 400
 		
 @app.route("/update_notification_token", methods=["POST"])
-def update_notification_token():
+def owner_update_notification_token():
 	content = request.get_json()
 
 	ownerid = content['ownerid']
 	token = content['token']
 
-	owner = User.query.filter_by(id=ownerid).first()
+	owner = Owner.query.filter_by(id=ownerid).first()
 	msg = ""
 	status = ""
 
 	if owner != None:
-		info = json.loads(owner.info)
-		info["pushtoken"] = token
+		ownerInfo = json.loads(owner.info)
+		ownerInfo["pushToken"] = token
 
-		owner.info = json.dumps(info)
+		owner.info = json.dumps(ownerInfo)
 
 		db.session.commit()
 
@@ -604,13 +672,13 @@ def add_bankaccount():
 	status = ""
 
 	if location != None:
-		accountid = location.accountId
+		locationInfo = json.loads(location.info)
+		accountid = locationInfo["accountId"]
 
-		if run_stripe == True:
-			stripe.Account.create_external_account(
-				accountid,
-				external_account=banktoken
-			)
+		stripe.Account.create_external_account(
+			accountid,
+			external_account=banktoken
+		)
 
 		return { "msg": "Added a bank account" }
 	else:
@@ -631,18 +699,18 @@ def update_bankaccount():
 	status = ""
 
 	if location != None:
-		accountid = location.accountId
+		locationInfo = json.loads(location.info)
+		accountid = locationInfo["accountId"]
 
-		if run_stripe == True:
-			stripe.Account.delete_external_account(
-				accountid,
-				oldbanktoken
-			)
+		stripe.Account.delete_external_account(
+			accountid,
+			oldbanktoken
+		)
 
-			stripe.Account.create_external_account(
-				accountid,
-				external_account=banktoken
-			)
+		stripe.Account.create_external_account(
+			accountid,
+			external_account=banktoken
+		)
 
 		return { "msg": "Updated a bank account" }
 	else:
@@ -676,25 +744,25 @@ def get_bankaccounts(id):
 	content = request.get_json()
 
 	location = Location.query.filter_by(id=id).first()
-	accountid = location.accountId
+	locationInfo = json.loads(location.info)
+	accountid = locationInfo["accountId"]
 	bankaccounts = []
 
-	if run_stripe == True:
-		accounts = stripe.Account.list_external_accounts(
-			accountid,
-			object="bank_account"
-		)
-		datas = accounts.data
+	accounts = stripe.Account.list_external_accounts(
+		accountid,
+		object="bank_account"
+	)
+	datas = accounts.data
 
-		for k, data in enumerate(datas):
-			bankaccounts.append({
-				"key": "bankaccount-" + str(k),
-				"id": str(k),
-				"bankid": data.id,
-				"bankname": data.bank_name,
-				"number": "****" + str(data.last4),
-				"default": data.default_for_currency
-			})
+	for k, data in enumerate(datas):
+		bankaccounts.append({
+			"key": "bankaccount-" + str(k),
+			"id": str(k),
+			"bankid": data.id,
+			"bankname": data.bank_name,
+			"number": "****" + str(data.last4),
+			"default": data.default_for_currency
+		})
 
 	return { "bankaccounts": bankaccounts, "msg": "get bank accounts" }
 
@@ -710,14 +778,14 @@ def set_bankaccountdefault():
 	status = ""
 
 	if location != None:
-		accountid = location.accountId
+		locationInfo = json.loads(location.info)
+		accountid = locationInfo["accountId"]
 
-		if run_stripe == True:
-			stripe.Account.modify_external_account(
-				accountid,
-				bankid,
-				default_for_currency=True
-			)
+		stripe.Account.modify_external_account(
+			accountid,
+			bankid,
+			default_for_currency=True
+		)
 
 		return { "msg": "Bank account set as default" }
 	else:
@@ -737,27 +805,27 @@ def get_bankaccount_info():
 	status = ""
 
 	if location != None:
-		accountid = location.accountId
+		locationInfo = json.loads(location.info)
+		accountid = locationInfo["accountId"]
 
-		if run_stripe == True:
-			accounts = stripe.Account.retrieve(accountid)
-			datas = accounts.external_accounts.data
+		accounts = stripe.Account.retrieve(accountid)
+		datas = accounts.external_accounts.data
 
-			for data in datas:
-				if data.id == bankid:
-					routing_number = data.routing_number
+		for data in datas:
+			if data.id == bankid:
+				routing_number = data.routing_number
 
-					transit = routing_number[4:]
-					institution = routing_number[1:4]
+				transit = routing_number[4:]
+				institution = routing_number[1:4]
 
-					info = {
-						"account_holder_name": data.account_holder_name,
-						"last4": data.last4,
-						"transit_number": transit,
-						"institution_number": institution
-					}
+				info = {
+					"account_holder_name": data.account_holder_name,
+					"last4": data.last4,
+					"transit_number": transit,
+					"institution_number": institution
+				}
 
-					return { "bankaccountInfo": info }
+				return { "bankaccountInfo": info }
 
 		msg = "Bank doesn't exist"
 	else:
@@ -777,13 +845,13 @@ def delete_bankaccount():
 	status = ""
 
 	if location != None:
-		accountid = location.accountId
+		locationInfo = json.loads(location.info)
+		accountid = locationInfo["accountId"]
 
-		if run_stripe == True:
-			stripe.Account.delete_external_account(
-				accountid,
-				bankid
-			)
+		stripe.Account.delete_external_account(
+			accountid,
+			bankid
+		)
 
 		return { "msg": "Bank account deleted" }
 	else:
@@ -792,7 +860,7 @@ def delete_bankaccount():
 	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/get_reset_code/<cellnumber>")
-def get_reset_code(cellnumber):
+def get_owner_reset_code(cellnumber):
 	owner = Owner.query.filter_by(cellnumber=cellnumber).first()
 	msg = ""
 	status = ""
@@ -814,7 +882,7 @@ def get_reset_code(cellnumber):
 	return { "errormsg": msg, "status": status }, 400
 
 @app.route("/reset_password", methods=["POST"])
-def reset_password():
+def owner_reset_password():
 	content = request.get_json()
 
 	cellnumber = content['cellnumber']
