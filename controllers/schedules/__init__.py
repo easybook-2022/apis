@@ -1,30 +1,12 @@
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, stripe, json, os
+import mysql.connector, pymysql.cursors, json, os
 from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
 from random import randint
-
-local = True
-test_stripe = True
-
-host = 'localhost'
-user = 'geottuse'
-password = 'G3ottu53?'
-database = 'easygo'
-server_url = "0.0.0.0"
-local_url = "192.168.0.172"
-apphost = server_url if local == False else local_url
-stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz" if test_stripe == True else "sk_live_AeoXx4kxjfETP2fTR7IkdTYC"
-test_sms = True
-fee = 0.98
-
-account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
-auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
-mss = "MG376dcb41368d7deca0bda395f36bf2a7"
-client = Client(account_sid, auth_token)
+from info import *
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://' + user + ':' + password + '@' + host + '/' + database
@@ -35,8 +17,6 @@ app.config['MYSQL_PASSWORD'] = password
 app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
-mydb = mysql.connector.connect(host=host, user=user, password=password, database=database)
-mycursor = mydb.cursor()
 migrate = Migrate(app, db)
 
 class User(db.Model):
@@ -403,7 +383,7 @@ def get_requests(id):
 				"type": data['locationType'],
 				"userId": user.id,
 				"username": user.username,
-				"time": int(data['time']),
+				"time": int(data['nextTime']) if data['nextTime'] != "" else int(data['time']),
 				"name": service.name if service != None else location.name,
 				"image": service.image if service != None else location.logo,
 				"note": data['note'],
@@ -602,7 +582,7 @@ def request_appointment():
 						}
 					else:
 						schedule.status = 'change'
-						schedule.time = time
+						schedule.nextTime = time
 						schedule.note = note
 
 						db.session.commit()
@@ -626,6 +606,7 @@ def request_appointment():
 				else:
 					schedule.status = 'requested'
 					schedule.time = time
+					schedule.nextTime = ''
 					schedule.note = note
 
 					db.session.commit()
@@ -695,6 +676,10 @@ def accept_request():
 		location = Location.query.filter_by(id=locationId).first()
 		appointment.status = "accepted"
 		appointment.table = tablenum
+
+		if appointment.nextTime != "":
+			appointment.time = appointment.nextTime
+			appointment.nextTime = ""
 
 		booker = ["user" + str(appointment.userId)]
 		receivingUsers = []
@@ -782,6 +767,10 @@ def confirm_request():
 		service = Service.query.filter_by(id=appointment.serviceId).first()
 		chargedUser = False
 		pushids = []
+
+		if appointment.nextTime != "":
+			appointment.time = appointment.nextTime
+			appointment.nextTime = ""
 
 		appointment.status = "confirmed"
 
@@ -954,11 +943,14 @@ def close_request(id):
 
 	if appointment != None:
 		if appointment.status == "cancel" or appointment.status == "rebook":
-			customers = json.loads(appointment.customers)
-			receiver = []
+			if "[" in appointment.customers: # restaurant
+				customers = json.loads(appointment.customers)
+				receiver = []
 
-			for customer in customers:
-				receiver.append("user" + str(customer["userid"]))
+				for customer in customers:
+					receiver.append("user" + str(customer["userid"]))
+			else:
+				receiver = ["user" + str(appointment.userId)]
 
 			db.session.delete(appointment)
 			db.session.commit()
@@ -1150,7 +1142,7 @@ def get_diners_payments():
 						customerid = info["customerId"]
 
 						if charge > 0:
-							totalamount = stripeFee(charge, True) + calcTax(charge)
+							totalamount = stripeFee(charge + calcTax(charge), True)
 
 							stripe.Charge.create(
 								amount=int(totalamount * 100),
@@ -1248,7 +1240,6 @@ def receive_epayment():
 	content = request.get_json()
 
 	scheduleid = content['scheduleid']
-	time = content['time']
 	ownerid = content['ownerid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
@@ -1291,7 +1282,7 @@ def receive_epayment():
 
 				if bankaccounts > 0:
 					if cards > 0:
-						price = round(stripeFee(price, True) + calcTax(price), 2)
+						price = stripeFee(price + calcTax(price), True)
 
 						stripe.Charge.create(
 							amount=int(price * 100),
@@ -1311,7 +1302,7 @@ def receive_epayment():
 						for k in range(20):
 							groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
 
-						transaction = Transaction(groupId, locationid, 0, schedule.serviceId, schedule.userId, '[]', '[]', '[]', '[]', time)
+						transaction = Transaction(groupId, locationid, 0, schedule.serviceId, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
 
 						db.session.add(transaction)
 						db.session.delete(schedule)
@@ -1358,7 +1349,6 @@ def receive_inpersonpayment():
 	content = request.get_json()
 
 	scheduleid = content['scheduleid']
-	time = content['time']
 	ownerid = content['ownerid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
@@ -1388,7 +1378,7 @@ def receive_inpersonpayment():
 				for k in range(20):
 					groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
 
-				transaction = Transaction(groupId, locationid, 0, schedule.serviceId, schedule.userId, '[]', '[]', '[]', '[]', time)
+				transaction = Transaction(groupId, locationid, 0, schedule.serviceId, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
 
 				db.session.add(transaction)
 				db.session.delete(schedule)
@@ -1712,7 +1702,7 @@ def see_user_orders():
 
 	datas = query("select * from cart where adder = " + str(userid) + " and locationId = " + str(locationid) + " and orderNumber = '" + ordernumber + "' and (status='checkout' or status='ready')", True)
 	orders = []
-	totalcost = 0
+	totaloverallcost = 0
 	ready = True
 
 	for data in datas:
@@ -1734,19 +1724,33 @@ def see_user_orders():
 		for k, size in enumerate(sizes):
 			size['key'] = "size-" + str(k)
 
-		if product.price == "":
-			for size in sizes:
-				if size['selected'] == True:
-					cost += quantity * float(size['price'])
-					totalcost += quantity * float(size['price'])
-		else:
-			cost += quantity * float(product.price)
-			totalcost += quantity * float(product.price)
+		if len(callfor) == 0:
+			if product.price == "":
+				for size in sizes:
+					if size['selected'] == True:
+						cost += quantity * float(size['price'])
+						totaloverallcost += quantity * float(size['price'])
+			else:
+				cost += quantity * float(product.price)
+				totaloverallcost += quantity * float(product.price)
 
-		for other in others:
-			if other['selected'] == True:
-				cost += float(other['price'])
-				totalcost += float(other['price'])
+			for other in others:
+				if other['selected'] == True:
+					cost += float(other['price'])
+					totaloverallcost += float(other['price'])
+
+		if len(datas) == 1:
+			pst = cost * 0.08
+			hst = cost * 0.05
+			totalcost = stripeFee(cost + pst + hst, True)
+			nofee = cost + pst + hst
+			fee = totalcost - nofee
+		else:
+			pst = 0.00
+			hst = 0.00
+			totalcost = cost
+			nofee = 0.00
+			fee = 0.00
 
 		orders.append({
 			"key": "cart-item-" + str(data['id']),
@@ -1759,12 +1763,25 @@ def see_user_orders():
 			"others": others,
 			"sizes": sizes,
 			"quantity": quantity,
-			"cost": cost,
+			"price": cost,
+			"pst": pst,
+			"hst": hst,
+			"totalcost": totalcost,
+			"nofee": nofee,
+			"fee": fee,
 			"orderers": len(callfor)
 		})
 
 		if data['status'] == "checkout":
 			ready = False
+
+	totalcost = {}
+	totalcost["price"] = totaloverallcost
+	totalcost["pst"] = totaloverallcost * 0.08 if len(datas) > 1 else 0.00
+	totalcost["hst"] = totaloverallcost * 0.05 if len(datas) > 1 else 0.00
+	totalcost["cost"] = stripeFee(totaloverallcost + totalcost["pst"] + totalcost["hst"], True)
+	totalcost["nofee"] = totaloverallcost + totalcost["pst"] + totalcost["hst"]
+	totalcost["fee"] = totalcost["cost"] - totalcost["nofee"]
 
 	return { "orders": orders, "totalcost": totalcost, "ready": ready }
 
@@ -1858,7 +1875,7 @@ def get_diners_orders(id):
 			user_charges[charge]["paying"] = False
 
 			if amount > 0:
-				user_charges[charge]["charge"] = stripeFee(amount, True) + calcTax(amount)
+				user_charges[charge]["charge"] = stripeFee(amount + calcTax(amount), True)
 				total += float(user_charges[charge]["charge"])
 
 				diners.append(user_charges[charge])

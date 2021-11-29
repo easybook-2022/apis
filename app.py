@@ -21,6 +21,8 @@ from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
 from info import *
 
+app = Flask(__name__)
+
 app.wsgi_app = DispatcherMiddleware(None, {
 	'/flask/dev': dev_controller,
 	'/flask/users': users_controller,

@@ -1,30 +1,12 @@
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, stripe, json, os
+import mysql.connector, pymysql.cursors, json, os
 from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
 from random import randint
-
-local = True
-test_stripe = True
-
-host = 'localhost'
-user = 'geottuse'
-password = 'G3ottu53?'
-database = 'easygo'
-server_url = "0.0.0.0"
-local_url = "192.168.0.172"
-apphost = server_url if local == False else local_url
-stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz" if test_stripe == True else "sk_live_AeoXx4kxjfETP2fTR7IkdTYC"
-test_sms = True
-fee = 0.98
-
-account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"
-auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3b46ac445302a4a0710e95f44c1"
-mss = "MG376dcb41368d7deca0bda395f36bf2a7"
-client = Client(account_sid, auth_token)
+from info import *
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://' + user + ':' + password + '@' + host + '/' + database
@@ -35,8 +17,6 @@ app.config['MYSQL_PASSWORD'] = password
 app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
-mydb = mysql.connector.connect(host=host, user=user, password=password, database=database)
-mycursor = mydb.cursor()
 migrate = Migrate(app, db)
 
 class User(db.Model):
@@ -395,6 +375,7 @@ def get_cart_items(id):
 		datas = Cart.query.filter_by(adder=user.id, status="unlisted").all()
 		items = []
 		active = True if len(datas) > 0 else False
+		total = 0.00
 
 		for data in datas:
 			product = Product.query.filter_by(id=data.productId).first()
@@ -447,16 +428,30 @@ def get_cart_items(id):
 			for k, size in enumerate(sizes):
 				size['key'] = "size-" + str(k)
 
-			if product.price == "":
-				for size in sizes:
-					if size['selected'] == True:
-						cost += quantity * float(size['price'])
-			else:
-				cost += quantity * float(product.price)
+			if len(callfor) == 0:
+				if product.price == "":
+					for size in sizes:
+						if size['selected'] == True:
+							cost += quantity * float(size['price'])
+				else:
+					cost += quantity * float(product.price)
 
-			for other in others:
-				if other['selected'] == True:
-					cost += float(other['price'])
+				for other in others:
+					if other['selected'] == True:
+						cost += float(other['price'])
+
+			if len(datas) == 1:
+				pst = cost * 0.08
+				hst = cost * 0.05
+				totalcost = stripeFee(cost + pst + hst, True)
+				nofee = cost + pst + hst
+				fee = totalcost - nofee
+			else:
+				pst = 0.00
+				hst = 0.00
+				totalcost = cost
+				nofee = 0.00
+				fee = 0.00
 
 			items.append({
 				"key": "cart-item-" + str(data.id),
@@ -469,12 +464,22 @@ def get_cart_items(id):
 				"others": others,
 				"sizes": sizes,
 				"quantity": quantity,
-				"cost": cost,
+				"price": cost,
+				"pst": pst,
+				"hst": hst,
+				"totalcost": totalcost,
+				"nofee": nofee,
+				"fee": fee,
 				"orderers": friends,
 				"status": data.status
 			})
 
-		return { "cartItems": items, "activeCheckout": active }
+			if len(datas) > 1:
+				total += cost
+
+		total = stripeFee(total + calcTax(total), True) if total > 0 else 0
+
+		return { "cartItems": items, "activeCheckout": active, "totalcost": total }
 	else:
 		msg = "User doesn't exist"
 
@@ -762,8 +767,10 @@ def receive_payment():
 				userInfo = User.query.filter_by(id=info).first()
 				customerid = json.loads(userInfo.info)["customerId"]
 
+				chargeamount = stripeFee(charge + calcTax(charge), True)
+
 				stripe.Charge.create(
-					amount=int(charge * 100),
+					amount=int(chargeamount * 100),
 					currency="cad",
 					customer=customerid,
 					transfer_data={
