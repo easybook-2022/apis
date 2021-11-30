@@ -302,7 +302,7 @@ def trialInfo(id, time): # days before over | cardrequired | trialover
 			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
 			status = "notover"
 	else:
-		if cards > 0:
+		if cards == 0:
 			status = "cardrequired"
 		else:
 			status = "trialover"
@@ -317,13 +317,8 @@ def getRanStr():
 
 	return strid
 
-def stripeFee(amount, add):
-	if add == True:
-		amount = (amount + 0.30) / (1 - 0.029)
-	else:
-		amount = (amount * (1 - 0.029) - 0.30)
-
-	return amount
+def stripeFee(amount):
+	return (amount + 0.30) / (1 - 0.029)
 
 def calcTax(amount):
 	pst = 0.08 * amount
@@ -333,6 +328,35 @@ def calcTax(amount):
 
 def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
+
+def customerPay(amount, userid, locationid):
+	chargeamount = stripeFee(amount + calcTax(amount))
+	transferamount = amount + calcTax(amount)
+
+	user = User.query.filter_by(id=userid).first()
+	info = json.loads(user.info)
+	customerid = info["customerId"]
+
+	charge = stripe.Charge.create(
+		amount=int(chargeamount * 100),
+		currency="cad",
+		customer=customerid
+	)
+
+	if locationid != None:
+		location = Location.query.filter_by(id=locationid).first()
+		info = json.loads(location.info)
+		accountid = info["accountId"]
+
+		transfer = stripe.Transfer.create(
+			amount=int(transferamount * 100),
+			currency="cad",
+			destination=accountid,
+		)
+	else:
+		transfer = None
+
+	return charge != None and (transfer != None or locationid == None)
 
 def push(messages):
 	if type(messages) == type([]):
@@ -411,7 +435,7 @@ def get_transactions():
 
 					pst = 0.08 * cost
 					gst = 0.05 * cost
-					total = stripeFee(cost + pst + gst, True)
+					total = stripeFee(cost + pst + gst)
 					nofee = cost + pst + hst
 					fee = total - nofee
 
@@ -436,7 +460,7 @@ def get_transactions():
 					cost = float(cost)
 					pst = 0.08 * cost
 					gst = 0.05 * cost
-					total = stripeFee(cost + pst + gst, True)
+					total = stripeFee(cost + pst + gst)
 					nofee = cost + pst + gst
 					fee = total - nofee
 

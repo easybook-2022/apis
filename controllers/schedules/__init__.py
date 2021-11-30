@@ -302,7 +302,7 @@ def trialInfo(id, time): # days before over | cardrequired | trialover
 			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
 			status = "notover"
 	else:
-		if cards > 0:
+		if cards == 0:
 			status = "cardrequired"
 		else:
 			status = "trialover"
@@ -317,13 +317,8 @@ def getRanStr():
 
 	return strid
 
-def stripeFee(amount, add):
-	if add == True:
-		amount = (amount + 0.30) / (1 - 0.029)
-	else:
-		amount = (amount * (1 - 0.029) - 0.30)
-
-	return amount
+def stripeFee(amount):
+	return (amount + 0.30) / (1 - 0.029)
 
 def calcTax(amount):
 	pst = 0.08 * amount
@@ -333,6 +328,35 @@ def calcTax(amount):
 
 def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
+
+def customerPay(amount, userid, locationid):
+	chargeamount = stripeFee(amount + calcTax(amount))
+	transferamount = amount + calcTax(amount)
+
+	user = User.query.filter_by(id=userid).first()
+	info = json.loads(user.info)
+	customerid = info["customerId"]
+
+	charge = stripe.Charge.create(
+		amount=int(chargeamount * 100),
+		currency="cad",
+		customer=customerid
+	)
+
+	if locationid != None:
+		location = Location.query.filter_by(id=locationid).first()
+		info = json.loads(location.info)
+		accountid = info["accountId"]
+
+		transfer = stripe.Transfer.create(
+			amount=int(transferamount * 100),
+			currency="cad",
+			destination=accountid,
+		)
+	else:
+		transfer = None
+
+	return charge != None and (transfer != None or locationid == None)
 
 def push(messages):
 	if type(messages) == type([]):
@@ -784,7 +808,6 @@ def confirm_request():
 
 					booker = User.query.filter_by(id=userid).first()
 					info = json.loads(booker.info)
-					customerId = info["customerId"]
 
 					stripeCustomer = stripe.Customer.list_sources(
 						customerId,
@@ -794,13 +817,8 @@ def confirm_request():
 					cards = len(stripeCustomer.data)
 
 					if cards > 0 and trialinfo["status"] == "trialover":
-						stripe.Charge.create(
-							amount=50,
-							currency="cad",
-							customer=customerId
-						)
-
-					chargedUser = True
+						customerPay(0.17, userid, None)
+						chargedUser = True
 
 					appointment.customers = json.dumps(customers)
 
@@ -838,11 +856,7 @@ def confirm_request():
 				cards = len(stripeCustomer.data)
 
 				if cards > 0 and trialinfo["status"] == "trialover":
-					stripe.Charge.create(
-						amount=50,
-						currency="cad",
-						customer=customerId
-					)
+					customerPay(0.17, userid, None)
 
 				chargedUser = True
 
@@ -1035,14 +1049,9 @@ def accept_reservation_joining():
 
 						data = User.query.filter_by(id=userid).first()
 						info = json.loads(data.info)
-						customerId = info["customerId"]
 
 						if trialinfo["status"] == "trialover":
-							stripe.Charge.create(
-								amount=50,
-								currency="cad",
-								customer=customerId
-							)
+							customerPay(0.17, userid, None)
 							chargeUser = True
 
 					if diner['status'] == 'confirmed' and diner['userid'] != userid:
@@ -1137,21 +1146,8 @@ def get_diners_payments():
 
 				if paid == False:
 					if allowPayment == True:
-						info = json.loads(user.info)
-
-						customerid = info["customerId"]
-
 						if charge > 0:
-							totalamount = stripeFee(charge + calcTax(charge), True)
-
-							stripe.Charge.create(
-								amount=int(totalamount * 100),
-								currency="cad",
-								customer=customerid,
-								transfer_data={
-									"destination": accountid
-								}
-							)
+							customerPay(totalamount, userid, schedule.locationId)
 
 						charges[userid]["paid"] = True
 						charges[userid]["charge"] = None
@@ -1282,16 +1278,7 @@ def receive_epayment():
 
 				if bankaccounts > 0:
 					if cards > 0:
-						price = stripeFee(price + calcTax(price), True)
-
-						stripe.Charge.create(
-							amount=int(price * 100),
-							currency="cad",
-							customer=customerid,
-							transfer_data={
-								"destination": accountid
-							}
-						)
+						customerPay(price, clientId, locationid)
 					else:
 						msg = "cardrequired"
 						status = "cardrequired"
@@ -1742,7 +1729,7 @@ def see_user_orders():
 		if len(datas) == 1:
 			pst = cost * 0.08
 			hst = cost * 0.05
-			totalcost = stripeFee(cost + pst + hst, True)
+			totalcost = stripeFee(cost + pst + hst)
 			nofee = cost + pst + hst
 			fee = totalcost - nofee
 		else:
@@ -1779,7 +1766,7 @@ def see_user_orders():
 	totalcost["price"] = totaloverallcost
 	totalcost["pst"] = totaloverallcost * 0.08 if len(datas) > 1 else 0.00
 	totalcost["hst"] = totaloverallcost * 0.05 if len(datas) > 1 else 0.00
-	totalcost["cost"] = stripeFee(totaloverallcost + totalcost["pst"] + totalcost["hst"], True)
+	totalcost["cost"] = stripeFee(totaloverallcost + totalcost["pst"] + totalcost["hst"])
 	totalcost["nofee"] = totaloverallcost + totalcost["pst"] + totalcost["hst"]
 	totalcost["fee"] = totalcost["cost"] - totalcost["nofee"]
 
@@ -1875,7 +1862,7 @@ def get_diners_orders(id):
 			user_charges[charge]["paying"] = False
 
 			if amount > 0:
-				user_charges[charge]["charge"] = stripeFee(amount + calcTax(amount), True)
+				user_charges[charge]["charge"] = stripeFee(amount + calcTax(amount))
 				total += float(user_charges[charge]["charge"])
 
 				diners.append(user_charges[charge])

@@ -302,7 +302,7 @@ def trialInfo(id, time): # days before over | cardrequired | trialover
 			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
 			status = "notover"
 	else:
-		if cards > 0:
+		if cards == 0:
 			status = "cardrequired"
 		else:
 			status = "trialover"
@@ -317,13 +317,8 @@ def getRanStr():
 
 	return strid
 
-def stripeFee(amount, add):
-	if add == True:
-		amount = (amount + 0.30) / (1 - 0.029)
-	else:
-		amount = (amount * (1 - 0.029) - 0.30)
-
-	return amount
+def stripeFee(amount):
+	return (amount + 0.30) / (1 - 0.029)
 
 def calcTax(amount):
 	pst = 0.08 * amount
@@ -333,6 +328,35 @@ def calcTax(amount):
 
 def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
+
+def customerPay(amount, userid, locationid):
+	chargeamount = stripeFee(amount + calcTax(amount))
+	transferamount = amount + calcTax(amount)
+
+	user = User.query.filter_by(id=userid).first()
+	info = json.loads(user.info)
+	customerid = info["customerId"]
+
+	charge = stripe.Charge.create(
+		amount=int(chargeamount * 100),
+		currency="cad",
+		customer=customerid
+	)
+
+	if locationid != None:
+		location = Location.query.filter_by(id=locationid).first()
+		info = json.loads(location.info)
+		accountid = info["accountId"]
+
+		transfer = stripe.Transfer.create(
+			amount=int(transferamount * 100),
+			currency="cad",
+			destination=accountid,
+		)
+	else:
+		transfer = None
+
+	return charge != None and (transfer != None or locationid == None)
 
 def push(messages):
 	if type(messages) == type([]):
@@ -443,7 +467,7 @@ def get_cart_items(id):
 			if len(datas) == 1:
 				pst = cost * 0.08
 				hst = cost * 0.05
-				totalcost = stripeFee(cost + pst + hst, True)
+				totalcost = stripeFee(cost + pst + hst)
 				nofee = cost + pst + hst
 				fee = totalcost - nofee
 			else:
@@ -477,7 +501,7 @@ def get_cart_items(id):
 			if len(datas) > 1:
 				total += cost
 
-		total = stripeFee(total + calcTax(total), True) if total > 0 else 0
+		total = stripeFee(total + calcTax(total)) if total > 0 else 0
 
 		return { "cartItems": items, "activeCheckout": active, "totalcost": total }
 	else:
@@ -767,7 +791,7 @@ def receive_payment():
 				userInfo = User.query.filter_by(id=info).first()
 				customerid = json.loads(userInfo.info)["customerId"]
 
-				chargeamount = stripeFee(charge + calcTax(charge), True)
+				chargeamount = stripeFee(charge + calcTax(charge))
 
 				stripe.Charge.create(
 					amount=int(chargeamount * 100),

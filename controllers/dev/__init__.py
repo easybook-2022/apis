@@ -302,7 +302,7 @@ def trialInfo(id, time): # days before over | cardrequired | trialover
 			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
 			status = "notover"
 	else:
-		if cards > 0:
+		if cards == 0:
 			status = "cardrequired"
 		else:
 			status = "trialover"
@@ -317,13 +317,8 @@ def getRanStr():
 
 	return strid
 
-def stripeFee(amount, add):
-	if add == True:
-		amount = (amount + 0.30) / (1 - 0.029)
-	else:
-		amount = (amount * (1 - 0.029) - 0.30)
-
-	return amount
+def stripeFee(amount):
+	return (amount + 0.30) / (1 - 0.029)
 
 def calcTax(amount):
 	pst = 0.08 * amount
@@ -333,6 +328,35 @@ def calcTax(amount):
 
 def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
+
+def customerPay(amount, userid, locationid):
+	chargeamount = stripeFee(amount + calcTax(amount))
+	transferamount = amount + calcTax(amount)
+
+	user = User.query.filter_by(id=userid).first()
+	info = json.loads(user.info)
+	customerid = info["customerId"]
+
+	charge = stripe.Charge.create(
+		amount=int(chargeamount * 100),
+		currency="cad",
+		customer=customerid
+	)
+
+	if locationid != None:
+		location = Location.query.filter_by(id=locationid).first()
+		info = json.loads(location.info)
+		accountid = info["accountId"]
+
+		transfer = stripe.Transfer.create(
+			amount=int(transferamount * 100),
+			currency="cad",
+			destination=accountid,
+		)
+	else:
+		transfer = None
+
+	return charge != None and (transfer != None or locationid == None)
 
 def push(messages):
 	if type(messages) == type([]):
@@ -495,58 +519,53 @@ def reset():
 
 	return { "reset": True }
 
-@app.route("/payout/<id>")
-def payout(id):
-	location = Location.query.filter_by(id=id).first()
+@app.route("/payout")
+def payout():
 	msg = ""
 	status = ""
 
-	if location != None:
-		data = stripe.Balance.retrieve()
-		balance = data.available[0].amount
-		amount = 2.00
+	accounts = stripe.Account.retrieve("acct_1K0w28PNuTzXPjNj").external_accounts.data
+	bankid = ""
 
-		if balance > amount:
-			locationInfo = json.loads(location.info)
-			accountid = locationInfo["accountId"]
+	for account in accounts:
+		if account["default_for_currency"] == True:
+			bankid = account["id"]
 
-			stripe.Transfer.create(
-				amount=int(amount * 100),
-				currency="cad",
-				destination=accountid
-			)
+	payout = stripe.Payout.create(
+		amount=50,
+		currency="cad",
+		destination=bankid
+	)
 
-			return { "msg": "transfer of $ 2.00 to " + location.name + " works" }
-		else:
-			msg = "Balance is " + str(balance) + " which isn't enough"
-	else:
-		msg = "Location doesn't exist"
-
-	return { "errormsg": msg, "status": status }, 400
+	return { "payout": payout }
 
 @app.route("/charge")
 def charge():
-	amount = 10.99
-	chargeamount = stripeFee(amount + calcTax(amount), True)
+	amount = 2.99
+
+	pay = customerPay(amount, 1, 1)
+
+	return { "error": False, "pay": pay }
+
+@app.route("/restore_balance")
+def restore_balance():
+	balance = stripe.Balance.retrieve().available[0].amount
 
 	user = User.query.filter_by(id=1).first()
 	info = json.loads(user.info)
 	customerid = info["customerId"]
 
-	location = Location.query.filter_by(id=1).first()
-	info = json.loads(location.info)
-	accountid = info["accountId"]
+	if balance < 0:
+		balance = -balance
+		balance = balance + 50 if balance < 50 else balance
 
-	stripe.Charge.create(
-		amount=int(chargeamount * 100),
-		currency="cad",
-		customer=customerid,
-		transfer_data={
-			"destination": accountid
-		}
-	)
+		stripe.Charge.create(
+			customer=customerid,
+			amount=balance,
+			currency="cad"
+		)
 
-	return { "error": False, "total": chargeamount, "includetax": amount + calcTax(amount) }
+	return { "balance": balance }
 
 @app.route("/return_all")
 def return_all():
