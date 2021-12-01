@@ -289,12 +289,6 @@ def trialInfo(id, time): # days before over | cardrequired | trialover
 	if "trialstart" in info:
 		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
 			if cards == 0:
-				del info["trialstart"]
-
-				user.info = json.dumps(info)
-
-				db.session.commit()
-
 				status = "cardrequired"
 			else:
 				status = "trialover"
@@ -596,18 +590,17 @@ def return_all():
 def test_deposit():
 	content = request.get_json()
 
-	back = content['back']
-	time = int(content['time'])
+	action = content['action']
 
 	users = User.query.all()
 
 	for user in users:
 		info = json.loads(user.info)
 
-		if back == True:
-			info["trialstart"] -= 1538104484348
-		else:
-			info["trialstart"] = time
+		if action == '-':
+			info["trialstart"] -= 100000000000
+		elif action == '+':
+			info["trialstart"] += 100000000000
 
 		user.info = json.dumps(info)
 

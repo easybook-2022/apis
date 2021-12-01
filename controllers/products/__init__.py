@@ -289,12 +289,6 @@ def trialInfo(id, time): # days before over | cardrequired | trialover
 	if "trialstart" in info:
 		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
 			if cards == 0:
-				del info["trialstart"]
-
-				user.info = json.dumps(info)
-
-				db.session.commit()
-
 				status = "cardrequired"
 			else:
 				status = "trialover"

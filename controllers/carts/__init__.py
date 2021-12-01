@@ -289,12 +289,6 @@ def trialInfo(id, time): # days before over | cardrequired | trialover
 	if "trialstart" in info:
 		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
 			if cards == 0:
-				del info["trialstart"]
-
-				user.info = json.dumps(info)
-
-				db.session.commit()
-
 				status = "cardrequired"
 			else:
 				status = "trialover"
@@ -791,16 +785,7 @@ def receive_payment():
 				userInfo = User.query.filter_by(id=info).first()
 				customerid = json.loads(userInfo.info)["customerId"]
 
-				chargeamount = stripeFee(charge + calcTax(charge))
-
-				stripe.Charge.create(
-					amount=int(chargeamount * 100),
-					currency="cad",
-					customer=customerid,
-					transfer_data={
-						"destination": accountid
-					}
-				)
+				customerPay(charge, info, locationid)
 
 				if pushToken != "":
 					push(pushInfo(

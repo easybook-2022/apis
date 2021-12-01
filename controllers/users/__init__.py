@@ -289,12 +289,6 @@ def trialInfo(id, time): # days before over | cardrequired | trialover
 	if "trialstart" in info:
 		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
 			if cards == 0:
-				del info["trialstart"]
-
-				user.info = json.dumps(info)
-
-				db.session.commit()
-
 				status = "cardrequired"
 			else:
 				status = "trialover"
@@ -910,6 +904,7 @@ def get_notifications(id):
 			options = json.loads(data['options'])
 			others = json.loads(data['others'])
 			sizes = json.loads(data['sizes'])
+			cost = 0
 
 			for k, option in enumerate(options):
 				option["key"] = "option-" + str(len(notifications)) + "-" + str(k)
@@ -919,6 +914,23 @@ def get_notifications(id):
 
 			for k, size in enumerate(sizes):
 				size["key"] = "size-" + str(len(notifications)) + "-" + str(k)
+
+			if product.price == "":
+				for size in sizes:
+					if size["selected"] == True:
+						cost += float(size["price"])
+			else:
+				cost += float(product.price)
+
+			for other in others:
+				if other["selected"] == True:
+					cost += float(other["price"])
+
+			pst = 0.08 * cost
+			hst = 0.05 * cost
+			total = stripeFee(cost + pst + hst)
+			nofee = cost + pst + hst
+			fee = total - nofee
 
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
@@ -931,7 +943,11 @@ def get_notifications(id):
 				"sizes": sizes,
 				"quantity": int(data['quantity']),
 				"adder": { "username": adder.username, "profile": adder.profile },
-				"price": int(data['quantity']) * float(product.price) if product.price != "" else "",
+				"cost": cost,
+				"fee": fee,
+				"pst": pst,
+				"hst": hst,
+				"total": total,
 				"orderNumber": data['orderNumber'],
 				"status": data['status']
 			})
@@ -955,6 +971,7 @@ def get_notifications(id):
 			others = json.loads(data['others'])
 			sizes = json.loads(data['sizes'])
 			friends = []
+			cost = 0
 
 			for info in callfor:
 				friend = User.query.filter_by(id=info['userid']).first()
@@ -974,6 +991,23 @@ def get_notifications(id):
 			for k, size in enumerate(sizes):
 				size["key"] = "size-" + str(len(notifications)) + "-" + str(k)
 
+			if product.price == "":
+				for size in sizes:
+					if size["selected"] == True:
+						cost += float(size["price"])
+			else:
+				cost += float(product.price)
+
+			for other in others:
+				if other["selected"] == True:
+					cost += float(other["price"])
+
+			pst = 0.08 * cost
+			hst = 0.05 * cost
+			total = stripeFee(cost + pst + hst)
+			nofee = cost + pst + hst
+			fee = total - nofee
+
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
 				"type": "cart-order-other",
@@ -986,7 +1020,11 @@ def get_notifications(id):
 				"quantity": int(data['quantity']),
 				"orderers": friends,
 				"adder": { "username": adder.username, "profile": adder.profile },
-				"price": int(data['quantity']) * float(product.price) if product.price != "" else "",
+				"cost": cost,
+				"fee": fee,
+				"pst": pst,
+				"hst": hst,
+				"total": total,
 				"status": data['status'],
 				"orderNumber": data['orderNumber']
 			})
@@ -1015,6 +1053,7 @@ def get_notifications(id):
 								options = orderer['options']
 								others = orderer['others']
 								sizes = orderer['sizes']
+								cost = 0
 
 								for k, option in enumerate(options):
 									option["key"] = "option-" + str(len(notifications)) + "-" + str(k)
@@ -1024,6 +1063,23 @@ def get_notifications(id):
 
 								for k, size in enumerate(sizes):
 									size["key"] = "size-" + str(len(notifications)) + "-" + str(k)
+
+								if product.price == "":
+									for size in sizes:
+										if size["selected"] == True:
+											cost += float(size["price"])
+								else:
+									cost += float(product.price)
+
+								for other in others:
+									if other["selected"] == True:
+										cost += float(other["price"])
+
+								pst = 0.08 * cost
+								hst = 0.05 * cost
+								total = stripeFee(cost + pst + hst)
+								nofee = cost + pst + hst
+								fee = total - nofee
 
 								notifications.append({
 									"key": "order-" + str(len(notifications)),
@@ -1036,7 +1092,11 @@ def get_notifications(id):
 									"sizes": sizes,
 									"quantity": int(orderer['quantity']),
 									"adder": { "username": adder.username, "profile": adder.profile },
-									"price": int(orderer['quantity']) * float(product.price) if product.price != "" else "",
+									"cost": cost,
+									"fee": fee,
+									"pst": pst,
+									"hst": hst,
+									"total": total,
 									"status": "unlisted"
 								})
 
@@ -1057,6 +1117,7 @@ def get_notifications(id):
 			others = json.loads(data['others'])
 			sizes = json.loads(data['sizes'])
 			friends = []
+			cost = 0
 
 			for info in callfor:
 				friend = User.query.filter_by(id=info['userid']).first()
@@ -1076,6 +1137,23 @@ def get_notifications(id):
 			for k, size in enumerate(sizes):
 				size["key"] = "size-" + str(len(notifications)) + "-" + str(k)
 
+			if product.price == "":
+				for size in sizes:
+					if size["selected"] == True:
+						cost += float(size["price"])
+			else:
+				cost += float(product.price)
+
+			for other in others:
+				if other["selected"] == True:
+					cost += float(other["price"])
+
+			pst = 0.08 * cost
+			hst = 0.05 * cost
+			total = stripeFee(cost + pst + hst)
+			nofee = cost + pst + hst
+			fee = total - nofee
+
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
 				"type": "paymentrequested",
@@ -1088,7 +1166,11 @@ def get_notifications(id):
 				"quantity": int(data['quantity']),
 				"orderers": friends,
 				"adder": { "username": adder.username, "profile": adder.profile },
-				"price": int(data['quantity']) * float(product.price) if product.price != "" else ""
+				"cost": cost,
+				"fee": fee,
+				"pst": pst,
+				"hst": hst,
+				"total": total,
 			})
 
 		# get requests

@@ -289,12 +289,6 @@ def trialInfo(id, time): # days before over | cardrequired | trialover
 	if "trialstart" in info:
 		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
 			if cards == 0:
-				del info["trialstart"]
-
-				user.info = json.dumps(info)
-
-				db.session.commit()
-
 				status = "cardrequired"
 			else:
 				status = "trialover"
@@ -1764,8 +1758,8 @@ def see_user_orders():
 
 	totalcost = {}
 	totalcost["price"] = totaloverallcost
-	totalcost["pst"] = totaloverallcost * 0.08 if len(datas) > 1 else 0.00
-	totalcost["hst"] = totaloverallcost * 0.05 if len(datas) > 1 else 0.00
+	totalcost["pst"] = totaloverallcost * 0.08
+	totalcost["hst"] = totaloverallcost * 0.05
 	totalcost["cost"] = stripeFee(totaloverallcost + totalcost["pst"] + totalcost["hst"])
 	totalcost["nofee"] = totaloverallcost + totalcost["pst"] + totalcost["hst"]
 	totalcost["fee"] = totalcost["cost"] - totalcost["nofee"]

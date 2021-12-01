@@ -15,7 +15,7 @@ server_url = "0.0.0.0"
 local_url = "192.168.0.172"
 apphost = server_url if local == False else local_url
 stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz" if test_stripe == True else "sk_live_AeoXx4kxjfETP2fTR7IkdTYC"
-test_sms = True
+test_sms = False
 fee = 0.98
 
 account_sid = "ACc2195555d01f8077e6dcd48adca06d14" if test_sms == True else "AC8c3cd78674e391f0834a086891304e52"

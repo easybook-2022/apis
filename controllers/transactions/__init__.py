@@ -289,12 +289,6 @@ def trialInfo(id, time): # days before over | cardrequired | trialover
 	if "trialstart" in info:
 		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
 			if cards == 0:
-				del info["trialstart"]
-
-				user.info = json.dumps(info)
-
-				db.session.commit()
-
 				status = "cardrequired"
 			else:
 				status = "trialover"
@@ -432,10 +426,9 @@ def get_transactions():
 						if other["selected"] == True:
 							cost += float(other["price"])
 
-
 					pst = 0.08 * cost
-					gst = 0.05 * cost
-					total = stripeFee(cost + pst + gst)
+					hst = 0.05 * cost
+					total = stripeFee(cost + pst + hst)
 					nofee = cost + pst + hst
 					fee = total - nofee
 
@@ -451,7 +444,7 @@ def get_transactions():
 						"cost": cost,
 						"fee": fee,
 						"pst": pst,
-						"gst": gst,
+						"hst": hst,
 						"total": total,
 						"type": "product"
 					})
@@ -459,9 +452,9 @@ def get_transactions():
 				if service != None:
 					cost = float(cost)
 					pst = 0.08 * cost
-					gst = 0.05 * cost
-					total = stripeFee(cost + pst + gst)
-					nofee = cost + pst + gst
+					hst = 0.05 * cost
+					total = stripeFee(cost + pst + hst)
+					nofee = cost + pst + hst
 					fee = total - nofee
 
 					row.append({
@@ -472,7 +465,7 @@ def get_transactions():
 						"cost": cost,
 						"fee": fee,
 						"pst": pst,
-						"gst": gst,
+						"hst": hst,
 						"total": total,
 						"type": "service"
 					})
