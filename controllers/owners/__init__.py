@@ -43,13 +43,15 @@ class Owner(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
+	hours = db.Column(db.Text)
 	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, username, profile, info):
+	def __init__(self, cellnumber, password, username, profile, hours, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
+		self.hours = hours
 		self.info = info
 
 	def __repr__(self):
@@ -452,6 +454,7 @@ def owner_register():
 	confirmPassword = request.form['confirmPassword']
 	profilepath = request.files.get('profile', False)
 	profileexist = False if profilepath == False else True
+	hours = request.form['hours']
 	permission = request.form['permission']
 	msg = ""
 	status = ""
@@ -493,7 +496,7 @@ def owner_register():
 		password = generate_password_hash(password)
 		info = json.dumps({"locationId": "","pushToken": ""})
 
-		owner = Owner(cellnumber, password, username, profilename, info)
+		owner = Owner(cellnumber, password, username, profilename, hours, info)
 		db.session.add(owner)
 		db.session.commit()
 
@@ -510,6 +513,7 @@ def add_owner():
 	confirmPassword = request.form['confirmPassword']
 	profilepath = request.files.get('profile', False)
 	profileexist = False if profilepath == False else True
+	hours = request.form['hours']
 	permission = request.form['permission']
 
 	data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
@@ -555,7 +559,7 @@ def add_owner():
 				info = {"locationId": locationId, "pushToken": ""}
 
 				password = generate_password_hash(password)
-				owner = Owner(cellnumber, password, username, profilename, json.dumps(info))
+				owner = Owner(cellnumber, password, username, profilename, hours, json.dumps(info))
 				db.session.add(owner)
 				db.session.commit()
 
@@ -584,6 +588,7 @@ def update_owner():
 	confirmPassword = request.form['confirmPassword']
 	profilepath = request.files.get('profile', False)
 	profileexist = False if profilepath == False else True
+	hours = request.form['hours']
 	permission = request.form['permission']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
@@ -591,10 +596,12 @@ def update_owner():
 	status = ""
 
 	if owner != None:
-		if username != "":
+		owner.hours = hours
+
+		if username != "" and owner.username != username:
 			owner.username = username
 
-		if cellnumber != "":
+		if cellnumber != "" and owner.cellnumber != cellnumber:
 			owner.cellnumber = cellnumber
 
 		if profileexist == True:
@@ -725,14 +732,66 @@ def get_accounts(id):
 	accounts = []
 
 	for owner in owners:
-		info = Owner.query.filter_by(id=owner).first()
+		ownerInfo = Owner.query.filter_by(id=owner).first()
+
+		hours = [
+			{ "key": "0", "header": "Sunday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "notworking": False },
+			{ "key": "1", "header": "Monday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "notworking": False },
+			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "notworking": False },
+			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "notworking": False },
+			{ "key": "4", "header": "Thursday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "notworking": False },
+			{ "key": "5", "header": "Friday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "notworking": False },
+			{ "key": "6", "header": "Saturday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "notworking": False }
+		]
+
+		data = json.loads(ownerInfo.hours)
+		day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+		for k, info in enumerate(hours):
+			openhour = int(data[day[k][:3]]["opentime"]["hour"])
+			closehour = int(data[day[k][:3]]["closetime"]["hour"])
+			notworking = data[day[k][:3]]["notworking"]
+
+			openperiod = "PM" if openhour > 12 else "AM"
+			openhour = int(openhour)
+
+			if openhour == 0:
+				openhour = "12"
+			elif openhour < 10:
+				openhour = "0" + str(openhour)
+			elif openhour > 12:
+				openhour -= 12
+				openhour = str(openhour)
+
+			closeperiod = "PM" if closehour > 12 else "AM"
+			closehour = int(closehour)
+
+			if closehour == 0:
+				closehour = "12"
+			elif closehour < 10:
+				closehour = "0" + str(closehour)
+			elif closehour > 12:
+				closehour -= 12
+				closehour = str(closehour)
+
+			info["opentime"]["hour"] = openhour
+			info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
+			info["opentime"]["period"] = openperiod
+
+			info["closetime"]["hour"] = closehour
+			info["closetime"]["minute"] = data[day[k][:3]]["closetime"]["minute"]
+			info["closetime"]["period"] = closeperiod
+			info["notworking"] = notworking
+
+			hours[k] = info
 
 		accounts.append({
 			"key": "account-" + str(owner), 
 			"id": owner, 
-			"cellnumber": info.cellnumber,
-			"username": info.username,
-			"profile": info.profile
+			"cellnumber": ownerInfo.cellnumber,
+			"username": ownerInfo.username,
+			"profile": ownerInfo.profile,
+			"hours": hours
 		})
 
 	return { "accounts": accounts }

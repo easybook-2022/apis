@@ -43,13 +43,15 @@ class Owner(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
+	hours = db.Column(db.Text)
 	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, username, profile, info):
+	def __init__(self, cellnumber, password, username, profile, hours, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
+		self.hours = hours
 		self.info = info
 
 	def __repr__(self):
@@ -385,8 +387,6 @@ def get_services():
 	locationid = content['locationid']
 	menuid = content['menuid']
 
-	print(locationid)
-
 	location = Location.query.filter_by(id=locationid).first()
 	msg = ""
 	status = ""
@@ -394,9 +394,10 @@ def get_services():
 	if location != None:
 		datas = Service.query.filter_by(locationId=locationid, menuId=menuid).all()
 		services = []
+		numservices = 0
 
 		if len(datas) > 0:
-			for data in datas:
+			for index, data in enumerate(datas):
 				schedule = Schedule.query.filter_by(userId=userid, serviceId=data.id).first()
 
 				services.append({
@@ -409,6 +410,7 @@ def get_services():
 					"duration": data.duration,
 					"scheduleid": schedule.id if schedule != None else None
 				})
+				numservices += 1
 
 		return { "services": services, "numservices": len(services) }
 	else:
@@ -549,3 +551,23 @@ def remove_service(id):
 		return { "msg": "" }
 
 	return { "errormsg": "Service doesn't exist" }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

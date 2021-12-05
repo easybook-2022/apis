@@ -43,13 +43,15 @@ class Owner(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
+	hours = db.Column(db.Text)
 	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, username, profile, info):
+	def __init__(self, cellnumber, password, username, profile, hours, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
+		self.hours = hours
 		self.info = info
 
 	def __repr__(self):
@@ -408,20 +410,15 @@ def get_products():
 				})
 				numproducts += 1
 
-				if len(row) == 3:
-					products.append({
-						"key": "row-product-" + str(rownum),
-						"row": row
-					})
-
+				if len(row) == 2:
+					products.append({ "key": "row-product-" + str(rownum), "row": row })
 					row = []
 					rownum += 1
 
 			if len(row) > 0:
-				leftover = 3 - len(row)
 				last_key = int(row[-1]['key'].replace("product-", "")) + 1
 
-				for k in range(leftover):
+				if len(row) < 2:
 					row.append({ "key": "product-" + str(last_key) })
 					last_key += 1
 

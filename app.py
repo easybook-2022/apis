@@ -30,6 +30,7 @@ app.config['MYSQL_PASSWORD'] = password
 app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -55,13 +56,15 @@ class Owner(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
+	hours = db.Column(db.Text)
 	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, username, profile, info):
+	def __init__(self, cellnumber, password, username, profile, hours, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
+		self.hours = hours
 		self.info = info
 
 	def __repr__(self):

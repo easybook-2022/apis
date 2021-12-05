@@ -43,13 +43,15 @@ class Owner(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
+	hours = db.Column(db.Text)
 	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, username, profile, info):
+	def __init__(self, cellnumber, password, username, profile, hours, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
+		self.hours = hours
 		self.info = info
 
 	def __repr__(self):
@@ -390,24 +392,42 @@ def get_menus():
 
 	if location != None:
 		datas = query("select * from menu where locationId = " + str(locationid) + " and parentMenuId = '" + str(parentMenuid) + "'", True)
+		row = []
+		rownum = 0
 		menus = []
+		nummenus = 0
 
 		if len(datas) > 0:
-			for data in datas:
+			for index, data in enumerate(datas):
 				numCategories = 0
 				numCategories += query("select count(*) as num from product where menuId = " + str(data['id']), True)[0]["num"]
 				numCategories += query("select count(*) as num from service where menuId = " + str(data['id']), True)[0]["num"]
 
-				menus.append({
-					"key": "menu-" + str(data['id']),
+				row.append({
+					"key": "menu-" + str(index),
 					"id": data['id'],
 					"numCategories": numCategories,
 					"name": data['name'],
 					"info": data['info'],
 					"image": data['image'],
 				})
+				nummenus += 1
 
-		return { "menus": menus, "nummenus": len(menus) }
+				if len(row) == 2:
+					menus.append({ "key": "row-menu-" + str(rownum),"row": row })
+					row = []
+					rownum += 1
+
+			if len(row) > 0:
+				last_key = int(row[-1]['key'].replace("menu-", "")) + 1
+
+				if len(row) < 2:
+					rownum += 1
+					row.append({ "key": "menu-" + str(last_key) })
+
+				menus.append({ "key": "row-menu-" + str(rownum), "row": row })
+
+		return { "menus": menus, "nummenus": nummenus }
 	else:
 		msg = "Location doesn't exist"
 
@@ -460,14 +480,14 @@ def get_menu_info(id):
 
 @app.route("/save_menu", methods=["POST"])
 def save_menu():
-	id = request.form['id']
+	menuid = request.form['menuid']
 	name = request.form['name']
 	info = request.form['info']
 	imagepath = request.files.get('image', False)
 	imageexist = False if imagepath == False else True
 	permission = request.form['permission']
 
-	menu = Menu.query.filter_by(id=id).first()
+	menu = Menu.query.filter_by(id=menuid).first()
 	msg = ""
 	status = ""
 
@@ -497,7 +517,6 @@ def save_menu():
 
 @app.route("/add_menu", methods=["POST"])
 def add_menu():
-	ownerid = request.form['ownerid']
 	locationid = request.form['locationid']
 	parentMenuid = request.form['parentmenuid']
 	name = request.form['name']
@@ -509,39 +528,39 @@ def add_menu():
 	status = ""
 
 	if name != '':
-		owner = Owner.query.filter_by(id=ownerid).first()
+		location = Location.query.filter_by(id=locationid).first()
 
-		if owner != None:
-			location = Location.query.filter_by(id=locationid).first()
+		if location != None:
+			data = query("select * from menu where locationId = " + str(locationid) + " and (parentMenuId = '" + str(parentMenuid) + "' and name = '" + name + "')", True)
 
-			if location != None:
-				data = query("select * from menu where locationId = " + str(locationid) + " and (parentMenuId = '" + str(parentMenuid) + "' and name = '" + name + "')", True)
+			if len(data) == 0:
+				imagename = ""
+				if imageexist == True:
+					image = request.files['image']
+					imagename = image.filename
 
-				if len(data) == 0:
-					imagename = ""
-					if imageexist == True:
-						image = request.files['image']
-						imagename = image.filename
-
-						image.save(os.path.join("static", imagename))
-					else:
-						if permission == "true":
-							msg = "Take a good picture of your menu"
-					
-					if msg == "":
-						menu = Menu(locationid, parentMenuid, name, info, imagename)
-
-						db.session.add(menu)
-						db.session.commit()
-						
-						return { "id": menu.id }
+					image.save(os.path.join("static", imagename))
 				else:
-					msg = "Menu already exist"
+					if permission == "true":
+						msg = "Take a good picture of your menu"
+				
+				if msg == "":
+					menu = Menu(locationid, parentMenuid, name, info, imagename)
+
+					db.session.add(menu)
+					db.session.commit()
+					
+					return { "id": menu.id }
 			else:
-				msg = "Location doesn't exist"
+				msg = "Menu already exist"
 		else:
-			msg = "User doesn't exist"
+			msg = "Location doesn't exist"
 	else:
 		msg = "Name is blank"
 
 	return { "errormsg": msg, "status": status }, 400
+
+
+
+
+

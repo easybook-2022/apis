@@ -43,13 +43,15 @@ class Owner(db.Model):
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(25))
+	hours = db.Column(db.Text)
 	info = db.Column(db.String(120))
 
-	def __init__(self, cellnumber, password, username, profile, info):
+	def __init__(self, cellnumber, password, username, profile, hours, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
 		self.profile = profile
+		self.hours = hours
 		self.info = info
 
 	def __repr__(self):
@@ -536,7 +538,6 @@ def update_user():
 	cellnumber = request.form['cellnumber']
 	profilepath = request.files.get('profile', False)
 	profileexist = False if profilepath == False else True
-	permission = request.form['permission']
 
 	user = User.query.filter_by(id=userid).first()
 	msg = ""
@@ -562,13 +563,14 @@ def update_user():
 			msg = "This username is already taken"
 			status = "sameusername"
 
-		exist_cellnumber = User.query.filter_by(cellnumber=cellnumber).count()
+		userInfo = User.query.filter_by(cellnumber=cellnumber).first()
 
-		if exist_cellnumber == 0:
+		if userInfo == None:
 			user.cellnumber = cellnumber
 		else:
-			msg = "This cell number is already taken"
-			status = "samecellnumber"
+			if userInfo.id != str(userid):
+				msg = "This cell number is already taken"
+				status = "samecellnumber"
 
 		info = json.loads(user.info)
 		customerid = info["customerId"]
