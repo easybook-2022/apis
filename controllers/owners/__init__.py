@@ -140,6 +140,7 @@ class Service(db.Model):
 class Schedule(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	userId = db.Column(db.Integer)
+	workerId = db.Column(db.Integer)
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	serviceId = db.Column(db.Text)
@@ -154,8 +155,9 @@ class Schedule(db.Model):
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(75))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
+		self.workerId = workerId
 		self.locationId = locationId
 		self.menuId = menuId
 		self.serviceId = serviceId
@@ -274,34 +276,37 @@ def query(sql, output):
 		return results
 
 def trialInfo(id, time): # days before over | cardrequired | trialover
-	user = User.query.filter_by(id=id).first()
-	info = json.loads(user.info)
+	# user = User.query.filter_by(id=id).first()
+	# info = json.loads(user.info)
 
-	customerid = info['customerId']
+	# customerid = info['customerId']
 
-	stripeCustomer = stripe.Customer.list_sources(
-		customerid,
-		object="card",
-		limit=1
-	)
-	cards = len(stripeCustomer.data)
-	status = ""
-	days = 0
+	# stripeCustomer = stripe.Customer.list_sources(
+	# 	customerid,
+	# 	object="card",
+	# 	limit=1
+	# )
+	# cards = len(stripeCustomer.data)
+	# status = ""
+	# days = 0
 
-	if "trialstart" in info:
-		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
-			if cards == 0:
-				status = "cardrequired"
-			else:
-				status = "trialover"
-		else:
-			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
-			status = "notover"
-	else:
-		if cards == 0:
-			status = "cardrequired"
-		else:
-			status = "trialover"
+	# if "trialstart" in info:
+	# 	if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
+	# 		if cards == 0:
+	# 			status = "cardrequired"
+	# 		else:
+	# 			status = "trialover"
+	# 	else:
+	# 		days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
+	# 		status = "notover"
+	# else:
+	# 	if cards == 0:
+	# 		status = "cardrequired"
+	# 	else:
+	# 		status = "trialover"
+
+	days = 30
+	status = "notover"
 
 	return { "days": days, "status": status }
 
@@ -599,10 +604,22 @@ def update_owner():
 		owner.hours = hours
 
 		if username != "" and owner.username != username:
-			owner.username = username
+			exist_username = Owner.query.filter_by(username=username).count()
+
+			if exist_username == 0:
+				owner.username = username
+			else:
+				msg = "The username is already taken"
+				status = "sameusername"
 
 		if cellnumber != "" and owner.cellnumber != cellnumber:
-			owner.cellnumber = cellnumber
+			exist_cellnumber = Owner.query.filter_by(cellnumber=cellnumber).count()
+
+			if exist_cellnumber == 0:
+				owner.cellnumber = cellnumber
+			else:
+				msg = "This cell number is already taken"
+				status = "samecellnumber"
 
 		if profileexist == True:
 			profile = request.files['profile']
@@ -664,6 +681,121 @@ def owner_update_notification_token():
 		msg = "User doesn't exist"
 
 	return { "errormsg": msg, "status": status }, 400
+
+@app.route("/get_workers/<id>")
+def get_workers(id):
+	errormsg = ""
+	status = ""
+
+	days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+	location = Location.query.filter_by(id=id).first()
+
+	if location != None:
+		datas = query("select * from owner where info like '%\"locationId\": \"" + str(id) + "\"%'", True)
+		owners = []
+		row = []
+		key = 0
+
+		for data in datas:
+			row.append({
+				"key": "worker-" + str(key),
+				"id": data['id'],
+				"username": data['username'],
+				"profile": data["profile"],
+				"selected": False
+			})
+			key += 1
+
+			if len(row) >= 3:
+				owners.append({ "key": str(len(owners)), "row": row })
+				row = []
+
+		if len(row) > 0 and len(row) < 3:
+			leftover = 3 - len(row)
+
+			for k in range(leftover):
+				row.append({ "key": "worker-" + str(key) })
+				key += 1
+
+			owners.append({ "key": str(len(owners)), "row": row })
+
+		return { "msg": "get workers", "owners": owners }
+	else:
+		errormsg = "Location doesn't exist"
+		
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/get_worker_info/<id>")
+def get_worker_info(id):
+	errormsg = ""
+	status = ""
+
+	owner = Owner.query.filter_by(id=id).first()
+	days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+	if owner != None:
+		hours = json.loads(owner.hours)
+		info = {}
+
+		for day in days:
+			info[day] = {
+				"start": hours[day]["opentime"]["hour"] + ":" + hours[day]["opentime"]["minute"],
+				"end": hours[day]["closetime"]["hour"] + ":" + hours[day]["closetime"]["minute"],
+				"working": hours[day]["working"]
+			}
+
+		return { "days": info }
+	else:
+		errormsg = "Owner doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/search_workers", methods=["POST"])
+def search_workers():
+	content = request.get_json()
+
+	scheduleid = content['scheduleid']
+	username = content['username']
+
+	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	errormsg = ""
+	status = ""
+
+	if schedule != None:
+		locationId = str(schedule.locationId)
+		datas = query("select * from owner where username like '%" + username + "%' and info like '%\"locationId\": \"" + str(locationId) + "\"%'", True)
+		owners = []
+		row = []
+		key = 0
+
+		for data in datas:
+			row.append({
+				"key": "worker-" + str(key),
+				"id": data['id'],
+				"username": data['username'],
+				"profile": data["profile"],
+				"selected": False
+			})
+			key += 1
+
+			if len(row) == 3:
+				owners.append({ "key": str(len(owners)), "row": row })
+				row = []
+
+		if len(row) > 0 and len(row) < 3:
+			leftover = 3 - len(row)
+
+			for k in range(leftover):
+				row.append({ "key": "worker-" + str(key) })
+				key += 1
+
+			owners.append({ "key": str(len(owners)), "row": row })
+
+		return { "msg": "get searched workers", "owners": owners }
+	else:
+		errormsg = "Schedule doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/add_bankaccount", methods=["POST"])
 def add_bankaccount():
@@ -735,13 +867,13 @@ def get_accounts(id):
 		ownerInfo = Owner.query.filter_by(id=owner).first()
 
 		hours = [
-			{ "key": "0", "header": "Sunday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "notworking": False },
-			{ "key": "1", "header": "Monday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "notworking": False },
-			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "notworking": False },
-			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "notworking": False },
-			{ "key": "4", "header": "Thursday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "notworking": False },
-			{ "key": "5", "header": "Friday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "notworking": False },
-			{ "key": "6", "header": "Saturday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "notworking": False }
+			{ "key": "0", "header": "Sunday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
+			{ "key": "1", "header": "Monday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
+			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
+			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
+			{ "key": "4", "header": "Thursday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
+			{ "key": "5", "header": "Friday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
+			{ "key": "6", "header": "Saturday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True }
 		]
 
 		data = json.loads(ownerInfo.hours)
@@ -750,29 +882,27 @@ def get_accounts(id):
 		for k, info in enumerate(hours):
 			openhour = int(data[day[k][:3]]["opentime"]["hour"])
 			closehour = int(data[day[k][:3]]["closetime"]["hour"])
-			notworking = data[day[k][:3]]["notworking"]
+			working = data[day[k][:3]]["working"]
 
 			openperiod = "PM" if openhour > 12 else "AM"
 			openhour = int(openhour)
 
 			if openhour == 0:
-				openhour = "12"
-			elif openhour < 10:
-				openhour = "0" + str(openhour)
+				openhour = 12
 			elif openhour > 12:
 				openhour -= 12
-				openhour = str(openhour)
+
+			openhour = "0" + str(openhour) if openhour < 10 else str(openhour)
 
 			closeperiod = "PM" if closehour > 12 else "AM"
 			closehour = int(closehour)
 
 			if closehour == 0:
-				closehour = "12"
-			elif closehour < 10:
-				closehour = "0" + str(closehour)
+				closehour = 12
 			elif closehour > 12:
 				closehour -= 12
-				closehour = str(closehour)
+				
+			closehour = "0" + str(closehour) if closehour < 10 else str(closehour)
 
 			info["opentime"]["hour"] = openhour
 			info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
@@ -781,7 +911,7 @@ def get_accounts(id):
 			info["closetime"]["hour"] = closehour
 			info["closetime"]["minute"] = data[day[k][:3]]["closetime"]["minute"]
 			info["closetime"]["period"] = closeperiod
-			info["notworking"] = notworking
+			info["working"] = working
 
 			hours[k] = info
 

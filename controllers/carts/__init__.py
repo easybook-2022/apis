@@ -140,6 +140,7 @@ class Service(db.Model):
 class Schedule(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	userId = db.Column(db.Integer)
+	workerId = db.Column(db.Integer)
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	serviceId = db.Column(db.Text)
@@ -154,8 +155,9 @@ class Schedule(db.Model):
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(75))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
+		self.workerId = workerId
 		self.locationId = locationId
 		self.menuId = menuId
 		self.serviceId = serviceId
@@ -274,34 +276,37 @@ def query(sql, output):
 		return results
 
 def trialInfo(id, time): # days before over | cardrequired | trialover
-	user = User.query.filter_by(id=id).first()
-	info = json.loads(user.info)
+	# user = User.query.filter_by(id=id).first()
+	# info = json.loads(user.info)
 
-	customerid = info['customerId']
+	# customerid = info['customerId']
 
-	stripeCustomer = stripe.Customer.list_sources(
-		customerid,
-		object="card",
-		limit=1
-	)
-	cards = len(stripeCustomer.data)
-	status = ""
-	days = 0
+	# stripeCustomer = stripe.Customer.list_sources(
+	# 	customerid,
+	# 	object="card",
+	# 	limit=1
+	# )
+	# cards = len(stripeCustomer.data)
+	# status = ""
+	# days = 0
 
-	if "trialstart" in info:
-		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
-			if cards == 0:
-				status = "cardrequired"
-			else:
-				status = "trialover"
-		else:
-			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
-			status = "notover"
-	else:
-		if cards == 0:
-			status = "cardrequired"
-		else:
-			status = "trialover"
+	# if "trialstart" in info:
+	# 	if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
+	# 		if cards == 0:
+	# 			status = "cardrequired"
+	# 		else:
+	# 			status = "trialover"
+	# 	else:
+	# 		days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
+	# 		status = "notover"
+	# else:
+	# 	if cards == 0:
+	# 		status = "cardrequired"
+	# 	else:
+	# 		status = "trialover"
+
+	days = 30
+	status = "notover"
 
 	return { "days": days, "status": status }
 
@@ -388,7 +393,7 @@ def get_num_items(id):
 @app.route("/get_cart_items/<id>")
 def get_cart_items(id):
 	user = User.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -477,33 +482,95 @@ def get_cart_items(id):
 				"key": "cart-item-" + str(data.id),
 				"id": str(data.id),
 				"name": product.name,
-				"productId": product.id,
-				"note": data.note,
-				"image": product.image,
-				"options": options,
-				"others": others,
-				"sizes": sizes,
-				"quantity": quantity,
-				"price": cost,
-				"pst": pst,
-				"hst": hst,
-				"totalcost": totalcost,
-				"nofee": nofee,
-				"fee": fee,
-				"orderers": friends,
-				"status": data.status
+				"productId": product.id, "note": data.note, "image": product.image, "options": options, "others": others,
+				"sizes": sizes, "quantity": quantity, "price": cost, "pst": pst, "hst": hst,
+				"totalcost": totalcost, "nofee": nofee, "fee": fee, "orderers": friends, "status": data.status
 			})
 
 			if len(datas) > 1:
 				total += cost
 
-		total = stripeFee(total + calcTax(total)) if total > 0 else 0
+		if len(datas) > 1:
+			pst = total * 0.08
+			hst = total * 0.05
+			totalcost = stripeFee(total + pst + hst)
+			nofee = total + pst + hst
+			fee = totalcost - nofee
 
-		return { "cartItems": items, "activeCheckout": active, "totalcost": total }
+			overallTotal = {
+				"pst": pst,
+				"hst": hst,
+				"total": total,
+				"totalcost": totalcost,
+				"nofee": nofee,
+				"fee": fee
+			}
+		else:
+			overallTotal = None
+
+		return { "cartItems": items, "activeCheckout": active, "totalcost": overallTotal }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/get_cart_items_total/<id>")
+def get_cart_items_total(id):
+	user = User.query.filter_by(id=id).first()
+	errormsg = ""
+	status = ""
+
+	if user != None:
+		datas = Cart.query.filter_by(adder=user.id, status="unlisted").all()
+		total = 0.00
+
+		for data in datas:
+			product = Product.query.filter_by(id=data.productId).first()
+			quantity = int(data.quantity)
+			callfor = json.loads(data.callfor)
+			options = json.loads(data.options)
+			others = json.loads(data.others)
+			sizes = json.loads(data.sizes)
+			cost = 0
+
+			if len(callfor) == 0:
+				if product.price == "":
+					for size in sizes:
+						if size['selected'] == True:
+							cost += quantity * float(size['price'])
+				else:
+					cost += quantity * float(product.price)
+
+				for other in others:
+					if other['selected'] == True:
+						cost += float(other['price'])
+
+			if len(datas) > 1:
+				total += cost
+
+		if len(datas) > 1:
+			pst = total * 0.08
+			hst = total * 0.05
+			totalcost = stripeFee(total + pst + hst)
+			nofee = total + pst + hst
+			fee = totalcost - nofee
+
+			overallTotal = {
+				"pst": pst,
+				"hst": hst,
+				"total": total,
+				"totalcost": totalcost,
+				"nofee": nofee,
+				"fee": fee
+			}
+		else:
+			overallTotal = None
+
+		return { "totalCost": overallTotal }
+	else:
+		errormsg = "User doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/add_item_to_cart", methods=["POST"])
 def add_item_to_cart():

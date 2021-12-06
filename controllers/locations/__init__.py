@@ -141,6 +141,7 @@ class Service(db.Model):
 class Schedule(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	userId = db.Column(db.Integer)
+	workerId = db.Column(db.Integer)
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	serviceId = db.Column(db.Text)
@@ -155,8 +156,9 @@ class Schedule(db.Model):
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(75))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
+		self.workerId = workerId
 		self.locationId = locationId
 		self.menuId = menuId
 		self.serviceId = serviceId
@@ -275,34 +277,37 @@ def query(sql, output):
 		return results
 
 def trialInfo(id, time): # days before over | cardrequired | trialover
-	user = User.query.filter_by(id=id).first()
-	info = json.loads(user.info)
+	# user = User.query.filter_by(id=id).first()
+	# info = json.loads(user.info)
 
-	customerid = info['customerId']
+	# customerid = info['customerId']
 
-	stripeCustomer = stripe.Customer.list_sources(
-		customerid,
-		object="card",
-		limit=1
-	)
-	cards = len(stripeCustomer.data)
-	status = ""
-	days = 0
+	# stripeCustomer = stripe.Customer.list_sources(
+	# 	customerid,
+	# 	object="card",
+	# 	limit=1
+	# )
+	# cards = len(stripeCustomer.data)
+	# status = ""
+	# days = 0
 
-	if "trialstart" in info:
-		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
-			if cards == 0:
-				status = "cardrequired"
-			else:
-				status = "trialover"
-		else:
-			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
-			status = "notover"
-	else:
-		if cards == 0:
-			status = "cardrequired"
-		else:
-			status = "trialover"
+	# if "trialstart" in info:
+	# 	if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
+	# 		if cards == 0:
+	# 			status = "cardrequired"
+	# 		else:
+	# 			status = "trialover"
+	# 	else:
+	# 		days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
+	# 		status = "notover"
+	# else:
+	# 	if cards == 0:
+	# 		status = "cardrequired"
+	# 	else:
+	# 		status = "trialover"
+
+	days = 30
+	status = "notover"
 
 	return { "days": days, "status": status }
 
@@ -862,6 +867,8 @@ def get_more_locations():
 @app.route("/get_location_profile", methods=["POST"])
 def get_location_profile():
 	content = request.get_json()
+	errormsg = ""
+	status = ""
 
 	locationid = content['locationid']
 
@@ -1096,6 +1103,18 @@ def get_info():
 	locationid = content['locationid']
 	menuid = content['menuid']
 
+	if 'longitude' in content:
+		geolocation = True
+
+		if content['longitude'] != None:
+			longitude = float(content['longitude'])
+			latitude = float(content['latitude'])
+		else:
+			longitude = content['longitude']
+			latitude = content['latitude']
+	else:
+		geolocation = False
+
 	location = Location.query.filter_by(id=locationid).first()
 
 	if location != None:
@@ -1125,13 +1144,42 @@ def get_info():
 			menuInfo = menu.info
 
 		if num_menus > 0:
-			return { "msg": "menus", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
+			info = { "msg": "menus", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
 		elif num_services > 0:
-			return { "msg": "services", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
+			info = { "msg": "services", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
 		elif num_products > 0:
-			return { "msg": "products", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
+			info = { "msg": "products", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
 		else:
-			return { "msg": "", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
+			info = { "msg": "", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
+
+		if geolocation == True:
+			point1 = (longitude, latitude)
+			point2 = (float(location.longitude), float(location.latitude))
+			distance = haversine(point1, point2)
+
+			if distance < 1:
+				distance *= 1000
+				distance = str(round(distance, 1)) + " m away"
+			else:
+				distance = str(round(distance, 1)) + " km away"
+		else:
+			distance = None
+
+		locationInfo = {
+			"name": location.name,
+			"addressOne": location.addressOne,
+			"addressTwo": location.addressTwo,
+			"city": location.city,
+			"province": location.province,
+			"postalcode": location.postalcode,
+			"phonenumber": location.phonenumber,
+			"distance": distance,
+			"logo": location.logo
+		}
+
+		info["info"] = locationInfo
+
+		return info
 	else:
 		errormsg = "Location doesn't exist"
 
@@ -1225,94 +1273,5 @@ def get_hours():
 		return { "openTime": openTime, "closeTime": closeTime, "scheduled": times }
 	else:
 		errormsg = "Location doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/get_workers/<id>")
-def get_workers(id):
-	schedule = Schedule.query.filter_by(id=id).first()
-	errormsg = ""
-	status = ""
-
-	if schedule != None:
-		locationId = schedule.locationId
-		datas = query("select * from owner where info like '%\"locationId\": \"" + str(locationId) + "\"%'", True)
-		owners = []
-		row = []
-		key = 0
-
-		for data in datas:
-			row.append({
-				"key": "worker-" + str(key),
-				"id": data['id'],
-				"username": data['username'],
-				"profile": data["profile"],
-				"selected": False
-			})
-			key += 1
-
-			if len(row) >= 3:
-				owners.append({ "key": str(len(owners)), "row": row })
-				row = []
-
-		if len(row) > 0 and len(row) < 3:
-			leftover = 3 - len(row)
-
-			for k in range(leftover):
-				row.append({ "key": "worker-" + str(key) })
-				key += 1
-
-			owners.append({ "key": str(len(owners)), "row": row })
-
-		return { "msg": "get workers", "owners": owners }
-	else:
-		errormsg = "Schedule doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/search_workers", methods=["POST"])
-def search_workers():
-	content = request.get_json()
-
-	scheduleid = content['scheduleid']
-	username = content['username']
-
-	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	errormsg = ""
-	status = ""
-
-	if schedule != None:
-		locationId = str(schedule.locationId)
-		datas = query("select * from owner where username like '%" + username + "%' and info like '%\"locationId\": \"" + str(locationId) + "\"%'", True)
-		owners = []
-		row = []
-		key = 0
-
-		for data in datas:
-			row.append({
-				"key": "worker-" + str(key),
-				"id": data['id'],
-				"username": data['username'],
-				"profile": data["profile"],
-				"selected": False
-			})
-			key += 1
-
-			if len(row) == 3:
-				owners.append({ "key": str(len(owners)), "row": row })
-				row = []
-
-		if len(row) > 0 and len(row) < 3:
-			leftover = 3 - len(row)
-
-			for k in range(leftover):
-				row.append({ "key": "worker-" + str(key) })
-				key += 1
-
-			owners.append({ "key": str(len(owners)), "row": row })
-
-		return { "msg": "get searched workers", "owners": owners }
-	else:
-		errormsg = "Schedule doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400

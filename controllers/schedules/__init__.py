@@ -140,6 +140,7 @@ class Service(db.Model):
 class Schedule(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	userId = db.Column(db.Integer)
+	workerId = db.Column(db.Integer)
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	serviceId = db.Column(db.Text)
@@ -154,8 +155,9 @@ class Schedule(db.Model):
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(75))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
+		self.workerId = workerId
 		self.locationId = locationId
 		self.menuId = menuId
 		self.serviceId = serviceId
@@ -274,34 +276,37 @@ def query(sql, output):
 		return results
 
 def trialInfo(id, time): # days before over | cardrequired | trialover
-	user = User.query.filter_by(id=id).first()
-	info = json.loads(user.info)
+	# user = User.query.filter_by(id=id).first()
+	# info = json.loads(user.info)
 
-	customerid = info['customerId']
+	# customerid = info['customerId']
 
-	stripeCustomer = stripe.Customer.list_sources(
-		customerid,
-		object="card",
-		limit=1
-	)
-	cards = len(stripeCustomer.data)
-	status = ""
-	days = 0
+	# stripeCustomer = stripe.Customer.list_sources(
+	# 	customerid,
+	# 	object="card",
+	# 	limit=1
+	# )
+	# cards = len(stripeCustomer.data)
+	# status = ""
+	# days = 0
 
-	if "trialstart" in info:
-		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
-			if cards == 0:
-				status = "cardrequired"
-			else:
-				status = "trialover"
-		else:
-			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
-			status = "notover"
-	else:
-		if cards == 0:
-			status = "cardrequired"
-		else:
-			status = "trialover"
+	# if "trialstart" in info:
+	# 	if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
+	# 		if cards == 0:
+	# 			status = "cardrequired"
+	# 		else:
+	# 			status = "trialover"
+	# 	else:
+	# 		days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
+	# 		status = "notover"
+	# else:
+	# 	if cards == 0:
+	# 		status = "cardrequired"
+	# 	else:
+	# 		status = "trialover"
+
+	days = 30
+	status = "notover"
 
 	return { "days": days, "status": status }
 
@@ -379,14 +384,19 @@ def welcome_schedules():
 
 	return { "msg": "welcome to schedules of easygo", "schedules": schedules }
 
-@app.route("/get_requests/<id>")
-def get_requests(id):
-	location = Location.query.filter_by(id=id).first()
-	msg = ""
+@app.route("/get_requests", methods=["POST"])
+def get_requests():
+	content = request.get_json()
+
+	ownerid = content['ownerid']
+	locationid = content['locationid']
+
+	location = Location.query.filter_by(id=locationid).first()
+	errormsg = ""
 	status = ""
 
 	if location != None:
-		datas = query("select * from schedule where locationId = " + str(id) + " and (status = 'requested' or status = 'change' or status = 'accepted')", True)
+		datas = query("select * from schedule where locationId = " + str(locationid) + " and (status = 'requested' or status = 'change' or status = 'accepted')", True)
 		requests = []
 
 		for data in datas:
@@ -397,10 +407,21 @@ def get_requests(id):
 
 			user = User.query.filter_by(id=data['userId']).first()
 
+			if data['workerId'] > -1:
+				owner = Owner.query.filter_by(id=data['workerId']).first()
+
+				worker = {
+					"id": data['workerId'],
+					"username": owner.username
+				}
+			else:
+				worker = None
+
 			requests.append({
 				"key": "request-" + str(data['id']),
 				"id": str(data['id']),
 				"type": data['locationType'],
+				"worker": worker,
 				"userId": user.id,
 				"username": user.username,
 				"time": int(data['nextTime']) if data['nextTime'] != "" else int(data['time']),
@@ -414,9 +435,9 @@ def get_requests(id):
 
 		return { "requests": requests, "numrequests": len(requests) }
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_appointment_info/<id>")
 def get_appointment_info(id):
@@ -556,6 +577,7 @@ def request_appointment():
 	content = request.get_json()
 
 	userid = content['userid']
+	workerid = content['workerid']
 	locationid = content['locationid']
 	serviceid = content['serviceid']
 	oldtime = content['oldtime']
@@ -649,7 +671,7 @@ def request_appointment():
 						return { "msg": "appointment re-requested", "status": "requested", "receiver": receiver }
 			else: # new schedule
 				info = json.dumps({"allowpayment": False,"chargedUser": False,"workerId":0,"cut": locationInfo["cut"]})
-				appointment = Schedule(userid, locationid, service.menuId, serviceid, time, "requested", '', '', location.type, 1, note, '[]', '', info)
+				appointment = Schedule(userid, workerid, locationid, service.menuId, serviceid, time, "requested", '', '', location.type, 1, note, '[]', '', info)
 
 				db.session.add(appointment)
 				db.session.commit()
@@ -696,6 +718,23 @@ def accept_request():
 		location = Location.query.filter_by(id=locationId).first()
 		appointment.status = "accepted"
 		appointment.table = tablenum
+
+		if 'ownerid' in content:
+			workerId = appointment.workerId
+
+			if workerId == -1:
+				appointment.workerId = content['ownerid']
+
+				owner = Owner.query.filter_by(id=content['ownerid']).first()
+			else:
+				owner = Owner.query.filter_by(id=workerId).first()
+
+			worker = {
+				"id": owner.id,
+				"username": owner.username
+			}
+		else:
+			worker = None
 
 		if appointment.nextTime != "":
 			appointment.time = appointment.nextTime
@@ -760,7 +799,7 @@ def accept_request():
 			resp = { "status": "ok" }
 
 		if resp["status"] == "ok":
-			return { "msg": "Appointment accepted", "receivers": receivers }
+			return { "msg": "Appointment accepted", "receivers": receivers, "worker": worker }
 
 		msg = "Push notification failed"
 	else:
@@ -836,7 +875,7 @@ def confirm_request():
 
 			# charge user for first time appointment acceptance
 			if info["chargedUser"] == False:
-				info["chargedUser"] = True
+				#info["chargedUser"] = True
 
 				appointment.info = json.dumps(info)
 
@@ -912,11 +951,14 @@ def cancel_request():
 
 			db.session.commit()
 
-			customers = json.loads(appointment.customers)
 			receiver = []
+			if '[' in appointment.customers:
+				customers = json.loads(appointment.customers)
 
-			for customer in customers:
-				receiver.append("user" + str(customer["userid"]))
+				for customer in customers:
+					receiver.append("user" + str(customer["userid"]))
+			else:
+				receiver.append("user" + str(appointment.userId))
 
 			user = User.query.filter_by(id=appointment.userId).first()
 			info = json.loads(user.info)
@@ -1355,7 +1397,7 @@ def receive_inpersonpayment():
 			customerid = clientInfo["customerId"]
 			price = float(service.price)
 
-			if info["allowpayment"] == True and info["workerId"] == str(ownerid):
+			if info["workerId"] == str(ownerid):
 				groupId = ""
 
 				for k in range(20):
@@ -1387,12 +1429,8 @@ def receive_inpersonpayment():
 				else:
 					msg = "Push notification failed"
 			else:
-				if info["allowpayment"] == False:
-					msg = "Client hasn't allowed payment yet"
-					status = "paymentunsent"
-				else:
-					msg = "Only the worker of this client can receive payment"
-					status = "wrongworker"
+				msg = "Only the worker of this client can receive payment"
+				status = "wrongworker"
 		else:
 			msg = "Location doesn't exist"
 	else:
@@ -1584,9 +1622,14 @@ def send_dining_payment():
 
 	return { "errormsg": msg, "status": status }, 400
 
-@app.route("/get_appointments/<id>")
-def get_appointments(id):
-	datas = query("select * from schedule where locationId = " + str(id) + " and status = 'confirmed'", True)
+@app.route("/get_appointments", methods=["POST"])
+def get_appointments():
+	content = request.get_json()
+
+	ownerid = content['ownerid']
+	locationid = content['locationid']
+
+	datas = query("select * from schedule where locationId = " + str(locationid) + " and status = 'confirmed' and (workerId = -1 or workerId = " + str(ownerid) + ")", True)
 	appointments = []
 
 	for data in datas:
@@ -1594,10 +1637,16 @@ def get_appointments(id):
 		service = Service.query.filter_by(id=data['serviceId']).first()
 		info = json.loads(data["info"])
 
+		client = {
+			"id": data['userId'],
+			"username": user.username
+		}
+
 		appointments.append({
 			"key": "appointment-" + str(data['id']),
 			"id": str(data['id']),
 			"username": user.username,
+			"client": client,
 			"time": int(data['time']),
 			"name": service.name,
 			"image": service.image,

@@ -140,6 +140,7 @@ class Service(db.Model):
 class Schedule(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	userId = db.Column(db.Integer)
+	workerId = db.Column(db.Integer)
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	serviceId = db.Column(db.Text)
@@ -154,8 +155,9 @@ class Schedule(db.Model):
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(75))
 
-	def __init__(self, userId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
+		self.workerId = workerId
 		self.locationId = locationId
 		self.menuId = menuId
 		self.serviceId = serviceId
@@ -274,34 +276,37 @@ def query(sql, output):
 		return results
 
 def trialInfo(id, time): # days before over | cardrequired | trialover
-	user = User.query.filter_by(id=id).first()
-	info = json.loads(user.info)
+	# user = User.query.filter_by(id=id).first()
+	# info = json.loads(user.info)
 
-	customerid = info['customerId']
+	# customerid = info['customerId']
 
-	stripeCustomer = stripe.Customer.list_sources(
-		customerid,
-		object="card",
-		limit=1
-	)
-	cards = len(stripeCustomer.data)
-	status = ""
-	days = 0
+	# stripeCustomer = stripe.Customer.list_sources(
+	# 	customerid,
+	# 	object="card",
+	# 	limit=1
+	# )
+	# cards = len(stripeCustomer.data)
+	# status = ""
+	# days = 0
 
-	if "trialstart" in info:
-		if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
-			if cards == 0:
-				status = "cardrequired"
-			else:
-				status = "trialover"
-		else:
-			days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
-			status = "notover"
-	else:
-		if cards == 0:
-			status = "cardrequired"
-		else:
-			status = "trialover"
+	# if "trialstart" in info:
+	# 	if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
+	# 		if cards == 0:
+	# 			status = "cardrequired"
+	# 		else:
+	# 			status = "trialover"
+	# 	else:
+	# 		days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
+	# 		status = "notover"
+	# else:
+	# 	if cards == 0:
+	# 		status = "cardrequired"
+	# 	else:
+	# 		status = "trialover"
+
+	days = 30
+	status = "notover"
 
 	return { "days": days, "status": status }
 
@@ -544,6 +549,26 @@ def update_user():
 	status = ""
 
 	if user != None:
+		if username != "":
+			if user.username != username:
+				exist_username = User.query.filter_by(username=username).count()
+
+				if exist_username == 0:
+					user.username = username
+				else:
+					msg = "This username is already taken"
+					status = "sameusername"
+
+		if cellnumber != "":
+			if user.cellnumber != cellnumber:
+				exist_cellnumber = User.query.filter_by(cellnumber=cellnumber).first()
+
+				if exist_cellnumber == 0:
+					user.cellnumber = cellnumber
+				else:
+					msg = "This cell number is already taken"
+					status = "samecellnumber"
+
 		if profileexist == True:
 			profile = request.files['profile']
 			newprofilename = profile.filename
@@ -554,23 +579,6 @@ def update_user():
 
 			profile.save(os.path.join('static', newprofilename))
 			user.profile = newprofilename
-
-		exist_username = User.query.filter_by(username=username).count()
-
-		if exist_username == 0:
-			user.username = username
-		else:
-			msg = "This username is already taken"
-			status = "sameusername"
-
-		userInfo = User.query.filter_by(cellnumber=cellnumber).first()
-
-		if userInfo == None:
-			user.cellnumber = cellnumber
-		else:
-			if userInfo.id != str(userid):
-				msg = "This cell number is already taken"
-				status = "samecellnumber"
 
 		info = json.loads(user.info)
 		customerid = info["customerId"]
@@ -1215,6 +1223,15 @@ def get_notifications(id):
 				charges = orders["charges"]
 				allowPayment = charges[str(userId)]["allowpayment"] if str(userId) in charges else False
 
+			if data["workerId"] > -1:
+				owner = Owner.query.filter_by(id=data["workerId"]).first()
+
+				worker = {
+					"id": data["workerId"],
+					"username": owner.username
+				}
+			else:
+				worker = None
 
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
@@ -1222,6 +1239,7 @@ def get_notifications(id):
 				"id": str(data['id']),
 				"locationid": data['locationId'],
 				"location": location.name,
+				"worker": worker,
 				"menuid": int(data['menuId']) if data['menuId'] != "" else "",
 				"serviceid": int(data['serviceId']) if data['serviceId'] != "" else "",
 				"service": service.name if service != None else "",
