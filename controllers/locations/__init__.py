@@ -276,7 +276,7 @@ def query(sql, output):
 
 		return results
 
-def trialInfo(id, time): # days before over | cardrequired | trialover
+def trialInfo(): # days before over | cardrequired | trialover (id, time)
 	# user = User.query.filter_by(id=id).first()
 	# info = json.loads(user.info)
 
@@ -1075,12 +1075,11 @@ def make_reservation():
 							"allowpayment": False,
 							"paid": False
 						}
-					customers.append({ "status": "waiting", "userid": str(userid) })
 
 					orders = json.dumps({"groups": [], "charges": charges })
 					info = json.dumps({"donedining": False, "dinersseated": False, "cut": int(info["cut"]) })
 
-					schedule = Schedule(userid, locationid, "", "", time, "requested", '', '', location.type, json.dumps(customers), note, orders, '', info)
+					schedule = Schedule(userid, -1, locationid, "", "", time, "requested", '', '', location.type, json.dumps(customers), note, orders, '', info)
 
 					db.session.add(schedule)
 					db.session.commit()

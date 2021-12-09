@@ -275,7 +275,7 @@ def query(sql, output):
 
 		return results
 
-def trialInfo(id, time): # days before over | cardrequired | trialover
+def trialInfo(): # days before over | cardrequired | trialover (id, time)
 	# user = User.query.filter_by(id=id).first()
 	# info = json.loads(user.info)
 
@@ -493,7 +493,7 @@ def save_menu():
 	permission = request.form['permission']
 
 	menu = Menu.query.filter_by(id=menuid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if menu != None:
@@ -516,9 +516,9 @@ def save_menu():
 
 		return { "msg": "menu info updated" }
 	else:
-		msg = "Menu doesn't exist"
+		errormsg = "Menu doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/add_menu", methods=["POST"])
 def add_menu():

@@ -275,7 +275,7 @@ def query(sql, output):
 
 		return results
 
-def trialInfo(id, time): # days before over | cardrequired | trialover
+def trialInfo(): # days before over | cardrequired | trialover (id, time)
 	# user = User.query.filter_by(id=id).first()
 	# info = json.loads(user.info)
 

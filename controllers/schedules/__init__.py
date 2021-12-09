@@ -275,7 +275,7 @@ def query(sql, output):
 
 		return results
 
-def trialInfo(id, time): # days before over | cardrequired | trialover
+def trialInfo(): # days before over | cardrequired | trialover (id, time)
 	# user = User.query.filter_by(id=id).first()
 	# info = json.loads(user.info)
 
@@ -468,7 +468,7 @@ def get_appointment_info(id):
 @app.route("/get_reservation_info/<id>")
 def get_reservation_info(id):
 	schedule = Schedule.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -477,21 +477,40 @@ def get_reservation_info(id):
 		location = Location.query.filter_by(id=locationId).first()
 
 		if location != None:
+			customers = json.loads(schedule.customers)
+			row = []
+			rownum = 0
+			column = []
+
+			for customer in customers:
+				user = User.query.filter_by(id=customer["userid"]).first()
+
+				rownum += 1
+				row.append({ "key": "selected-friend-" + str(rownum), "id": user.id, "profile": user.profile })
+
+				if len(row) == 3:
+					column.append({ "key": "selected-friend-row-" + str(len(column)), "row": row })
+					row = []
+
+			if len(row) > 0:
+				column.append({ "key": "selected-friend-row-" + str(len(column)), "row": row })
+
 			info = {
 				"locationId": locationId,
 				"name": location.name,
-				"diners": len(json.loads(schedule.customers)),
+				"numdiners": len(json.loads(schedule.customers)),
+				"diners": column,
 				"note": schedule.note,
 				"table": schedule.table
 			}
 
 			return { "reservationInfo": info }
 		else:
-			msg = "Location doesn't exist"
+			errormsg = "Location doesn't exist"
 	else:
-		msg = "Reservation doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/reschedule_appointment", methods=["POST"])
 def reschedule_appointment():
@@ -820,12 +839,16 @@ def confirm_request():
 	status = ""
 
 	if appointment != None:
-		trialinfo = trialInfo(userid, time)
+		trialinfo = trialInfo()
 		locationId = str(appointment.locationId)
+		user = User.query.filter_by(id=userid).first()
 		location = Location.query.filter_by(id=locationId).first()
 		service = Service.query.filter_by(id=appointment.serviceId).first()
 		chargedUser = False
 		pushids = []
+
+		info = json.loads(user.info)
+		customerId = info["customerId"]
 
 		if appointment.nextTime != "":
 			appointment.time = appointment.nextTime
@@ -878,11 +901,6 @@ def confirm_request():
 				#info["chargedUser"] = True
 
 				appointment.info = json.dumps(info)
-
-				booker = User.query.filter_by(id=userid).first()
-				info = json.loads(booker.info)
-				customerId = info["customerId"]
-
 				stripeCustomer = stripe.Customer.list_sources(
 					customerId,
 					object="card",
@@ -1076,6 +1094,7 @@ def accept_reservation_joining():
 				confirmed = False
 				receiver = ["user" + str(schedule.userId)]
 				chargeUser = False
+				trialinfo = trialInfo()
 
 				for k, diner in enumerate(diners):
 					if diner['userid'] == userid:
@@ -1137,6 +1156,28 @@ def add_diner():
 
 	return { "errormsg": msg, "status": status }, 400
 
+@app.route("/cancel_reservation/<id>")
+def cancel_reservation(id):
+	schedule = Schedule.query.filter_by(id=id).first()
+	errormsg = ""
+	status = ""
+
+	if schedule != None:
+		customers = json.loads(schedule.customers)
+		receiver = []
+
+		for customer in customers:
+			receiver.append("user" + str(customer["userid"]))
+
+		db.session.delete(schedule)
+		db.session.commit()
+
+		return { "msg": "Schedule cancelled", "receiver": receiver }
+	else:
+		errormsg = "Schedule doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
 @app.route("/done_dining/<id>")
 def done_dining(id):
 	user_orders = []
@@ -1185,7 +1226,7 @@ def get_diners_payments():
 				if paid == False:
 					if allowPayment == True:
 						if charge > 0:
-							customerPay(totalamount, userid, schedule.locationId)
+							customerPay(charge, userid, schedule.locationId)
 
 						charges[userid]["paid"] = True
 						charges[userid]["charge"] = None
@@ -1697,6 +1738,7 @@ def search_customers():
 @app.route("/get_cart_orderers/<id>")
 def get_cart_orderers(id):
 	datas = query("select adder, orderNumber from cart where locationId = " + str(id) + " and (status = 'checkout' or status = 'ready') group by adder, orderNumber", True)
+	numCartorderers = query("select count(*) as num from cart where locationId = " + str(id) + " and (status = 'checkout' or status = 'ready') group by adder, orderNumber", True)
 	cartOrderers = []
 
 	for k, data in enumerate(datas):
@@ -1722,7 +1764,12 @@ def get_cart_orderers(id):
 			"orderNumber": data['orderNumber']
 		})
 
-	return { "cartOrderers": cartOrderers }
+	if len(numCartorderers) > 0:
+		numCartorderers = len(numCartorderers)
+	else:
+		numCartorderers = 0
+
+	return { "cartOrderers": cartOrderers, "numCartorderers": numCartorderers }
 
 @app.route("/see_user_orders", methods=["POST"])
 def see_user_orders():

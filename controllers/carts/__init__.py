@@ -275,7 +275,7 @@ def query(sql, output):
 
 		return results
 
-def trialInfo(id, time): # days before over | cardrequired | trialover
+def trialInfo(): # days before over | cardrequired | trialover (id, time)
 	# user = User.query.filter_by(id=id).first()
 	# info = json.loads(user.info)
 
@@ -715,7 +715,7 @@ def order_ready():
 	ordernumber = content['ordernumber']
 
 	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if location != None:
@@ -745,13 +745,13 @@ def order_ready():
 
 				return { "msg": "Order ready" }
 
-			msg = "Push notification failed"
+			errormsg = "Push notification failed"
 		else:
-			msg = "Order doesn't exist"
+			errormsg = "Order doesn't exist"
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/receive_payment", methods=["POST"])
 def receive_payment():
@@ -764,7 +764,7 @@ def receive_payment():
 
 	user = User.query.filter_by(id=userid).first()
 	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None and location != None:
@@ -782,94 +782,98 @@ def receive_payment():
 			charges = {}
 			totalPaying = 0.00
 
-			for data in datas:
-				groupId = ""
+			if len(datas) > 0:
+				for data in datas:
+					groupId = ""
 
-				for k in range(20):
-					groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
+					for k in range(20):
+						groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
 
-				product = Product.query.filter_by(id=data['productId']).first()
-				location = Location.query.filter_by(id=product.locationId).first()
-				sizes = json.loads(data['sizes'])
-				others = json.loads(data['others'])
-				quantity = int(data['quantity'])
-				cost = 0
+					product = Product.query.filter_by(id=data['productId']).first()
+					location = Location.query.filter_by(id=product.locationId).first()
+					sizes = json.loads(data['sizes'])
+					others = json.loads(data['others'])
+					quantity = int(data['quantity'])
+					cost = 0
 
-				if product.price == "":
-					for size in sizes:
-						if size["selected"] == True:
-							cost += quantity * float(size["price"])
-				else:
-					cost += quantity * float(product.price)
-
-				for other in others:
-					if other['selected'] == True:
-						cost += float(other['price'])
-
-				quantity = int(data['quantity'])
-				callfor = json.loads(data['callfor'])
-				options = data['options']
-				others = data['others']
-				sizes = json.dumps(sizes)
-				friends = []
-
-				if len(callfor) > 0:
-					for info in callfor:
-						friends.append(str(info['userid']))
-						friend = User.query.filter_by(id=info['userid']).first()
-						friendInfo = json.loads(friend.info)
-						friendid = str(info['userid'])
-
-						if friendid in charges:
-							charges[friendid]["charge"] += float(cost)
-						else:
-							charges[friendid] = {
-								"charge": float(cost),
-								"pushToken": friendInfo["pushToken"]
-							}
-				else:
-					userInfo = User.query.filter_by(id=userid).first()
-					info = json.loads(userInfo.info)
-
-					if userid in charges:
-						charges[userid]["charge"] += float(cost)
+					if product.price == "":
+						for size in sizes:
+							if size["selected"] == True:
+								cost += quantity * float(size["price"])
 					else:
-						charges[userid] = {
-							"charge": float(cost),
-							"pushToken": info["pushToken"]
-						}
+						cost += quantity * float(product.price)
 
-				for k in range(quantity):
-					transaction = Transaction(groupId, 0, product.id, 0, adder, json.dumps(friends), options, others, sizes, time)
+					for other in others:
+						if other['selected'] == True:
+							cost += float(other['price'])
 
-					db.session.add(transaction)
-					db.session.commit()
+					quantity = int(data['quantity'])
+					callfor = json.loads(data['callfor'])
+					options = data['options']
+					others = data['others']
+					sizes = json.dumps(sizes)
+					friends = []
 
-				query("delete from cart where id = " + str(data['id']), False)
+					if len(callfor) > 0:
+						for info in callfor:
+							friends.append(str(info['userid']))
+							friend = User.query.filter_by(id=info['userid']).first()
+							friendInfo = json.loads(friend.info)
+							friendid = str(info['userid'])
 
-			for info in charges:
-				charge = charges[info]["charge"]
-				pushToken = charges[info]["pushToken"]
+							if friendid in charges:
+								charges[friendid]["charge"] += float(cost)
+							else:
+								charges[friendid] = {
+									"charge": float(cost),
+									"pushToken": friendInfo["pushToken"]
+								}
+					else:
+						userInfo = User.query.filter_by(id=userid).first()
+						info = json.loads(userInfo.info)
 
-				userInfo = User.query.filter_by(id=info).first()
-				customerid = json.loads(userInfo.info)["customerId"]
+						if userid in charges:
+							charges[userid]["charge"] += float(cost)
+						else:
+							charges[userid] = {
+								"charge": float(cost),
+								"pushToken": info["pushToken"]
+							}
 
-				customerPay(charge, info, locationid)
+					for k in range(quantity):
+						transaction = Transaction(groupId, 0, product.id, 0, adder, json.dumps(friends), options, others, sizes, time)
 
-				if pushToken != "":
-					push(pushInfo(
-						pushToken,
-						"Payment sent",
-						"Your payment of " + str(charge) + " was charged",
-						content
-					))
+						db.session.add(transaction)
+						db.session.commit()
+
+					query("delete from cart where id = " + str(data['id']), False)
+
+				for info in charges:
+					charge = charges[info]["charge"]
+					pushToken = charges[info]["pushToken"]
+
+					userInfo = User.query.filter_by(id=info).first()
+					customerid = json.loads(userInfo.info)["customerId"]
+
+					customerPay(charge, info, locationid)
+
+					if pushToken != "":
+						push(pushInfo(
+							pushToken,
+							"Payment sent",
+							"Your payment of " + str(charge) + " was charged",
+							content
+						))
 			
-			return { "msg": "Order delivered and payment made" }
+				return { "msg": "Order delivered and payment made" }
+			else:
+				errormsg = "Order doesn't exist"
+				status = "nonexist"
 		else:
-			msg = "Bank account required"
+			errormsg = "Bank account required"
 			status = "bankaccountrequired"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/edit_cart_item/<id>")
 def edit_cart_item(id):
