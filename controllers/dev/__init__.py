@@ -513,7 +513,10 @@ def reset():
 	customers = stripe.Customer.list().data
 
 	for account in accounts:
-		stripe.Account.delete(account.id)
+		try:
+			stripe.Account.delete(account.id)
+		except:
+			print(account.id)
 
 	for customer in customers:
 		stripe.Customer.delete(customer.id)

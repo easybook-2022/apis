@@ -464,9 +464,14 @@ def remove_menu(id):
 
 	return { "errormsg": msg, "status": status }, 400
 
-@app.route("/get_menu_info/<id>")
-def get_menu_info(id):
-	menu = Menu.query.filter_by(id=id).first()
+@app.route("/get_menu_info", methods=["POST"])
+def get_menu_info():
+	content = request.get_json()
+
+	parentMenuid = content['parentMenuid']
+	menuid = content['menuid']
+
+	menu = Menu.query.filter_by(id=menuid, parentMenuId=parentMenuid).first()
 	msg = ""
 	status = ""
 
