@@ -67,8 +67,8 @@ class Location(db.Model):
 	postalcode = db.Column(db.String(7))
 	phonenumber = db.Column(db.String(10), unique=True)
 	logo = db.Column(db.String(20))
-	longitude = db.Column(db.String(15))
-	latitude = db.Column(db.String(15))
+	longitude = db.Column(db.String(20))
+	latitude = db.Column(db.String(20))
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
@@ -401,22 +401,25 @@ def owner_login():
 
 			if check_password_hash(owner['password'], password):
 				ownerid = owner['id']
+				ownerhours = owner['hours']
 
 				data = query("select * from location where owners like '%\"" + str(ownerid) + "\"%'", True)
-				storeName = data[0]["name"] if len(data) > 0 else ""
 
-				if len(data) == 0 or storeName == "":
-					return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": "", "locationtype": "", "msg": "setup" }
-				else:
-					data = data[0]
+				if len(data) == 1:
+					location = data[0]
+					locationid = location['id']
+					locationtype = location['type']
+					locationhours = location['hours']
 
-					if data['type'] != "":
-						if data['hours'] != "":
-							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": data['id'], "locationtype": data['type'], "msg": "main" }
-						else:
-							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": data['id'], "locationtype": data['type'], "msg": "setuphours" }
+					if locationhours != '{}' and ownerhours != '{}':
+						return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "main" }
 					else:
-						return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": data['id'], "locationtype": "", "msg": "typesetup" }
+						if locationhours == '{}':
+							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": "", "msg": "locationsetup" }
+						else:
+							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "workinghours" }
+				else:
+					return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": None, "locationtype": "", "msg": "locationsetup" }
 			else:
 				msg = "Password is incorrect"
 		else:
@@ -459,7 +462,6 @@ def owner_register():
 	confirmPassword = request.form['confirmPassword']
 	profilepath = request.files.get('profile', False)
 	profileexist = False if profilepath == False else True
-	hours = request.form['hours']
 	permission = request.form['permission']
 	msg = ""
 	status = ""
@@ -501,7 +503,7 @@ def owner_register():
 		password = generate_password_hash(password)
 		info = json.dumps({"locationId": "","pushToken": ""})
 
-		owner = Owner(cellnumber, password, username, profilename, hours, info)
+		owner = Owner(cellnumber, password, username, profilename, '{}', info)
 		db.session.add(owner)
 		db.session.commit()
 

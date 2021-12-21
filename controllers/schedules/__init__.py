@@ -67,8 +67,8 @@ class Location(db.Model):
 	postalcode = db.Column(db.String(7))
 	phonenumber = db.Column(db.String(10), unique=True)
 	logo = db.Column(db.String(20))
-	longitude = db.Column(db.String(15))
-	latitude = db.Column(db.String(15))
+	longitude = db.Column(db.String(20))
+	latitude = db.Column(db.String(20))
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
@@ -516,6 +516,7 @@ def get_reservation_info(id):
 def reschedule_appointment():
 	content = request.get_json()
 
+	ownerid = content['ownerid']
 	appointmentid = content['appointmentid']
 	time = content['time']
 
@@ -531,6 +532,7 @@ def reschedule_appointment():
 			schedule.status = "rebook"
 			schedule.nextTime = time
 			schedule.info = json.dumps(info)
+			schedule.workerId = ownerid
 
 			db.session.commit()
 
@@ -538,6 +540,12 @@ def reschedule_appointment():
 			service = Service.query.filter_by(id=schedule.serviceId).first()
 			user = User.query.filter_by(id=schedule.userId).first()
 			userInfo = json.loads(user.info)
+
+			workerInfo = Owner.query.filter_by(id=ownerid).first()
+			worker = {
+				"id": ownerid,
+				"username": workerInfo.username
+			}
 
 			if userInfo["pushToken"] != "":
 				resp = push(pushInfo(
@@ -550,7 +558,7 @@ def reschedule_appointment():
 				resp = { "status": "ok" }
 
 			if resp["status"] == "ok":
-				return { "msg": "appointment rescheduled", "receiver": "user" + str(schedule.userId) }
+				return { "msg": "appointment rescheduled", "receiver": "user" + str(schedule.userId), "worker": worker }
 			else:
 				msg = "Push notification failed"
 
@@ -1432,46 +1440,51 @@ def receive_inpersonpayment():
 		if location != None and service != None:
 			locationInfo = json.loads(location.info)
 			clientId = schedule.userId
+			workerId = int(info["workerId"])
 
 			client = User.query.filter_by(id=clientId).first()
 			clientInfo = json.loads(client.info)
 			customerid = clientInfo["customerId"]
 			price = float(service.price)
 
-			if info["workerId"] == str(ownerid):
-				groupId = ""
+			if workerId > 0:
+				if info["workerId"] == str(ownerid):
+					groupId = ""
 
-				for k in range(20):
-					groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
+					for k in range(20):
+						groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
 
-				transaction = Transaction(groupId, locationid, 0, schedule.serviceId, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
+					transaction = Transaction(groupId, locationid, 0, schedule.serviceId, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
 
-				db.session.add(transaction)
-				db.session.delete(schedule)
-				db.session.commit()
+					db.session.add(transaction)
+					db.session.delete(schedule)
+					db.session.commit()
 
-				user = User.query.filter_by(id=schedule.userId).first()
-				userInfo = json.loads(user.info)
+					user = User.query.filter_by(id=schedule.userId).first()
+					userInfo = json.loads(user.info)
 
-				if userInfo["pushToken"] != "":
-					resp = push(pushInfo(
-						userInfo["pushToken"],
-						"Payment received by salon",
-						location.name + " has received your payment for service: " + service.name,
-						content
-					))
+					if userInfo["pushToken"] != "":
+						resp = push(pushInfo(
+							userInfo["pushToken"],
+							"Payment received by salon",
+							location.name + " has received your payment for service: " + service.name,
+							content
+						))
+					else:
+						resp = { "status": "ok" }
+
+					if resp["status"] == "ok":
+						receiver = ["user" + str(schedule.userId)]
+
+						return { "msg": "Payment received", "clientName": client.username, "name": service.name, "price": service.price, "receiver": receiver }
+					else:
+						msg = "Push notification failed"
 				else:
-					resp = { "status": "ok" }
-
-				if resp["status"] == "ok":
-					receiver = ["user" + str(schedule.userId)]
-
-					return { "msg": "Payment received", "clientName": client.username, "name": service.name, "price": service.price, "receiver": receiver }
-				else:
-					msg = "Push notification failed"
+					msg = "Only the worker of this client can receive payment"
+					status = "wrongworker"
 			else:
-				msg = "Only the worker of this client can receive payment"
-				status = "wrongworker"
+				msg = "The client hasn't allowed payment yet"
+				status = "unallowedpayment"
 		else:
 			msg = "Location doesn't exist"
 	else:

@@ -68,8 +68,8 @@ class Location(db.Model):
 	postalcode = db.Column(db.String(7))
 	phonenumber = db.Column(db.String(10), unique=True)
 	logo = db.Column(db.String(20))
-	longitude = db.Column(db.String(15))
-	latitude = db.Column(db.String(15))
+	longitude = db.Column(db.String(20))
+	latitude = db.Column(db.String(20))
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
@@ -394,10 +394,13 @@ def setup_location():
 	city = request.form['city']
 	province = request.form['province']
 	postalcode = request.form['postalcode']
+	hours = request.form['hours']
+	type = request.form['type']
 	logopath = request.files.get('logo', False)
 	logoexist = False if logopath == False else True
 	longitude = request.form['longitude']
 	latitude = request.form['latitude']
+	hours = request.form['hours']
 	ownerid = request.form['ownerid']
 	time = request.form['time']
 	ipAddress = request.form['ipAddress']
@@ -479,7 +482,7 @@ def setup_location():
 					name, addressOne, addressTwo, 
 					city, province, postalcode, phonenumber, logoname,
 					longitude, latitude, '["' + str(ownerid) + '"]',
-					'', '', locationInfo
+					type, hours, locationInfo
 				)
 				db.session.add(location)
 				db.session.commit()
@@ -661,22 +664,16 @@ def set_hours():
 	content = request.get_json()
 
 	ownerid = content['ownerid']
-	locationid = content['locationid']
 	hours = content['hours']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
 
 	if owner != None:
-		location = Location.query.filter_by(id=locationid).first()
+		owner.hours = json.dumps(hours)
 
-		if location != None:
-			location.hours = json.dumps(hours)
+		db.session.commit()
 
-			db.session.commit()
-
-			return { "msg": "hours updated" }
-		else:
-			errormsg = "Location doesn't exist"
+		return { "msg": "hours updated" }
 	else:
 		errormsg = "Owner doesn't exist"
 
