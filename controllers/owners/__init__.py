@@ -659,6 +659,24 @@ def update_owner():
 
 	return { "errormsg": msg, "status": status }, 400
 		
+@app.route("/set_hours", methods=["POST"])
+def set_hours():
+	content = request.get_json()
+
+	ownerid = content['ownerid']
+	hours = content['hours']
+
+	owner = Owner.query.filter_by(id=ownerid).first()
+
+	if owner != None:
+		owner.hours = json.dumps(hours)
+
+		db.session.commit()
+
+		return { "msg": "hours updated" }
+	else:
+		errormsg = "Owner doesn't exist"
+
 @app.route("/update_notification_token", methods=["POST"])
 def owner_update_notification_token():
 	content = request.get_json()

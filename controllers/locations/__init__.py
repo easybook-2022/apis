@@ -663,19 +663,19 @@ def set_type():
 def set_hours():
 	content = request.get_json()
 
-	ownerid = content['ownerid']
+	locationid = content['locationid']
 	hours = content['hours']
 
-	owner = Owner.query.filter_by(id=ownerid).first()
+	location = Location.query.filter_by(id=locationid).first()
 
-	if owner != None:
-		owner.hours = json.dumps(hours)
+	if location != None:
+		location.hours = json.dumps(hours)
 
 		db.session.commit()
 
 		return { "msg": "hours updated" }
 	else:
-		errormsg = "Owner doesn't exist"
+		errormsg = "Location doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
