@@ -393,7 +393,7 @@ def get_services():
 	menuid = content['menuid']
 
 	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if location != None:
@@ -419,14 +419,14 @@ def get_services():
 
 		return { "services": services, "numservices": len(services) }
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_service_info/<id>")
 def get_service_info(id):
 	service = Service.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if service != None:
@@ -440,9 +440,9 @@ def get_service_info(id):
 
 		return { "serviceInfo": info }
 	else:
-		msg = "Service doesn't exist"
+		errormsg = "Service doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/add_service", methods=["POST"])
 def add_service():
@@ -457,7 +457,7 @@ def add_service():
 	permission = request.form['permission']
 
 	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if location != None:
@@ -472,9 +472,9 @@ def add_service():
 				image.save(os.path.join("static", imagename))
 			else:
 				if permission == "true":
-					msg = "Please take a good photo"
+					errormsg = "Please take a good photo"
 
-			if msg == "":
+			if errormsg == "":
 				service = Service(locationid, menuid, name, info, imagename, price, duration)
 
 				db.session.add(service)
@@ -482,11 +482,11 @@ def add_service():
 
 				return { "id": service.id }
 		else:
-			msg = "Service already exist"
+			errormsg = "Service already exist"
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/update_service", methods=["POST"])
 def update_service():
@@ -502,7 +502,7 @@ def update_service():
 	permission = request.form['permission']
 
 	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if location != None:
@@ -527,18 +527,18 @@ def update_service():
 					service.image = newimagename
 			else:
 				if permission == "true":
-					msg = "Please take a good photo"
+					errormsg = "Please take a good photo"
 
-			if msg == "":
+			if errormsg == "":
 				db.session.commit()
 
 				return { "msg": "service updated", "id": service.id }
 		else:
-			msg = "Service already exist"
+			errormsg = "Service already exist"
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/remove_service/<id>")
 def remove_service(id):

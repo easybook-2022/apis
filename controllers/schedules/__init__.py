@@ -442,7 +442,7 @@ def get_requests():
 @app.route("/get_appointment_info/<id>")
 def get_appointment_info(id):
 	schedule = Schedule.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -459,11 +459,11 @@ def get_appointment_info(id):
 
 			return { "appointmentInfo": info }
 		else:
-			msg = "Service doesn't exist"
+			errormsg = "Service doesn't exist"
 	else:
-		msg = "Appointment doesn't exist"
+		errormsg = "Appointment doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_reservation_info/<id>")
 def get_reservation_info(id):
@@ -521,7 +521,7 @@ def reschedule_appointment():
 	time = content['time']
 
 	schedule = Schedule.query.filter_by(id=appointmentid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -560,13 +560,13 @@ def reschedule_appointment():
 			if resp["status"] == "ok":
 				return { "msg": "appointment rescheduled", "receiver": "user" + str(schedule.userId), "worker": worker }
 			else:
-				msg = "Push notification failed"
+				errormsg = "Push notification failed"
 
-		msg = "Action is denied"
+		errormsg = "Action is denied"
 	else:
-		msg = "Appointment doesn't exist"
+		errormsg = "Appointment doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/reschedule_reservation", methods=["POST"])
 def reschedule_reservation():
@@ -577,7 +577,7 @@ def reschedule_reservation():
 	table = content['table']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -595,9 +595,9 @@ def reschedule_reservation():
 
 		return { "msg": "Reservation rescheduled", "receiver": receiver }
 	else:
-		msg = "Reservation doesn't exist"
+		errormsg = "Reservation doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/request_appointment", methods=["POST"])
 def request_appointment():
@@ -613,7 +613,7 @@ def request_appointment():
 	currTime = int(content['currTime'])
 
 	user = User.query.filter_by(id=userid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -720,13 +720,13 @@ def request_appointment():
 				if resp["status"] == "ok":
 					return { "msg": "appointment added", "status": "new", "receiver": receiver }
 				
-				msg = "Push notification failed"
+				errormsg = "Push notification failed"
 		else:
-			msg = "Location doesn't exist"
+			errormsg = "Location doesn't exist"
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/accept_request", methods=["POST"])
 def accept_request():
@@ -736,7 +736,7 @@ def accept_request():
 	tablenum = content['tablenum']
 
 	appointment = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if appointment != None:
@@ -828,11 +828,11 @@ def accept_request():
 		if resp["status"] == "ok":
 			return { "msg": "Appointment accepted", "receivers": receivers, "worker": worker }
 
-		msg = "Push notification failed"
+		errormsg = "Push notification failed"
 	else:
-		msg = "Appointment doesn't exist"
+		errormsg = "Appointment doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/confirm_request", methods=["POST"])
 def confirm_request():
@@ -843,7 +843,7 @@ def confirm_request():
 	time = int(content['time'])
 
 	appointment = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if appointment != None:
@@ -953,11 +953,11 @@ def confirm_request():
 		if resp["status"] == "ok":
 			return { "msg": "Appointment confirmed", "receivers": receivers, "chargedUser": chargedUser }
 
-		msg = "Push notification failed"
+		errormsg = "Push notification failed"
 	else:
-		msg = "Appointment doesn't exist"
+		errormsg = "Appointment doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/cancel_request", methods=["POST"])
 def cancel_request():
@@ -967,7 +967,7 @@ def cancel_request():
 	reason = content['reason']
 
 	appointment = Schedule.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if appointment != None:
@@ -1005,18 +1005,18 @@ def cancel_request():
 			if resp["status"] == "ok":
 				return { "msg": "request cancelled", "receiver": receiver }
 			else:
-				msg = "Push notification failed"
+				errormsg = "Push notification failed"
 		else:
-			msg = "Action is denied"
+			errormsg = "Action is denied"
 	else:
-		msg = "Appointment doesn't exist"
+		errormsg = "Appointment doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/close_request/<id>")
 def close_request(id):
 	appointment = Schedule.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if appointment != None:
@@ -1035,11 +1035,11 @@ def close_request(id):
 
 			return { "msg": "request deleted", "receiver": receiver }
 
-		msg = "Action is denied"
+		errormsg = "Action is denied"
 	else:
-		msg = "Appointment doesn't exist"
+		errormsg = "Appointment doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/cancel_reservation_joining", methods=["POST"])
 def cancel_reservation_joining():
@@ -1049,7 +1049,7 @@ def cancel_reservation_joining():
 	scheduleid = content['scheduleid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -1065,11 +1065,11 @@ def cancel_reservation_joining():
 
 				return { "msg": "diner removed" }
 
-		msg = "Diner doesn't exist"
+		errormsg = "Diner doesn't exist"
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/accept_reservation_joining", methods=["POST"])
 def accept_reservation_joining():
@@ -1079,7 +1079,7 @@ def accept_reservation_joining():
 	scheduleid = content['scheduleid']
 
 	user = User.query.filter_by(id=userid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -1127,16 +1127,16 @@ def accept_reservation_joining():
 				if confirmed == True:
 					return { "msg": "diner accepted", "receiver": receiver, "chargeUser": chargeUser }
 
-				msg = "Diner doesn't exist"
+				errormsg = "Diner doesn't exist"
 			else:
-				msg = "Schedule doesn't exist"
+				errormsg = "Schedule doesn't exist"
 		else:
-			msg = "A payment method is required"
+			errormsg = "A payment method is required"
 			status = "cardrequired"
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/add_diner", methods=["POST"])
 def add_diner():
@@ -1146,7 +1146,7 @@ def add_diner():
 	scheduleid = content['scheduleid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -1160,9 +1160,9 @@ def add_diner():
 
 		return { "msg": "Diner added" }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/cancel_reservation/<id>")
 def cancel_reservation(id):
@@ -1191,16 +1191,16 @@ def done_dining(id):
 	user_orders = []
 
 	numUnserved = query("select count(*) as num from schedule where ((length(orders) - length(replace(orders, 'making', ''))) / 6 > 0) and id = " + str(id), True)[0]["num"]
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if numUnserved == 0:
 		return { "msg": "success" }
 	else:
-		msg = "There's still some unserved orders"
+		errormsg = "There's still some unserved orders"
 		status = "unserved"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_diners_payments", methods=["POST"])
 def get_diners_payments():
@@ -1211,7 +1211,7 @@ def get_diners_payments():
 	time = content['time']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 	info = {}
 
@@ -1297,11 +1297,11 @@ def get_diners_payments():
 											db.session.add(transaction)
 											db.session.commit()
 					else:
-						msg = "Payment unconfirmed"
+						errormsg = "Payment unconfirmed"
 						status = "paymentunconfirmed"
 						info = { "username": user.username }
 
-				if msg == "":
+				if errormsg == "":
 					if "\"charge\": \"" not in json.dumps(charges):
 						db.session.delete(schedule)
 						db.session.commit()
@@ -1310,13 +1310,13 @@ def get_diners_payments():
 					else:
 						return { "msg": "" }
 			else:
-				msg = "Diner doesn't exist"
+				errormsg = "Diner doesn't exist"
 		else:
-			msg = "Location doesn't exist"
+			errormsg = "Location doesn't exist"
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status, "info": info }, 400
+	return { "errormsg": errormsg, "status": status, "info": info }, 400
 
 @app.route("/receive_epayment", methods=["POST"])
 def receive_epayment():
@@ -1326,7 +1326,7 @@ def receive_epayment():
 	ownerid = content['ownerid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -1367,10 +1367,10 @@ def receive_epayment():
 					if cards > 0:
 						customerPay(price, clientId, locationid)
 					else:
-						msg = "cardrequired"
+						errormsg = "cardrequired"
 						status = "cardrequired"
 
-					if msg == "":
+					if errormsg == "":
 						groupId = ""
 
 						for k in range(20):
@@ -1400,23 +1400,23 @@ def receive_epayment():
 
 							return { "msg": "Payment received", "clientName": client.username, "name": service.name, "price": service.price, "receiver": receiver }
 						else:
-							msg = "Push notification failed"
+							errormsg = "Push notification failed"
 				else:
-					msg = "Please provide a bank account to receive payment"
+					errormsg = "Please provide a bank account to receive payment"
 					status = "bankaccountrequired"
 			else:
 				if info["allowpayment"] == False:
-					msg = "Client hasn't sent payment yet"
+					errormsg = "Client hasn't sent payment yet"
 					status = "paymentunsent"
 				else:
-					msg = "Only the worker of this client can receive payment"
+					errormsg = "Only the worker of this client can receive payment"
 					status = "wrongworker"
 		else:
-			msg = "Location doesn't exist"
+			errormsg = "Location doesn't exist"
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/receive_inpersonpayment", methods=["POST"])
 def receive_inpersonpayment():
@@ -1426,7 +1426,7 @@ def receive_inpersonpayment():
 	ownerid = content['ownerid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -1478,24 +1478,24 @@ def receive_inpersonpayment():
 
 						return { "msg": "Payment received", "clientName": client.username, "name": service.name, "price": service.price, "receiver": receiver }
 					else:
-						msg = "Push notification failed"
+						errormsg = "Push notification failed"
 				else:
-					msg = "Only the worker of this client can receive payment"
+					errormsg = "Only the worker of this client can receive payment"
 					status = "wrongworker"
 			else:
-				msg = "The client hasn't allowed payment yet"
+				errormsg = "The client hasn't allowed payment yet"
 				status = "unallowedpayment"
 		else:
-			msg = "Location doesn't exist"
+			errormsg = "Location doesn't exist"
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/cancel_service/<id>")
 def cancel_service(id):
 	schedule = Schedule.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -1512,14 +1512,14 @@ def cancel_service(id):
 
 		return { "msg": "appointment cancelled", "receiver": receiver }
 	else:
-		msg = "Schedule doens't exist"
+		errormsg = "Schedule doens't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/can_serve_diners/<id>")
 def can_serve_diners(id):
 	schedule = Schedule.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -1558,11 +1558,11 @@ def can_serve_diners(id):
 		if resp["status"] == "ok":
 			return { "msg": "Diners are seated", "receiver": receiver }
 
-		msg = "Push notification failed"
+		errormsg = "Push notification failed"
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/allow_payment", methods=["POST"])
 def allow_payment():
@@ -1572,7 +1572,7 @@ def allow_payment():
 	workerid = content['workerid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -1601,11 +1601,11 @@ def allow_payment():
 		if resp["status"] == "ok":
 			return { "msg": "" }
 
-		msg = "Push notification failed"
+		errormsg = "Push notification failed"
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/send_dining_payment", methods=["POST"])
 def send_dining_payment():
@@ -1615,7 +1615,7 @@ def send_dining_payment():
 	scheduleid = content['scheduleid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if 'getinfo' in content:
@@ -1672,9 +1672,9 @@ def send_dining_payment():
 
 			return { "msg": "Payment sent", "receiver": receiver }
 		else:
-			msg = "Schedule doesn't exist"
+			errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_appointments", methods=["POST"])
 def get_appointments():
@@ -1718,7 +1718,7 @@ def search_customers():
 	searchingusername = content['username']
 
 	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if location != None:
@@ -1744,9 +1744,9 @@ def search_customers():
 
 		return { "appointments": appointments, "numappointments": len(appointments) }
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_cart_orderers/<id>")
 def get_cart_orderers(id):
@@ -1880,7 +1880,7 @@ def see_user_orders():
 @app.route("/get_diners_orders/<id>")
 def get_diners_orders(id):
 	schedule = Schedule.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -1974,9 +1974,9 @@ def get_diners_orders(id):
 
 		return { "diners": diners, "total": total }
 	else:
-		msg = "Reservation doesn't exist"
+		errormsg = "Reservation doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_reservations/<id>")
 def get_reservations(id):
@@ -2013,7 +2013,7 @@ def get_reservations(id):
 @app.route("/get_schedule_info/<id>")
 def get_schedule_info(id):
 	schedule = Schedule.query.filter_by(id=id, status="confirmed").first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -2031,9 +2031,9 @@ def get_schedule_info(id):
 
 		return { "scheduleInfo": info }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/add_item_to_order", methods=["POST"])
 def add_item_to_order():
@@ -2063,7 +2063,7 @@ def add_item_to_order():
 	note = content['note']
 
 	user = User.query.filter_by(id=userid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -2072,9 +2072,9 @@ def add_item_to_order():
 		if product != None:
 			if product.price == '':
 				if "true" not in json.dumps(sizes):
-					msg = "Please choose a size"
+					errormsg = "Please choose a size"
 
-			if msg == "":
+			if errormsg == "":
 				schedule = Schedule.query.filter_by(id=scheduleid).first()
 
 				if schedule != None:
@@ -2135,20 +2135,20 @@ def add_item_to_order():
 					if resp["status"] == "ok":
 						return { "orders": orders, "msg": "item added to list", "receiver": receiver }
 					
-					msg = "Push notification failed"
+					errormsg = "Push notification failed"
 				else:
-					msg = "Schedule doesn't exist"
+					errormsg = "Schedule doesn't exist"
 		else:
-			msg = "Product doesn't exist"
+			errormsg = "Product doesn't exist"
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/see_dining_orders/<id>")
 def see_dining_orders(id):
 	schedule = Schedule.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -2276,14 +2276,14 @@ def see_dining_orders(id):
 
 		return { "rounds": each_rounds, "dinersseated": dinersseated }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/edit_diners/<id>")
 def edit_diners(id):
 	schedule = Schedule.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -2319,14 +2319,14 @@ def edit_diners(id):
 
 		return { "diners": diners, "numdiners": numdiners }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_dining_orders/<id>")
 def get_dining_orders(id):
 	schedule = Schedule.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -2400,9 +2400,9 @@ def get_dining_orders(id):
 
 		return { "rounds": each_rounds }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/deliver_round", methods=["POST"])
 def deliver_round():
@@ -2413,7 +2413,7 @@ def deliver_round():
 	roundid = content['roundid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -2444,14 +2444,14 @@ def deliver_round():
 
 		return { "msg": "round served", "receiver": receiver }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/send_orders/<id>")
 def send_orders(id):
 	schedule = Schedule.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -2484,7 +2484,7 @@ def send_orders(id):
 							if info["status"] == "confirmawaits":
 								confirmed = False
 
-								msg = "unconfirm orders"
+								errormsg = "unconfirm orders"
 								status = "unconfirmedorders"
 
 			if confirmed == True:
@@ -2502,9 +2502,9 @@ def send_orders(id):
 		else:
 			return { "msg": "order sent" }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/edit_order", methods=["POST"])
 def edit_order():
@@ -2514,7 +2514,7 @@ def edit_order():
 	orderid = content['orderid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -2568,11 +2568,11 @@ def edit_order():
 
 							return { "orderInfo": info, "msg": "order info fetched" }
 
-		msg = "Order doesn't exist"
+		errormsg = "Order doesn't exist"
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/update_order", methods=["POST"])
 def update_order():
@@ -2587,7 +2587,7 @@ def update_order():
 	note = content['note']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -2613,9 +2613,9 @@ def update_order():
 
 		return { "msg": "order updated" }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/delete_order", methods=["POST"])
 def delete_order():
@@ -2625,7 +2625,7 @@ def delete_order():
 	orderid = content['orderid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -2653,9 +2653,9 @@ def delete_order():
 
 		return { "msg": "order deleted", "receiver": receiver }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/add_diners", methods=["POST"])
 def add_diners():
@@ -2666,7 +2666,7 @@ def add_diners():
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
 	location = Location.query.filter_by(id=schedule.locationId).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -2705,11 +2705,11 @@ def add_diners():
 		if resp["status"] == "ok":
 			return { "msg": "New diners added", "receiver": receiver }
 		
-		msg = "Push notification failed"
+		errormsg = "Push notification failed"
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/edit_order_callfor", methods=["POST"])
 def edit_order_callfor():
@@ -2719,7 +2719,7 @@ def edit_order_callfor():
 	orderid = content['orderid']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -2798,9 +2798,9 @@ def edit_order_callfor():
 
 							return { "searchedDiners": searcheddiners, "numSearchedDiners": numsearcheddiners, "orderingItem": orderingItem }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/diner_is_removable", methods=["POST"])
 def diner_is_removable():
@@ -2810,7 +2810,7 @@ def diner_is_removable():
 	userid = str(content['userid'])
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -2823,9 +2823,9 @@ def diner_is_removable():
 
 		return { "removable": True }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/diner_is_selectable", methods=["POST"])
 def diner_is_selectable():
@@ -2836,7 +2836,7 @@ def diner_is_selectable():
 
 	num = query("select count(*) as num from schedule where id = " + str(scheduleid) + " and customers like '%\"" + userid + "\"%'", True)[0]["num"]
 	user = User.query.filter_by(id=userid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 	info = {}
 
@@ -2857,13 +2857,13 @@ def diner_is_selectable():
 		if (paymentStatus == "filled" and confirmed == True) or str(schedule.userId) == str(userid):
 			return { "selectable": True, "username": user.username }
 
-		msg = "paymentrequired" if paymentStatus == "required" else "unconfirmeddiner"
+		errormsg = "paymentrequired" if paymentStatus == "required" else "unconfirmeddiner"
 
 		info = { "selectable": False, "username": user.username }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status, "info": info }, 400
+	return { "errormsg": errormsg, "status": status, "info": info }, 400
 
 @app.route("/cancel_dining_order", methods=["POST"])
 def cancel_dining_order():
@@ -2873,7 +2873,7 @@ def cancel_dining_order():
 	ordererid = content['ordererid']
 
 	data = query("select customers, orders from schedule where orders like '%\"" + str(orderid) + "\"%'", True)
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if len(data) == 1:
@@ -2904,9 +2904,9 @@ def cancel_dining_order():
 
 		return { "msg": "user order cancelled", "receiver": receiver, "numCallfor": numCallfor }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/confirm_dining_order", methods=["POST"])
 def confirm_dining_order():
@@ -2916,7 +2916,7 @@ def confirm_dining_order():
 	ordererid = content['ordererid']
 
 	data = query("select orders from schedule where orders like '%\"" + str(orderid) + "\"%'", True)
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if len(data) == 1:
@@ -2938,9 +2938,9 @@ def confirm_dining_order():
 
 		return { "msg": "user order confirmed", "receiver": receiver }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/update_order_callfor", methods=["POST"])
 def update_order_callfor():
@@ -2951,7 +2951,7 @@ def update_order_callfor():
 	callfor = content['callfor']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -2973,6 +2973,6 @@ def update_order_callfor():
 
 		return { "msg": "call for updated" }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400

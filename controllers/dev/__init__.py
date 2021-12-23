@@ -634,7 +634,7 @@ def push():
 	message = content['message']
 	data = content['data']
 
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -653,11 +653,11 @@ def push():
 		if response.status == "ok":
 			return { "msg": "push sent successfully" }
 
-		msg = "push failed to sent"
+		errormsg = "push failed to sent"
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/twilio_test")
 def twilio_test():

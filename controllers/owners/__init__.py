@@ -390,7 +390,7 @@ def owner_login():
 
 	cellnumber = content['cellnumber']
 	password = content['password']
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if cellnumber != "" and password != "":
@@ -421,23 +421,23 @@ def owner_login():
 				else:
 					return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": None, "locationtype": "", "msg": "locationsetup" }
 			else:
-				msg = "Password is incorrect"
+				errormsg = "Password is incorrect"
 		else:
-			msg = "Owner doesn't exist"
+			errormsg = "Owner doesn't exist"
 	else:
 		if cellnumber == "":
-			msg = "Phone number is blank"
+			errormsg = "Phone number is blank"
 		else:
-			msg = "Password is blank"
+			errormsg = "Password is blank"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/verify/<cellnumber>")
 def owner_verify(cellnumber):
 	verifycode = getRanStr()
 
 	owner = Owner.query.filter_by(cellnumber=cellnumber).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if owner == None:
@@ -450,9 +450,9 @@ def owner_verify(cellnumber):
 
 		return { "verifycode": verifycode }
 	else:
-		msg = "Cell number already used"
+		errormsg = "Cell number already used"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/register", methods=["POST"])
 def owner_register():
@@ -463,31 +463,31 @@ def owner_register():
 	profilepath = request.files.get('profile', False)
 	profileexist = False if profilepath == False else True
 	permission = request.form['permission']
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if username == "":
-		msg = "Please provide a username for identification"
+		errormsg = "Please provide a username for identification"
 
 	if cellnumber == "":
-		msg = "Cell number is blank"
+		errormsg = "Cell number is blank"
 	else:
 		data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
 
 		if len(data) > 0:
-			msg = "Owner already exist"
+			errormsg = "Owner already exist"
 
 	if password != "" and confirmPassword != "":
 		if len(password) >= 6:
 			if password != confirmPassword:
-				msg = "Password is mismatch"
+				errormsg = "Password is mismatch"
 		else:
-			msg = "Password needs to be atleast 6 characters long"
+			errormsg = "Password needs to be atleast 6 characters long"
 	else:
 		if password == "":
-			msg = "Passwod is blank"
+			errormsg = "Passwod is blank"
 		else:
-			msg = "Please confirm your password"
+			errormsg = "Please confirm your password"
 
 	profilename = ""
 	if profileexist == True:
@@ -497,9 +497,9 @@ def owner_register():
 		profile.save(os.path.join('static', profilename))
 	else:
 		if permission == "true":
-			msg = "Please provide a profile for identification"
+			errormsg = "Please provide a profile for identification"
 	
-	if msg == "":
+	if errormsg == "":
 		password = generate_password_hash(password)
 		info = json.dumps({"locationId": "","pushToken": ""})
 
@@ -509,7 +509,7 @@ def owner_register():
 
 		return { "id": owner.id }
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/add_owner", methods=["POST"])
 def add_owner():
@@ -524,7 +524,7 @@ def add_owner():
 	permission = request.form['permission']
 
 	data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if len(data) == 0:
@@ -532,22 +532,22 @@ def add_owner():
 
 		if owner != None:
 			if username == "":
-				msg = "Please provide a username for identification"
+				errormsg = "Please provide a username for identification"
 
 			if cellnumber == "":
-				msg = "Cell number is blank"
+				errormsg = "Cell number is blank"
 
 			if password != "" and confirmPassword != "":
 				if len(password) >= 6:
 					if password != confirmPassword:
-						msg = "Password is mismatch"
+						errormsg = "Password is mismatch"
 				else:
-					msg = "Password needs to be atleast 6 characters long"
+					errormsg = "Password needs to be atleast 6 characters long"
 			else:
 				if password == "":
-					msg = "Please enter a password"
+					errormsg = "Please enter a password"
 				else:
-					msg = "Please confirm your password"
+					errormsg = "Please confirm your password"
 
 			profilename = ""
 			if profileexist == True:
@@ -557,9 +557,9 @@ def add_owner():
 				profile.save(os.path.join('static', profilename))
 			else:
 				if permission == "true":
-					msg = "Please provide a profile for identification"
+					errormsg = "Please provide a profile for identification"
 
-			if msg == "":
+			if errormsg == "":
 				ownerInfo = json.loads(owner.info)
 				locationId = ownerInfo["locationId"]
 
@@ -580,11 +580,11 @@ def add_owner():
 
 				return { "id": owner.id, "msg": "New owner added by an owner" }
 		else:
-			msg = "Owner doesn't exist"
+			errormsg = "Owner doesn't exist"
 	else:
-		msg = "Owner already exist"
+		errormsg = "Owner already exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/update_owner", methods=["POST"])
 def update_owner():
@@ -599,7 +599,7 @@ def update_owner():
 	permission = request.form['permission']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if owner != None:
@@ -611,7 +611,7 @@ def update_owner():
 			if exist_username == 0:
 				owner.username = username
 			else:
-				msg = "The username is already taken"
+				errormsg = "The username is already taken"
 				status = "sameusername"
 
 		if cellnumber != "" and owner.cellnumber != cellnumber:
@@ -620,7 +620,7 @@ def update_owner():
 			if exist_cellnumber == 0:
 				owner.cellnumber = cellnumber
 			else:
-				msg = "This cell number is already taken"
+				errormsg = "This cell number is already taken"
 				status = "samecellnumber"
 
 		if profileexist == True:
@@ -642,22 +642,22 @@ def update_owner():
 
 						owner.password = password
 					else:
-						msg = "Password is mismatch"
+						errormsg = "Password is mismatch"
 				else:
-					msg = "Password needs to be atleast 6 characters long"
+					errormsg = "Password needs to be atleast 6 characters long"
 			else:
 				if password == "":
-					msg = "Please enter a password"
+					errormsg = "Please enter a password"
 				else:
-					msg = "Please confirm your password"
+					errormsg = "Please confirm your password"
 
 		db.session.commit()
 
 		return { "id": owner.id, "msg": "Owner's info updated" }
 	else:
-		msg = "Owner doesn't exist"
+		errormsg = "Owner doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 		
 @app.route("/set_hours", methods=["POST"])
 def set_hours():
@@ -685,7 +685,7 @@ def owner_update_notification_token():
 	token = content['token']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if owner != None:
@@ -698,17 +698,16 @@ def owner_update_notification_token():
 
 		return { "msg": "Push token updated" }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_workers/<id>")
 def get_workers(id):
-	errormsg = ""
-	status = ""
-
 	days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 	location = Location.query.filter_by(id=id).first()
+	errormsg = ""
+	status = ""
 
 	if location != None:
 		datas = query("select * from owner where info like '%\"locationId\": \"" + str(id) + "\"%'", True)
@@ -747,10 +746,9 @@ def get_workers(id):
 
 @app.route("/get_worker_info/<id>")
 def get_worker_info(id):
+	owner = Owner.query.filter_by(id=id).first()
 	errormsg = ""
 	status = ""
-
-	owner = Owner.query.filter_by(id=id).first()
 	days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 	if owner != None:
@@ -825,7 +823,7 @@ def add_bankaccount():
 	banktoken = content['banktoken']
 
 	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if location != None:
@@ -839,9 +837,9 @@ def add_bankaccount():
 
 		return { "msg": "Added a bank account" }
 	else:
-		msg = "Owner doesn't exist"
+		errormsg = "Owner doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/update_bankaccount", methods=["POST"])
 def update_bankaccount():
@@ -852,7 +850,7 @@ def update_bankaccount():
 	banktoken = content['banktoken']
 
 	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if location != None:
@@ -871,9 +869,9 @@ def update_bankaccount():
 
 		return { "msg": "Updated a bank account" }
 	else:
-		msg = "Owner doesn't exist"
+		errormsg = "Owner doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_accounts/<id>")
 def get_accounts(id):
@@ -981,7 +979,7 @@ def set_bankaccountdefault():
 	bankid = content['bankid']
 
 	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if location != None:
@@ -996,9 +994,9 @@ def set_bankaccountdefault():
 
 		return { "msg": "Bank account set as default" }
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_bankaccount_info", methods=["POST"])
 def get_bankaccount_info():
@@ -1008,7 +1006,7 @@ def get_bankaccount_info():
 	bankid = content['bankid']
 
 	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if location != None:
@@ -1034,11 +1032,11 @@ def get_bankaccount_info():
 
 				return { "bankaccountInfo": info }
 
-		msg = "Bank doesn't exist"
+		errormsg = "Bank doesn't exist"
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/delete_bankaccount", methods=["POST"])
 def delete_bankaccount():
@@ -1048,7 +1046,7 @@ def delete_bankaccount():
 	bankid = content['bankid']
 
 	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if location != None:
@@ -1062,14 +1060,14 @@ def delete_bankaccount():
 
 		return { "msg": "Bank account deleted" }
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_reset_code/<cellnumber>")
 def get_owner_reset_code(cellnumber):
 	owner = Owner.query.filter_by(cellnumber=cellnumber).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if owner != None:
@@ -1084,9 +1082,9 @@ def get_owner_reset_code(cellnumber):
 
 		return { "msg": "Reset code sent", "code": code }
 	else:
-		msg = "Owner doesn't exist"
+		errormsg = "Owner doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/reset_password", methods=["POST"])
 def owner_reset_password():
@@ -1097,7 +1095,7 @@ def owner_reset_password():
 	confirmPassword = content['confirmPassword']
 
 	owner = Owner.query.filter_by(cellnumber=cellnumber).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if owner != None:
@@ -1127,15 +1125,15 @@ def owner_reset_password():
 						else:
 							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": data['id'], "locationtype": "", "msg": "typesetup" }
 				else:
-					msg = "Password is mismatch"
+					errormsg = "Password is mismatch"
 			else:
-				msg = "Password needs to be atleast 6 characters long"
+				errormsg = "Password needs to be atleast 6 characters long"
 		else:
 			if password == '':
-				msg = "Passwod is blank"
+				errormsg = "Passwod is blank"
 			else:
-				msg = "Please confirm your password"
+				errormsg = "Please confirm your password"
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400

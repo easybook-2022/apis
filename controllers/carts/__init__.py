@@ -587,7 +587,7 @@ def add_item_to_cart():
 
 	user = User.query.filter_by(id=userid).first()
 	product = Product.query.filter_by(id=productid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None and product != None:
@@ -604,17 +604,17 @@ def add_item_to_cart():
 		if cards > 0 or len(callfor) > 0:
 			if product.price == '':
 				if "true" not in json.dumps(sizes):
-					msg = "Please choose a size"
+					errormsg = "Please choose a size"
 		else:
-			msg = "A payment method is required"
+			errormsg = "A payment method is required"
 			status = "cardrequired"
 	else:
 		if user != None:
-			msg = "User doesn't exist"
+			errormsg = "User doesn't exist"
 		else:
-			msg = "Product doesn't exist"
+			errormsg = "Product doesn't exist"
 
-	if msg == "":
+	if errormsg == "":
 		callfor = json.dumps(callfor)
 		options = json.dumps(options)
 		others = json.dumps(others)
@@ -627,12 +627,12 @@ def add_item_to_cart():
 
 		return { "msg": "item added to cart" }
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/remove_item_from_cart/<id>")
 def remove_item_from_cart(id):
 	cartitem = Cart.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if cartitem != None:
@@ -641,9 +641,9 @@ def remove_item_from_cart(id):
 
 		return { "msg": "Cart item removed from cart" }
 	else:
-		msg = "Cart item doesn't exist"
+		errormsg = "Cart item doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/checkout", methods=["POST"])
 def checkout():
@@ -665,7 +665,7 @@ def checkout():
 	time = content['time']
 
 	user = User.query.filter_by(id=adder).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -702,9 +702,9 @@ def checkout():
 
 		return { "msg": "order sent", "receiver": receiver }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/order_ready", methods=["POST"])
 def order_ready():
@@ -878,7 +878,7 @@ def receive_payment():
 @app.route("/edit_cart_item/<id>")
 def edit_cart_item(id):
 	cartitem = Cart.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if cartitem != None:
@@ -924,9 +924,9 @@ def edit_cart_item(id):
 
 		return { "cartItem": info, "msg": "cart item fetched" }
 	else:
-		msg = "Cart item doesn't exist"
+		errormsg = "Cart item doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/update_cart_item", methods=["POST"])
 def update_cart_item():
@@ -940,7 +940,7 @@ def update_cart_item():
 	note = content['note']
 
 	cartitem = Cart.query.filter_by(id=cartid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if cartitem != None:
@@ -954,14 +954,14 @@ def update_cart_item():
 
 		return { "msg": "cart item is updated" }
 	else:
-		msg = "Cart item doesn't exist"
+		errormsg = "Cart item doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/edit_call_for/<id>")
 def edit_call_for(id):
 	cartitem = Cart.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if cartitem != None:
@@ -1031,9 +1031,9 @@ def edit_call_for(id):
 
 		return { "searchedFriends": searchedfriends, "numSearchedFriends": numsearchedfriends, "orderingItem": orderingItem }
 	else:
-		msg = "Cart item doesn't exist"
+		errormsg = "Cart item doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/update_call_for", methods=["POST"])
 def update_call_for():
@@ -1043,7 +1043,7 @@ def update_call_for():
 	callfor = json.dumps(content['callfor'])
 
 	cartitem = Cart.query.filter_by(id=cartid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if cartitem != None:
@@ -1053,9 +1053,9 @@ def update_call_for():
 
 		return { "msg": "Call for updated" }
 	else:
-		msg = "Cart item doesn't exist"
+		errormsg = "Cart item doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/remove_call_for", methods=["POST"])
 def remove_call_for():
@@ -1065,7 +1065,7 @@ def remove_call_for():
 	callforid = content['callforid']
 
 	cartitem = Cart.query.filter_by(id=cartid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if cartitem != None:
@@ -1082,6 +1082,6 @@ def remove_call_for():
 
 		return { "msg": "callfor is removed" }
 	else:
-		msg = "Cart item doesn't exist"
+		errormsg = "Cart item doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400

@@ -667,6 +667,8 @@ def set_hours():
 	hours = content['hours']
 
 	location = Location.query.filter_by(id=locationid).first()
+	errormsg = ""
+	status = ""
 
 	if location != None:
 		location.hours = json.dumps(hours)
@@ -864,8 +866,6 @@ def get_more_locations():
 @app.route("/get_location_profile", methods=["POST"])
 def get_location_profile():
 	content = request.get_json()
-	errormsg = ""
-	status = ""
 
 	locationid = content['locationid']
 
@@ -877,6 +877,8 @@ def get_location_profile():
 		latitude = content['latitude']
 
 	location = Location.query.filter_by(id=locationid).first()
+	errormsg = ""
+	status = ""
 
 	if location != None:
 		num_menus = Menu.query.filter_by(locationId=locationid, parentMenuId="").count()
@@ -1112,6 +1114,8 @@ def get_info():
 		geolocation = False
 
 	location = Location.query.filter_by(id=locationid).first()
+	errormsg = ""
+	status = ""
 
 	if location != None:
 		locationInfo = json.loads(location.info)
@@ -1221,6 +1225,8 @@ def change_location_state(id):
 @app.route("/set_location_public/<id>")
 def set_location_public(id):
 	owner = Owner.query.filter_by(id=id).first()
+	errormsg = ""
+	status = ""
 
 	if owner != None:
 		info = json.loads(owner.info)
@@ -1255,6 +1261,8 @@ def get_hours():
 	scheduled = Schedule.query.filter_by(locationId=locationid).all()
 	location = Location.query.filter_by(id=locationid).first()
 	times = []
+	errormsg = ""
+	status = ""
 
 	if location != None:
 		hours = json.loads(location.hours)

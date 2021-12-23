@@ -390,7 +390,7 @@ def user_login():
 
 	cellnumber = content['cellnumber']
 	password = content['password']
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if cellnumber != '' and password != '':
@@ -411,23 +411,23 @@ def user_login():
 				else:
 					return { "id": userid, "msg": "main" }
 			else:
-				msg = "Password is incorrect"
+				errormsg = "Password is incorrect"
 		else:
-			msg = "User doesn't exist"
+			errormsg = "User doesn't exist"
 	else:
 		if cellnumber == '':
-			msg = "Cell number is blank"
+			errormsg = "Cell number is blank"
 		else:
-			msg = "Password is blank"
+			errormsg = "Password is blank"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/verify/<cellnumber>")
 def user_verify(cellnumber):
 	verifycode = getRanStr()
 
 	user = User.query.filter_by(cellnumber=cellnumber).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user == None:
@@ -440,9 +440,9 @@ def user_verify(cellnumber):
 
 		return { "verifycode": verifycode }
 	else:
-		msg = "Cell number already used"
+		errormsg = "Cell number already used"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/register", methods=["POST"])
 def user_register():
@@ -451,7 +451,7 @@ def user_register():
 	cellnumber = content['cellnumber']
 	password = content['password']
 	confirmPassword = content['confirmPassword']
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if cellnumber != '' and password != '' and confirmPassword != '':
@@ -475,20 +475,20 @@ def user_register():
 
 					return { "id": user.id }
 				else:
-					msg = "User already exist"
+					errormsg = "User already exist"
 			else:
-				msg = "Password is mismatch"
+				errormsg = "Password is mismatch"
 		else:
-			msg = "Password needs to be atleast 6 characters long"
+			errormsg = "Password needs to be atleast 6 characters long"
 	else:
 		if cellnumber == '':
-			msg = "Cell number is blank"
+			errormsg = "Cell number is blank"
 		elif password == '':
-			msg = "Password is blank"
+			errormsg = "Password is blank"
 		else:
-			msg = "Please confirm your password"
+			errormsg = "Please confirm your password"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/setup", methods=["POST"])
 def setup():
@@ -500,7 +500,7 @@ def setup():
 	time = int(request.form['time'])
 
 	user = User.query.filter_by(id=userid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -517,12 +517,12 @@ def setup():
 			user.profile = profilename
 		else:
 			if permission == "true":
-				msg = "Please take a photo of yourself for identification purpose"
+				errormsg = "Please take a photo of yourself for identification purpose"
 
 		info["trialstart"] = time
 		user.info = json.dumps(info)
 
-		if msg == "":
+		if errormsg == "":
 			stripe.Customer.modify(
 				customerid,
 				name=username
@@ -532,9 +532,9 @@ def setup():
 
 			return { "msg": "User setup" }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/update_user", methods=["POST"])
 def update_user():
@@ -545,7 +545,7 @@ def update_user():
 	profileexist = False if profilepath == False else True
 
 	user = User.query.filter_by(id=userid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -556,7 +556,7 @@ def update_user():
 				if exist_username == 0:
 					user.username = username
 				else:
-					msg = "This username is already taken"
+					errormsg = "This username is already taken"
 					status = "sameusername"
 
 		if cellnumber != "":
@@ -566,7 +566,7 @@ def update_user():
 				if exist_cellnumber == 0:
 					user.cellnumber = cellnumber
 				else:
-					msg = "This cell number is already taken"
+					errormsg = "This cell number is already taken"
 					status = "samecellnumber"
 
 		if profileexist == True:
@@ -583,7 +583,7 @@ def update_user():
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
-		if msg == "":
+		if errormsg == "":
 			stripe.Customer.modify(
 				customerid,
 				phone=cellnumber,
@@ -594,9 +594,9 @@ def update_user():
 
 			return { "msg": "update successfully" }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/update_notification_token", methods=["POST"])
 def user_update_notification_token():
@@ -606,7 +606,7 @@ def user_update_notification_token():
 	token = content['token']
 
 	user = User.query.filter_by(id=userid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -619,14 +619,14 @@ def user_update_notification_token():
 
 		return { "msg": "Push token updated" }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_user_info/<id>")
 def get_user_info(id):
 	user = User.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -639,9 +639,9 @@ def get_user_info(id):
 
 		return { "userInfo": info }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_trial_info", methods=["POST"])
 def get_trial_info():
@@ -682,7 +682,7 @@ def add_paymentmethod():
 
 		return { "msg": "Added a payment method" }
 	else:
-		msg = ""
+		errormsg = ""
 
 @app.route("/update_paymentmethod", methods=["POST"])
 def update_paymentmethod():
@@ -693,7 +693,7 @@ def update_paymentmethod():
 	cardtoken = content['cardtoken']
 
 	user = User.query.filter_by(id=userid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -712,14 +712,14 @@ def update_paymentmethod():
 
 		return { "msg": "Updated a payment method" }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_payment_methods/<id>")
 def get_payment_methods(id):
 	user = User.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -748,9 +748,9 @@ def get_payment_methods(id):
 
 		return { "cards": cards }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/set_paymentmethoddefault", methods=["POST"])
 def set_paymentmethoddefault():
@@ -760,7 +760,7 @@ def set_paymentmethoddefault():
 	cardid = content['cardid']
 
 	user = User.query.filter_by(id=userid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -774,9 +774,9 @@ def set_paymentmethoddefault():
 
 		return { "msg": "Payment method set as default" }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_paymentmethod_info", methods=["POST"])
 def get_paymentmethod_info():
@@ -786,7 +786,7 @@ def get_paymentmethod_info():
 	cardid = content['cardid']
 
 	user = User.query.filter_by(id=userid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -806,9 +806,9 @@ def get_paymentmethod_info():
 
 		return { "paymentmethodInfo": info }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/delete_paymentmethod", methods=["POST"])
 def delete_paymentmethod():
@@ -818,7 +818,7 @@ def delete_paymentmethod():
 	cardid = content['cardid']
 
 	user = User.query.filter_by(id=userid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -832,9 +832,9 @@ def delete_paymentmethod():
 
 		return { "msg": "Payment method deleted"}
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_num_updates", methods=["POST"])
 def get_num_updates():
@@ -844,7 +844,7 @@ def get_num_updates():
 	time = content['time']
 
 	user = User.query.filter_by(id=userid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -891,14 +891,14 @@ def get_num_updates():
 
 		return { "numNotifications": num }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_notifications/<id>")
 def get_notifications(id):
 	user = User.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -1264,9 +1264,9 @@ def get_notifications(id):
 
 		return { "notifications": notifications }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/search_friends", methods=["POST"])
 def search_friends():
@@ -1276,7 +1276,7 @@ def search_friends():
 	searchusername = content['username']
 
 	user = User.query.filter_by(id=userid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -1312,9 +1312,9 @@ def search_friends():
 
 		return { "searchedFriends": searchedfriends, "numSearchedFriends": numSearchedFriends }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/search_diners", methods=["POST"])
 def search_diners():
@@ -1325,7 +1325,7 @@ def search_diners():
 	searchusername = content['username']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if schedule != None:
@@ -1368,14 +1368,14 @@ def search_diners():
 
 		return { "searchedDiners": searcheddiners, "numSearchedDiners": numSearchedDiners }
 	else:
-		msg = "Schedule doesn't exist"
+		errormsg = "Schedule doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/select_user/<id>")
 def select_user(id):
 	user = User.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -1391,14 +1391,14 @@ def select_user(id):
 
 		return { "username": user.username, "cards": cards }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/request_user_payment_method/<id>")
 def request_user_payment_method(id):
 	user = User.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -1412,14 +1412,14 @@ def request_user_payment_method(id):
 
 		return { "msg": "Card requested" }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_reset_code/<phonenumber>")
 def get_user_reset_code(phonenumber):
 	user = User.query.filter_by(cellnumber=phonenumber).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -1434,9 +1434,9 @@ def get_user_reset_code(phonenumber):
 
 		return { "msg": "Reset code sent", "code": code }
 	else:
-		msg = "Owner doesn't exist"
+		errormsg = "Owner doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/reset_password", methods=["POST"])
 def user_reset_password():
@@ -1447,7 +1447,7 @@ def user_reset_password():
 	confirmPassword = content['confirmPassword']
 
 	user = User.query.filter_by(cellnumber=cellnumber).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -1465,15 +1465,15 @@ def user_reset_password():
 					else:
 						return { "id": user.id, "msg": "main" }
 				else:
-					msg = "Password is mismatch"
+					errormsg = "Password is mismatch"
 			else:
-				msg = "Password needs to be atleast 6 characters long"
+				errormsg = "Password needs to be atleast 6 characters long"
 		else:
 			if password == '':
-				msg = "Password is blank"
+				errormsg = "Password is blank"
 			else:
-				msg = "Please confirm your password"
+				errormsg = "Please confirm your password"
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400

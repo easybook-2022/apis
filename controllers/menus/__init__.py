@@ -392,7 +392,7 @@ def get_menus():
 	parentMenuid = content['parentmenuid']
 
 	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if location != None:
@@ -434,14 +434,14 @@ def get_menus():
 
 		return { "menus": menus, "nummenus": nummenus }
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/remove_menu/<id>")
 def remove_menu(id):
 	menu = Menu.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if menu != None:
@@ -460,9 +460,9 @@ def remove_menu(id):
 
 		return { "msg": "deleted" }
 	else:
-		msg = "Menu doesn't exist"
+		errormsg = "Menu doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_menu_info", methods=["POST"])
 def get_menu_info():
@@ -472,7 +472,7 @@ def get_menu_info():
 	menuid = content['menuid']
 
 	menu = Menu.query.filter_by(id=menuid, parentMenuId=parentMenuid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if menu != None:
@@ -484,9 +484,9 @@ def get_menu_info():
 
 		return { "info": info, "msg": "menu info" }
 	else:
-		msg = "Menu doesn't exist"
+		errormsg = "Menu doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/save_menu", methods=["POST"])
 def save_menu():
@@ -534,7 +534,7 @@ def add_menu():
 	imagepath = request.files.get('image', False)
 	imageexist = False if imagepath == False else True
 	permission = request.form['permission']
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if name != '':
@@ -552,9 +552,9 @@ def add_menu():
 					image.save(os.path.join("static", imagename))
 				else:
 					if permission == "true":
-						msg = "Take a good picture of your menu"
+						errormsg = "Take a good picture of your menu"
 				
-				if msg == "":
+				if errormsg == "":
 					menu = Menu(locationid, parentMenuid, name, info, imagename)
 
 					db.session.add(menu)
@@ -562,13 +562,13 @@ def add_menu():
 					
 					return { "id": menu.id }
 			else:
-				msg = "Menu already exist"
+				errormsg = "Menu already exist"
 		else:
-			msg = "Location doesn't exist"
+			errormsg = "Location doesn't exist"
 	else:
-		msg = "Name is blank"
+		errormsg = "Name is blank"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 
 

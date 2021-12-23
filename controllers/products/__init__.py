@@ -392,7 +392,7 @@ def get_products():
 	menuid = content['menuid']
 
 	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if location != None:
@@ -431,16 +431,16 @@ def get_products():
 
 		return { "products": products, "numproducts": numproducts }
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_product_info/<id>")
 def get_product_info(id):
 	content = request.get_json()
 
 	product = Product.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if product != None:
@@ -493,9 +493,9 @@ def get_product_info(id):
 
 		return { "productInfo": info }
 	else:
-		msg = "Product doesn't exist"
+		errormsg = "Product doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/cancel_cart_order", methods=["POST"])
 def cancel_cart_order():
@@ -512,7 +512,7 @@ def cancel_cart_order():
 	sql += ")"
 
 	data = query(sql, True)
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if len(data) > 0:
@@ -532,9 +532,9 @@ def cancel_cart_order():
 
 		return { "msg": "Orderer deleted", "receiver": receiver }
 	else:
-		msg = "Cart item doesn't exist"
+		errormsg = "Cart item doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/confirm_cart_order", methods=["POST"])
 def confirm_cart_order():
@@ -551,7 +551,7 @@ def confirm_cart_order():
 	sql += ")"
 
 	data = query(sql, True)
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if len(data) > 0:
@@ -568,9 +568,9 @@ def confirm_cart_order():
 
 		return { "msg": "Order confirmed", "receiver": receiver }
 	else:
-		msg = "Cart item doesn't exist"
+		errormsg = "Cart item doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/add_product", methods=["POST"])
 def add_product():
@@ -587,7 +587,7 @@ def add_product():
 	permission = request.form['permission']
 
 	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if location != None:
@@ -604,9 +604,9 @@ def add_product():
 				image.save(os.path.join('static', imagename))
 			else:
 				if permission == "true":
-					msg = "Please take a good photo"
+					errormsg = "Please take a good photo"
 
-			if msg == "":
+			if errormsg == "":
 				product = Product(locationid, menuid, name, info, imagename, options, others, sizes, price)
 
 				db.session.add(product)
@@ -614,11 +614,11 @@ def add_product():
 
 				return { "id": product.id }
 		else:
-			msg = "Product already exist"
+			errormsg = "Product already exist"
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/update_product", methods=["POST"])
 def update_product():
@@ -636,7 +636,7 @@ def update_product():
 	permission = request.form['permission']
 
 	location = Location.query.filter_by(id=locationid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if location != None:
@@ -663,23 +663,23 @@ def update_product():
 					product.image = newimagename
 			else:
 				if permission == "true":
-					msg = "Please take a good photo"
+					errormsg = "Please take a good photo"
 
-			if msg == "":
+			if errormsg == "":
 				db.session.commit()
 
 				return { "msg": "product updated", "id": product.id }
 		else:
-			msg = "Product doesn't exist"
+			errormsg = "Product doesn't exist"
 	else:
-		msg = "Location doesn't exist"
+		errormsg = "Location doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/remove_product/<id>", methods=["POST"])
 def remove_product(id):
 	product = Product.query.filter_by(id=id).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if product != None:
@@ -693,6 +693,6 @@ def remove_product(id):
 
 		return { "msg": "product deleted" }
 	else:
-		msg = "Product doesn't exist"
+		errormsg = "Product doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400

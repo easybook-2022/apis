@@ -392,7 +392,7 @@ def get_transactions():
 	cartIndex = content['cartIndex']
 
 	user = User.query.filter_by(id=userid).first()
-	msg = ""
+	errormsg = ""
 	status = ""
 
 	if user != None:
@@ -488,6 +488,6 @@ def get_transactions():
 
 		return { "transactions": transactions }
 	else:
-		msg = "User doesn't exist"
+		errormsg = "User doesn't exist"
 
-	return { "errormsg": msg, "status": status }, 400
+	return { "errormsg": errormsg, "status": status }, 400

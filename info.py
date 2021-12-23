@@ -4,7 +4,7 @@ from flask_migrate import Migrate
 from twilio.rest import Client
 import stripe, mysql.connector, pymysql.cursors
 
-test = False
+test = True
 
 local = test
 test_stripe = test
