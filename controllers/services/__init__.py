@@ -471,8 +471,7 @@ def add_service():
 
 				image.save(os.path.join("static", imagename))
 			else:
-				if permission == "true":
-					errormsg = "Please take a good photo"
+				imagename = ""
 
 			if errormsg == "":
 				service = Service(locationid, menuid, name, info, imagename, price, duration)
@@ -520,7 +519,7 @@ def update_service():
 				oldimage = service.image
 
 				if oldimage != newimagename:
-					if oldimage != "" and os.path.exists("static/" + oldimage):
+					if oldimage != "" and oldimage != None and os.path.exists("static/" + oldimage):
 						os.remove("static/" + oldimage)
 
 					image.save(os.path.join('static', newimagename))
@@ -547,7 +546,7 @@ def remove_service(id):
 	if service != None:
 		image = service.image
 
-		if image != "" and os.path.exists("static/" + image):
+		if image != "" and image != None and os.path.exists("static/" + image):
 			os.remove("static/" + image)
 
 		db.session.delete(service)

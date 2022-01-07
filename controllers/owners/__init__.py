@@ -6,6 +6,7 @@ from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
 from random import randint
+from datetime import datetime
 from info import *
 
 app = Flask(__name__)
@@ -496,8 +497,7 @@ def owner_register():
 
 		profile.save(os.path.join('static', profilename))
 	else:
-		if permission == "true":
-			errormsg = "Please provide a profile for identification"
+		profilename = ""
 	
 	if errormsg == "":
 		password = generate_password_hash(password)
@@ -603,7 +603,8 @@ def update_owner():
 	status = ""
 
 	if owner != None:
-		owner.hours = hours
+		if hours != "[]":
+			owner.hours = hours
 
 		if username != "" and owner.username != username:
 			exist_username = Owner.query.filter_by(username=username).count()
@@ -628,7 +629,7 @@ def update_owner():
 			newprofilename = profile.filename
 			oldprofile = owner.profile
 
-			if oldprofile != "" and os.path.exists("static/" + oldprofile):
+			if oldprofile != "" and oldprofile != None and os.path.exists("static/" + oldprofile):
 				os.remove("static/" + oldprofile)
 
 			profile.save(os.path.join('static', newprofilename))
@@ -702,43 +703,77 @@ def owner_update_notification_token():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/get_workers/<id>")
-def get_workers(id):
+@app.route("/get_workers", methods=["POST"])
+def get_workers():
+	content = request.get_json()
+
+	locationid = content['locationid']
+	dateStr = content['dateStr']
+	timeStr = content['timeStr']
+	day = content['day']
+
 	days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-	location = Location.query.filter_by(id=id).first()
+	location = Location.query.filter_by(id=locationid).first()
 	errormsg = ""
 	status = ""
 
 	if location != None:
-		datas = query("select * from owner where info like '%\"locationId\": \"" + str(id) + "\"%'", True)
+		datas = query("select * from owner where info like '%\"locationId\": \"" + str(locationid) + "\"%'", True)
 		owners = []
 		row = []
 		key = 0
+		numWorkers = 0
 
 		for data in datas:
-			row.append({
-				"key": "worker-" + str(key),
-				"id": data['id'],
-				"username": data['username'],
-				"profile": data["profile"],
-				"selected": False
-			})
-			key += 1
+			hours = json.loads(data['hours'])
 
-			if len(row) >= 3:
-				owners.append({ "key": str(len(owners)), "row": row })
-				row = []
+			if days[day] in hours:
+				info = hours[days[day]]
 
-		if len(row) > 0 and len(row) < 3:
-			leftover = 3 - len(row)
+				if info["working"] == True:
+					opentime = info["opentime"]
+					closetime = info["closetime"]
 
-			for k in range(leftover):
-				row.append({ "key": "worker-" + str(key) })
-				key += 1
+					openhour = opentime["hour"]
+					openminute = opentime["minute"]
 
-			owners.append({ "key": str(len(owners)), "row": row })
+					closehour = closetime["hour"]
+					closeminute = closetime["minute"]
 
-		return { "msg": "get workers", "owners": owners }
+					opentime = dateStr + openhour + ":" + openminute + ":00"
+					workertime = dateStr + timeStr
+					closetime = dateStr + closehour + ":" + closeminute + ":00"
+
+					opentime = int(datetime.strptime(opentime, "%d.%m.%Y %H:%M:%S").timestamp() * 1000)
+					workertime = int(datetime.strptime(workertime, "%d.%m.%Y %H:%M:%S").timestamp() * 1000)
+					closetime = int(datetime.strptime(closetime, "%d.%m.%Y %H:%M:%S").timestamp() * 1000)
+
+					if workertime >= opentime and workertime <= closetime:
+						for data in datas:
+							row.append({
+								"key": "worker-" + str(key),
+								"id": data['id'],
+								"username": data['username'],
+								"profile": data["profile"],
+								"selected": False
+							})
+							key += 1
+							numWorkers += 1
+
+							if len(row) >= 3:
+								owners.append({ "key": str(len(owners)), "row": row })
+								row = []
+
+						if len(row) > 0 and len(row) < 3:
+							leftover = 3 - len(row)
+
+							for k in range(leftover):
+								row.append({ "key": "worker-" + str(key) })
+								key += 1
+
+							owners.append({ "key": str(len(owners)), "row": row })
+
+		return { "msg": "get workers", "owners": owners, "numWorkers": numWorkers }
 	else:
 		errormsg = "Location doesn't exist"
 		
@@ -894,44 +929,47 @@ def get_accounts(id):
 			{ "key": "6", "header": "Saturday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True }
 		]
 
-		data = json.loads(ownerInfo.hours)
-		day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+		if "Sun" in ownerInfo.hours:
+			data = json.loads(ownerInfo.hours)
+			day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
-		for k, info in enumerate(hours):
-			openhour = int(data[day[k][:3]]["opentime"]["hour"])
-			closehour = int(data[day[k][:3]]["closetime"]["hour"])
-			working = data[day[k][:3]]["working"]
+			for k, info in enumerate(hours):
+				openhour = int(data[day[k][:3]]["opentime"]["hour"])
+				closehour = int(data[day[k][:3]]["closetime"]["hour"])
+				working = data[day[k][:3]]["working"]
 
-			openperiod = "PM" if openhour > 12 else "AM"
-			openhour = int(openhour)
+				openperiod = "PM" if openhour > 12 else "AM"
+				openhour = int(openhour)
 
-			if openhour == 0:
-				openhour = 12
-			elif openhour > 12:
-				openhour -= 12
+				if openhour == 0:
+					openhour = 12
+				elif openhour > 12:
+					openhour -= 12
 
-			openhour = "0" + str(openhour) if openhour < 10 else str(openhour)
+				openhour = "0" + str(openhour) if openhour < 10 else str(openhour)
 
-			closeperiod = "PM" if closehour > 12 else "AM"
-			closehour = int(closehour)
+				closeperiod = "PM" if closehour > 12 else "AM"
+				closehour = int(closehour)
 
-			if closehour == 0:
-				closehour = 12
-			elif closehour > 12:
-				closehour -= 12
-				
-			closehour = "0" + str(closehour) if closehour < 10 else str(closehour)
+				if closehour == 0:
+					closehour = 12
+				elif closehour > 12:
+					closehour -= 12
+					
+				closehour = "0" + str(closehour) if closehour < 10 else str(closehour)
 
-			info["opentime"]["hour"] = openhour
-			info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
-			info["opentime"]["period"] = openperiod
+				info["opentime"]["hour"] = openhour
+				info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
+				info["opentime"]["period"] = openperiod
 
-			info["closetime"]["hour"] = closehour
-			info["closetime"]["minute"] = data[day[k][:3]]["closetime"]["minute"]
-			info["closetime"]["period"] = closeperiod
-			info["working"] = working
+				info["closetime"]["hour"] = closehour
+				info["closetime"]["minute"] = data[day[k][:3]]["closetime"]["minute"]
+				info["closetime"]["period"] = closeperiod
+				info["working"] = working
 
-			hours[k] = info
+				hours[k] = info
+		else:
+			hours = []
 
 		accounts.append({
 			"key": "account-" + str(owner), 

@@ -400,7 +400,6 @@ def setup_location():
 	logoexist = False if logopath == False else True
 	longitude = request.form['longitude']
 	latitude = request.form['latitude']
-	hours = request.form['hours']
 	ownerid = request.form['ownerid']
 	time = request.form['time']
 	ipAddress = request.form['ipAddress']
@@ -422,8 +421,7 @@ def setup_location():
 
 				logo.save(os.path.join('static', logoname))
 			else:
-				if permission == "true":
-					errormsg = "Please take a good photo of your store"
+				logoname = ""
 
 			if errormsg == "":
 				# create a connected account
@@ -490,6 +488,7 @@ def setup_location():
 				ownerInfo = json.loads(owner.info)
 				ownerInfo["locationId"] = str(location.id)
 				owner.info = json.dumps(ownerInfo)
+				owner.hours = json.dumps({"notrequired": True}) if type == "restaurant" else "{}"
 
 				db.session.commit()
 
@@ -586,7 +585,7 @@ def update_location():
 				oldlogo = location.logo
 
 				if newlogoname != oldlogo:
-					if oldlogo != "" and os.path.exists("static/" + oldlogo):
+					if oldlogo != "" and oldlogo != None and os.path.exists("static/" + oldlogo):
 						os.remove("static/" + oldlogo)
 
 					logo.save(os.path.join('static', newlogoname))
@@ -867,31 +866,25 @@ def get_more_locations():
 def get_location_profile():
 	content = request.get_json()
 
-	locationid = content['locationid']
+	locationid = str(content['locationid'])
 
-	if content['longitude'] != None:
-		longitude = float(content['longitude'])
-		latitude = float(content['latitude'])
+	if 'longitude' in content:
+		if content['longitude'] != None:
+			longitude = float(content['longitude'])
+			latitude = float(content['latitude'])
+		else:
+			longitude = content['longitude']
+			latitude = content['latitude']
 	else:
-		longitude = content['longitude']
-		latitude = content['latitude']
+		longitude = None
+		latitude = None
 
 	location = Location.query.filter_by(id=locationid).first()
 	errormsg = ""
 	status = ""
 
 	if location != None:
-		num_menus = Menu.query.filter_by(locationId=locationid, parentMenuId="").count()
-		num_services = Service.query.filter_by(locationId=locationid, menuId="").count()
-		num_products = Product.query.filter_by(locationId=locationid, menuId="").count()
-
-		msg = ""
-		if num_menus > 0:
-			msg = "menus"
-		elif num_services > 0:
-			msg = "services"
-		elif num_products > 0:
-			msg = "products"
+		locationInfo = json.loads(location.info)
 
 		if longitude != None:
 			point1 = (longitude, latitude)
@@ -971,10 +964,13 @@ def get_location_profile():
 			"logo": location.logo,
 			"longitude": float(location.longitude),
 			"latitude": float(location.latitude),
-			"hours": hours
+			"hours": hours,
+			"type": "restaurant" if location.type == "restaurant" else "salon",
+			"listed": locationInfo["listed"],
+			"fullAddress": location.addressOne + ", " + (location.addressOne if location.addressTwo != "" else "") + location.city + ", " + location.province + ", " + location.postalcode
 		}
 
-		return { "locationInfo": info, "msg": msg }
+		return { "info": info }
 	else:
 		errormsg = "Location doesn't exist"
 
@@ -1091,97 +1087,6 @@ def make_reservation():
 			status = "cardrequired"
 	else:
 		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/get_info", methods=["POST"])
-def get_info():
-	content = request.get_json()
-
-	locationid = content['locationid']
-	menuid = content['menuid']
-
-	if 'longitude' in content:
-		geolocation = True
-
-		if content['longitude'] != None:
-			longitude = float(content['longitude'])
-			latitude = float(content['latitude'])
-		else:
-			longitude = content['longitude']
-			latitude = content['latitude']
-	else:
-		geolocation = False
-
-	location = Location.query.filter_by(id=locationid).first()
-	errormsg = ""
-	status = ""
-
-	if location != None:
-		locationInfo = json.loads(location.info)
-		addressOne = location.addressOne
-		addressTwo = location.addressTwo
-		city = location.city
-		province = location.province
-		postalcode = location.postalcode
-
-		storeName = location.name
-		storeAddress = addressOne + " " + addressTwo + ", " + city + ", " + province + " " + postalcode
-		storeLogo = location.logo
-		locationType = 'salon' if location.type == 'nail' or location.type == 'hair' else 'restaurant'
-		locationListed = locationInfo["listed"]
-
-		num_menus = Menu.query.filter_by(locationId=locationid, parentMenuId=menuid).count()
-		num_services = Service.query.filter_by(locationId=locationid, menuId=menuid).count()
-		num_products = Product.query.filter_by(locationId=locationid, menuId=menuid).count()
-
-		menu = Menu.query.filter_by(id=menuid).first()
-		menuName = ""
-		menuInfo = ""
-
-		if menu != None:
-			menuName = menu.name
-			menuInfo = menu.info
-
-		if num_menus > 0:
-			info = { "msg": "menus", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
-		elif num_services > 0:
-			info = { "msg": "services", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
-		elif num_products > 0:
-			info = { "msg": "products", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
-		else:
-			info = { "msg": "", "menuName": menuName, "menuInfo": menuInfo, "name": storeName, "address": storeAddress, "icon": storeLogo, "type": locationType, "listed": locationListed }
-
-		if geolocation == True:
-			point1 = (longitude, latitude)
-			point2 = (float(location.longitude), float(location.latitude))
-			distance = haversine(point1, point2)
-
-			if distance < 1:
-				distance *= 1000
-				distance = str(round(distance, 1)) + " m away"
-			else:
-				distance = str(round(distance, 1)) + " km away"
-		else:
-			distance = None
-
-		locationInfo = {
-			"name": location.name,
-			"addressOne": location.addressOne,
-			"addressTwo": location.addressTwo,
-			"city": location.city,
-			"province": location.province,
-			"postalcode": location.postalcode,
-			"phonenumber": location.phonenumber,
-			"distance": distance,
-			"logo": location.logo
-		}
-
-		info["info"] = locationInfo
-
-		return info
-	else:
-		errormsg = "Location doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 

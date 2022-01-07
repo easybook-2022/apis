@@ -574,7 +574,7 @@ def update_user():
 			newprofilename = profile.filename
 			oldprofile = user.profile
 
-			if oldprofile != "" and os.path.exists("static/" + oldprofile):
+			if oldprofile != "" and oldprofile != None and os.path.exists("static/" + oldprofile):
 				os.remove("static/" + oldprofile)
 
 			profile.save(os.path.join('static', newprofilename))

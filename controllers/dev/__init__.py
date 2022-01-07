@@ -422,7 +422,7 @@ def reset():
 		except:
 			print("no id exist")
 
-		if logo != "" and os.path.exists("static/" + logo):
+		if logo != "" and logo != None and os.path.exists("static/" + logo):
 			os.remove("static/" + logo)
 
 		query("delete from location where id = " + str(location['id']), False)
@@ -436,7 +436,7 @@ def reset():
 		delete = True
 		image = menu['image']
 
-		if image != "" and os.path.exists("static/" + image):
+		if image != "" and image != None and os.path.exists("static/" + image):
 			os.remove("static/" + image)
 
 		query("delete from menu where id = " + str(menu['id']), False)
@@ -450,7 +450,7 @@ def reset():
 		delete = True
 		image = service['image']
 
-		if image != "" and os.path.exists("static/" + image):
+		if image != "" and image != None and os.path.exists("static/" + image):
 			os.remove("static/" + image)
 
 		query("delete from service where id = " + str(service['id']), False)
@@ -474,7 +474,7 @@ def reset():
 		delete = True
 		image = product['image']
 
-		if image != "" and os.path.exists("static/" + image):
+		if image != "" and image != None and os.path.exists("static/" + image):
 			os.remove("static/" + image)
 
 		query("delete from product where id = " + str(product['id']), False)
@@ -506,7 +506,7 @@ def reset():
 
 	for file in files:
 		if ".jpg" in file:
-			if file != "" and os.path.exists("static/" + file):
+			if file != "" and file != None and os.path.exists("static/" + file):
 				os.remove("static/" + file)
 
 	accounts = stripe.Account.list().data

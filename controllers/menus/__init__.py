@@ -384,55 +384,88 @@ def welcome_menus():
 
 	return { "msg": "welcome to menus of easygo", "menus": menus }
 
-@app.route("/get_menus", methods=["POST"])
-def get_menus():
+@app.route("/get_menus/<id>")
+def get_menus(id):
+	def getOtherMenu(locationId, parentMenuid):
+		menuDatas = Menu.query.filter_by(locationId=locationId, parentMenuId=parentMenuid).all() # if start with menus
+		items = []
+
+		if len(menuDatas) > 0:
+			for index, data in enumerate(menuDatas):
+				parentMenuid = data.id
+				children = Menu.query.filter_by(locationId=id, parentMenuId=parentMenuid).count()
+
+				items.append({
+					"key": "menu-" + str(index), "id": data.id, "name": data.name, "info": data.info, 
+					"image": data.image, "list": [], "listType": "list"
+				})
+				otherList = getOtherMenu(locationId, data.id)
+
+				if len(otherList) > 0:
+					items[len(items) - 1]["list"] = otherList
+				else:
+					location = Location.query.filter_by(id=locationId).first()
+					type = location.type
+					items = []
+
+					if type == "restaurant":
+						datas = Product.query.filter_by(locationId=locationId, menuId=data.id).all()
+
+						for data in datas:
+							sizes = json.loads(data.sizes)
+
+							items.append({
+								"key": "product-" + str(data.id), "id": data.id, "name": data.name, "info": data.info, 
+								"price": float(data.price) if data.price != '' else None, "sizes": sizes,
+								"image": data.image, "listType": "product"
+							})
+					else:
+						datas = Service.query.filter_by(locationId=locationId, menuId=data.id).all()
+
+						for data in datas:
+							items.append({
+								"key": "service-" + str(data.id), "id": data.id, 
+								"name": data.name, "info": data.info, 
+								"price": float(data.price), "duration": data.duration, 
+								"image": data.image, "listType": "service"
+							})
+
+					items[len(items) - 1]["list"] = items
+		else:
+			productDatas = Product.query.filter_by(locationId=locationId, menuId=parentMenuid).all() # if start with products
+
+			if len(productDatas) > 0:
+				for index, data in enumerate(productDatas):
+					sizes = json.loads(data.sizes)
+					
+					items.append({
+						"key": "product-" + str(data.id), "id": data.id, "name": data.name, "info": data.info, 
+						"price": float(data.price) if data.price != '' else None, "sizes": sizes,
+						"image": data.image, "listType": "product"
+					})
+			else:
+				serviceDatas = Service.query.filter_by(locationId=locationId, menuId=parentMenuid).all() # if start with services
+
+				for index, data in enumerate(serviceDatas):
+					items.append({
+						"key": "service-" + str(data.id), "id": data.id, 
+						"name": data.name, "info": data.info, 
+						"price": float(data.price), "duration": data.duration, 
+						"image": data.image, "listType": "service"
+					})
+
+		return items
+
 	content = request.get_json()
 
-	locationid = content['locationid']
-	parentMenuid = content['parentmenuid']
-
-	location = Location.query.filter_by(id=locationid).first()
+	location = Location.query.filter_by(id=id).first()
 	errormsg = ""
 	status = ""
 
 	if location != None:
-		datas = query("select * from menu where locationId = " + str(locationid) + " and parentMenuId = '" + str(parentMenuid) + "'", True)
-		row = []
-		rownum = 0
-		menus = []
-		nummenus = 0
+		menus = getOtherMenu(id, "")
 
-		if len(datas) > 0:
-			for index, data in enumerate(datas):
-				numCategories = 0
-				numCategories += query("select count(*) as num from product where menuId = " + str(data['id']), True)[0]["num"]
-				numCategories += query("select count(*) as num from service where menuId = " + str(data['id']), True)[0]["num"]
-
-				row.append({
-					"key": "menu-" + str(index),
-					"id": data['id'],
-					"numCategories": numCategories,
-					"name": data['name'],
-					"info": data['info'],
-					"image": data['image'],
-				})
-				nummenus += 1
-
-				if len(row) == 2:
-					menus.append({ "key": "row-menu-" + str(rownum),"row": row })
-					row = []
-					rownum += 1
-
-			if len(row) > 0:
-				last_key = int(row[-1]['key'].replace("menu-", "")) + 1
-
-				if len(row) < 2:
-					rownum += 1
-					row.append({ "key": "menu-" + str(last_key) })
-
-				menus.append({ "key": "row-menu-" + str(rownum), "row": row })
-
-		return { "menus": menus, "nummenus": nummenus }
+		return { "menus": menus }
 	else:
 		errormsg = "Location doesn't exist"
 
@@ -452,7 +485,7 @@ def remove_menu(id):
 
 		image = menu.image
 
-		if os.path.exists("static/" + image):
+		if image != "" and image != None and os.path.exists("static/" + image):
 			os.remove("static/" + image)
 
 		db.session.delete(menu)
@@ -464,14 +497,9 @@ def remove_menu(id):
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/get_menu_info", methods=["POST"])
-def get_menu_info():
-	content = request.get_json()
-
-	parentMenuid = content['parentMenuid']
-	menuid = content['menuid']
-
-	menu = Menu.query.filter_by(id=menuid, parentMenuId=parentMenuid).first()
+@app.route("/get_menu_info/<id>")
+def get_menu_info(id):
+	menu = Menu.query.filter_by(id=id).first()
 	errormsg = ""
 	status = ""
 
@@ -511,7 +539,7 @@ def save_menu():
 			oldimage = menu.image
 
 			if newimagename != oldimage:
-				if oldimage != "" and os.path.exists("static/" + oldimage):
+				if oldimage != "" and oldimage != None and os.path.exists("static/" + oldimage):
 					os.remove("static/" + oldimage)
 
 				image.save(os.path.join('static', newimagename))
@@ -551,8 +579,7 @@ def add_menu():
 
 					image.save(os.path.join("static", imagename))
 				else:
-					if permission == "true":
-						errormsg = "Take a good picture of your menu"
+					imagename = ""
 				
 				if errormsg == "":
 					menu = Menu(locationid, parentMenuid, name, info, imagename)
