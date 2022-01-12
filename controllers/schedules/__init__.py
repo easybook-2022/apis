@@ -143,7 +143,8 @@ class Schedule(db.Model):
 	workerId = db.Column(db.Integer)
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
-	serviceId = db.Column(db.Text)
+	serviceId = db.Column(db.Integer)
+	serviceInput = db.Column(db.String(20))
 	time = db.Column(db.String(15))
 	status = db.Column(db.String(10))
 	cancelReason = db.Column(db.String(200))
@@ -153,14 +154,15 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
-	info = db.Column(db.String(75))
+	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, serviceInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
 		self.menuId = menuId
 		self.serviceId = serviceId
+		self.serviceInput = serviceInput
 		self.time = time
 		self.status = status
 		self.cancelReason = cancelReason
@@ -205,6 +207,8 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
+	productInput = db.Column(db.String(20))
+	productPrice = db.Column(db.String(10))
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
@@ -215,9 +219,11 @@ class Cart(db.Model):
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, locationId, productId, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, productInput, productPrice, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
 		self.locationId = locationId
 		self.productId = productId
+		self.productInput = productInput
+		self.productPrice = productPrice
 		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
@@ -237,6 +243,8 @@ class Transaction(db.Model):
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	serviceId = db.Column(db.Integer)
+	serviceInput = db.Column(db.String(20))
+	serviceInputPrice = db.Column(db.String(10))
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
@@ -244,11 +252,13 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(200))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, locationId, productId, serviceId, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, locationId, productId, serviceId, serviceInput, serviceInputPrice, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.locationId = locationId
 		self.productId = productId
 		self.serviceId = serviceId
+		self.serviceInput = serviceInput
+		self.serviceInputPrice = serviceInputPrice
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
@@ -396,11 +406,12 @@ def get_requests():
 	status = ""
 
 	if location != None:
+		# get requested schedules
 		datas = query("select * from schedule where locationId = " + str(locationid) + " and (status = 'requested' or status = 'change' or status = 'accepted')", True)
 		requests = []
 
 		for data in datas:
-			service = None
+			service = {}
 
 			if data['serviceId'] != "":
 				service = Service.query.filter_by(id=data['serviceId']).first()
@@ -425,17 +436,28 @@ def get_requests():
 				"userId": user.id,
 				"username": user.username,
 				"time": int(data['nextTime']) if data['nextTime'] != "" else int(data['time']),
-				"name": service.name if service != None else location.name,
-				"image": service.image if service != None else location.logo,
+				"name": service.name if service != None else data["serviceInput"],
+				"image": service.image if service != None else None,
 				"note": data['note'],
 				"diners": len(json.loads(data['customers'])) if data['locationType'] == 'restaurant' else False,
 				"tablenum": data['table'],
 				"status": data['status']
 			})
 
+		datas = query("select * from cart where status = 'requested'", True)
+
+		for data in datas:
+			requests.append({
+				"key": "order-request-" + str(data['id']),
+				"id": str(data['id']),
+				"product": data['productInput'],
+				"quantity": data['quantity']
+			})
+
 		return { "requests": requests, "numrequests": len(requests) }
 	else:
 		errormsg = "Location doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -449,19 +471,24 @@ def get_appointment_info(id):
 		locationId = schedule.locationId
 		serviceId = schedule.serviceId
 
-		service = Service.query.filter_by(id=serviceId).first()
+		info = { "locationId": int(locationId) }
 
-		if service != None:
-			info = {
-				"locationId": int(locationId),
-				"name": service.name,
-			}
+		if serviceId != "-1":
+			service = Service.query.filter_by(id=serviceId).first()
 
-			return { "appointmentInfo": info }
+			if service != None:
+				info["name"] = service.name
+			else:
+				errormsg = "Service doesn't exist"
+				status = "nonexist"
 		else:
-			errormsg = "Service doesn't exist"
+			info["name"] = schedule.serviceInput
+
+		if errormsg == "":
+			return { "appointmentInfo": info }
 	else:
 		errormsg = "Appointment doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -507,8 +534,10 @@ def get_reservation_info(id):
 			return { "reservationInfo": info }
 		else:
 			errormsg = "Location doesn't exist"
+			status = "nonexist"
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -565,6 +594,7 @@ def reschedule_appointment():
 		errormsg = "Action is denied"
 	else:
 		errormsg = "Appointment doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -596,6 +626,7 @@ def reschedule_reservation():
 		return { "msg": "Reservation rescheduled", "receiver": receiver }
 	else:
 		errormsg = "Reservation doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -607,6 +638,7 @@ def request_appointment():
 	workerid = content['workerid']
 	locationid = content['locationid']
 	serviceid = content['serviceid']
+	serviceinfo = content['serviceinfo']
 	oldtime = content['oldtime']
 	time = content['time']
 	note = content['note']
@@ -618,8 +650,16 @@ def request_appointment():
 
 	if user != None:
 		location = Location.query.filter_by(id=locationid).first()
-		service = Service.query.filter_by(id=serviceid).first()
-		schedule = Schedule.query.filter_by(userId=userid, serviceId=serviceid).first()
+
+		if serviceid != -1:
+			service = Service.query.filter_by(id=serviceid).first()
+			schedule = Schedule.query.filter_by(userId=userid, serviceId=serviceid).first()
+			servicename = service.name
+			menuid = service.menuId
+		else:
+			schedule = Schedule.query.filter_by(userId=userid, serviceInput=serviceinfo).first()
+			servicename = serviceinfo
+			menuid = -1
 
 		if location != None:
 			owners = query("select id, info from owner where info like '%\"locationId\": \"" + str(location.id) + "\"%'", True)
@@ -662,7 +702,7 @@ def request_appointment():
 								pushmessages.append(pushInfo(
 									pushid, 
 									"Appointment requesting time change",
-									"A client re-requested an appointment for service: " + service.name,
+									"A client re-requested an appointment for service: " + servicename,
 									content
 								))
 							
@@ -686,7 +726,7 @@ def request_appointment():
 							pushmessages.append(pushInfo(
 								pushid, 
 								"Appointment re-requesting",
-								"A client re-requested an appointment for service: " + service.name,
+								"A client re-requested an appointment for service: " + servicename,
 								content
 							))
 						
@@ -698,7 +738,7 @@ def request_appointment():
 						return { "msg": "appointment re-requested", "status": "requested", "receiver": receiver }
 			else: # new schedule
 				info = json.dumps({"allowpayment": False,"chargedUser": False,"workerId":0,"cut": locationInfo["cut"]})
-				appointment = Schedule(userid, workerid, locationid, service.menuId, serviceid, time, "requested", '', '', location.type, 1, note, '[]', '', info)
+				appointment = Schedule(userid, workerid, locationid, menuid, serviceid, serviceinfo, time, "requested", '', '', location.type, 1, note, '[]', '', info)
 
 				db.session.add(appointment)
 				db.session.commit()
@@ -709,7 +749,7 @@ def request_appointment():
 						pushmessages.append(pushInfo(
 							pushid, 
 							"Appointment requesting",
-							"A client requested an appointment for service: " + service.name,
+							"A client requested an appointment for service: " + servicename,
 							content
 						))
 				
@@ -723,8 +763,10 @@ def request_appointment():
 				errormsg = "Push notification failed"
 		else:
 			errormsg = "Location doesn't exist"
+			status = "nonexist"
 	else:
 		errormsg = "User doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -831,6 +873,7 @@ def accept_request():
 		errormsg = "Push notification failed"
 	else:
 		errormsg = "Appointment doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -956,6 +999,7 @@ def confirm_request():
 		errormsg = "Push notification failed"
 	else:
 		errormsg = "Appointment doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -1010,6 +1054,7 @@ def cancel_request():
 			errormsg = "Action is denied"
 	else:
 		errormsg = "Appointment doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -1038,6 +1083,7 @@ def close_request(id):
 		errormsg = "Action is denied"
 	else:
 		errormsg = "Appointment doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -1066,8 +1112,10 @@ def cancel_reservation_joining():
 				return { "msg": "diner removed" }
 
 		errormsg = "Diner doesn't exist"
+		status = "nonexist"
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -1128,13 +1176,16 @@ def accept_reservation_joining():
 					return { "msg": "diner accepted", "receiver": receiver, "chargeUser": chargeUser }
 
 				errormsg = "Diner doesn't exist"
+				status = "nonexist"
 			else:
 				errormsg = "Schedule doesn't exist"
+				status = "nonexist"
 		else:
 			errormsg = "A payment method is required"
 			status = "cardrequired"
 	else:
 		errormsg = "User doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -1161,6 +1212,7 @@ def add_diner():
 		return { "msg": "Diner added" }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -1183,6 +1235,63 @@ def cancel_reservation(id):
 		return { "msg": "Schedule cancelled", "receiver": receiver }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/cancel_appointment/<id>")
+def cancel_appointment(id):
+	schedule = Schedule.query.filter_by(id=id).first()
+	errormsg = ""
+	status = ""
+
+	if schedule != None:
+		receiver = ["user" + str(schedule.userId)]
+
+		db.session.delete(schedule)
+		db.session.commit()
+
+		return { "msg": "Schedule cancelled", "receiver": receiver }
+	else:
+		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/request_payment", methods=["POST"])
+def request_payment():
+	content = request.get_json()
+
+	scheduleid = content['scheduleid']
+	ownerid = content['ownerid']
+	serviceprice = content['serviceprice']
+
+	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	owner = Owner.query.filter_by(id=ownerid).first()
+
+	errormsg = ""
+	status = ""
+
+	if schedule != None and owner != None:
+		receiver = ["user" + str(schedule.userId)]
+
+		worker = {
+			"id": owner.id,
+			"username": owner.username,
+			"requestprice": float(serviceprice)
+		}
+
+		info = json.loads(schedule.info)
+		info["workerId"] = int(owner.id)
+
+		schedule.info = json.dumps(info)
+
+		db.session.commit()
+
+		return { "msg": "success", "receiver": receiver, "worker": worker }
+	else:
+		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -1292,7 +1401,7 @@ def get_diners_payments():
 												if other["selected"] == True:
 													price += float(other["price"])
 
-											transaction = Transaction(groupId, location.id, order['productid'], 0, userid, '[]', json.dumps(options), json.dumps(others), json.dumps(sizes), time)
+											transaction = Transaction(groupId, location.id, order['productid'], 0, "", 0, userid, '[]', json.dumps(options), json.dumps(others), json.dumps(sizes), time)
 
 											db.session.add(transaction)
 											db.session.commit()
@@ -1311,10 +1420,13 @@ def get_diners_payments():
 						return { "msg": "" }
 			else:
 				errormsg = "Diner doesn't exist"
+				status = "nonexist"
 		else:
 			errormsg = "Location doesn't exist"
+			status = "nonexist"
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status, "info": info }, 400
 
@@ -1376,7 +1488,7 @@ def receive_epayment():
 						for k in range(20):
 							groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
 
-						transaction = Transaction(groupId, locationid, 0, schedule.serviceId, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
+						transaction = Transaction(groupId, locationid, 0, schedule.serviceId, "", 0, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
 
 						db.session.add(transaction)
 						db.session.delete(schedule)
@@ -1413,8 +1525,10 @@ def receive_epayment():
 					status = "wrongworker"
 		else:
 			errormsg = "Location doesn't exist"
+			status = "nonexist"
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -1454,7 +1568,7 @@ def receive_inpersonpayment():
 					for k in range(20):
 						groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
 
-					transaction = Transaction(groupId, locationid, 0, schedule.serviceId, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
+					transaction = Transaction(groupId, locationid, 0, schedule.serviceId, "", 0, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
 
 					db.session.add(transaction)
 					db.session.delete(schedule)
@@ -1487,8 +1601,10 @@ def receive_inpersonpayment():
 				status = "unallowedpayment"
 		else:
 			errormsg = "Location doesn't exist"
+			status = "nonexist"
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -1561,6 +1677,7 @@ def can_serve_diners(id):
 		errormsg = "Push notification failed"
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -1604,6 +1721,7 @@ def allow_payment():
 		errormsg = "Push notification failed"
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -1673,6 +1791,57 @@ def send_dining_payment():
 			return { "msg": "Payment sent", "receiver": receiver }
 		else:
 			errormsg = "Schedule doesn't exist"
+			status = "nonexist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/send_service_payment", methods=["POST"])
+def send_service_payment():
+	content = request.get_json()
+
+	scheduleid = content['scheduleid']
+	userid = content['userid']
+	service = content['service']
+	workerinfo = content['workerinfo']
+
+	user = User.query.filter_by(id=userid).first()
+	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	errormsg = ""
+	status = ""
+
+	if user != None and schedule != None:
+		price = workerinfo["requestprice"]
+		info = json.loads(user.info)
+
+		customerId = info["customerId"]
+		stripeCustomer = stripe.Customer.list_sources(
+			customerId,
+			object="card",
+			limit=1
+		)
+		cards = len(stripeCustomer.data)
+
+		if cards > 0:
+			customerPay(price, userid, schedule.locationId)
+
+			groupId = ""
+
+			for k in range(20):
+				groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
+
+			transaction = Transaction(groupId, schedule.locationId, 0, schedule.serviceId, service, price, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
+
+			db.session.add(transaction)
+			db.session.delete(schedule)
+			db.session.commit()
+
+			return { "msg": "success" }
+		else:
+			errormsg = "cardrequired"
+			status = "cardrequired"
+	else:
+		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -1689,6 +1858,7 @@ def get_appointments():
 	for data in datas:
 		user = User.query.filter_by(id=data['userId']).first()
 		service = Service.query.filter_by(id=data['serviceId']).first()
+			
 		info = json.loads(data["info"])
 
 		client = {
@@ -1702,8 +1872,9 @@ def get_appointments():
 			"username": user.username,
 			"client": client,
 			"time": int(data['time']),
-			"name": service.name,
-			"image": service.image,
+			"serviceid": service.id if service != None else "",
+			"name": service.name if service != None else data['serviceInput'],
+			"image": service.image if service != None else None,
 			"gettingPayment": False,
 			"allowPayment": info["allowpayment"]
 		})
@@ -1745,6 +1916,7 @@ def search_customers():
 		return { "appointments": appointments, "numappointments": len(appointments) }
 	else:
 		errormsg = "Location doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -1817,14 +1989,18 @@ def see_user_orders():
 			size['key'] = "size-" + str(k)
 
 		if len(callfor) == 0:
-			if product.price == "":
-				for size in sizes:
-					if size['selected'] == True:
-						cost += quantity * float(size['price'])
-						totaloverallcost += quantity * float(size['price'])
+			if product != None:
+				if product.price == "":
+					for size in sizes:
+						if size['selected'] == True:
+							cost += quantity * float(size['price'])
+							totaloverallcost += quantity * float(size['price'])
+				else:
+					cost += quantity * float(product.price)
+					totaloverallcost += quantity * float(product.price)
 			else:
-				cost += quantity * float(product.price)
-				totaloverallcost += quantity * float(product.price)
+				cost += quantity * float(data['productPrice'])
+				totaloverallcost += quantity * float(data['productPrice'])
 
 			for other in others:
 				if other['selected'] == True:
@@ -1847,10 +2023,10 @@ def see_user_orders():
 		orders.append({
 			"key": "cart-item-" + str(data['id']),
 			"id": str(data['id']),
-			"name": product.name,
-			"productId": product.id,
+			"name": product.name if product != None else data['productInput'],
+			"productId": product.id if product != None else "",
 			"note": data['note'],
-			"image": product.image,
+			"image": product.image if product != None else None,
 			"options": options,
 			"others": others,
 			"sizes": sizes,
@@ -1975,6 +2151,7 @@ def get_diners_orders(id):
 		return { "diners": diners, "total": total }
 	else:
 		errormsg = "Reservation doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2032,6 +2209,7 @@ def get_schedule_info(id):
 		return { "scheduleInfo": info }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2138,10 +2316,13 @@ def add_item_to_order():
 					errormsg = "Push notification failed"
 				else:
 					errormsg = "Schedule doesn't exist"
+					status = "nonexist"
 		else:
 			errormsg = "Product doesn't exist"
+			status = "nonexist"
 	else:
 		errormsg = "User doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2277,6 +2458,7 @@ def see_dining_orders(id):
 		return { "rounds": each_rounds, "dinersseated": dinersseated }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2320,6 +2502,7 @@ def edit_diners(id):
 		return { "diners": diners, "numdiners": numdiners }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2401,6 +2584,7 @@ def get_dining_orders(id):
 		return { "rounds": each_rounds }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2445,6 +2629,7 @@ def deliver_round():
 		return { "msg": "round served", "receiver": receiver }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2503,6 +2688,7 @@ def send_orders(id):
 			return { "msg": "order sent" }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2569,8 +2755,10 @@ def edit_order():
 							return { "orderInfo": info, "msg": "order info fetched" }
 
 		errormsg = "Order doesn't exist"
+		status = "nonexist"
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2614,6 +2802,7 @@ def update_order():
 		return { "msg": "order updated" }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2654,6 +2843,7 @@ def delete_order():
 		return { "msg": "order deleted", "receiver": receiver }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2708,6 +2898,7 @@ def add_diners():
 		errormsg = "Push notification failed"
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2799,6 +2990,7 @@ def edit_order_callfor():
 							return { "searchedDiners": searcheddiners, "numSearchedDiners": numsearcheddiners, "orderingItem": orderingItem }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2824,6 +3016,7 @@ def diner_is_removable():
 		return { "removable": True }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2862,6 +3055,7 @@ def diner_is_selectable():
 		info = { "selectable": False, "username": user.username }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status, "info": info }, 400
 
@@ -2905,6 +3099,7 @@ def cancel_dining_order():
 		return { "msg": "user order cancelled", "receiver": receiver, "numCallfor": numCallfor }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2939,6 +3134,7 @@ def confirm_dining_order():
 		return { "msg": "user order confirmed", "receiver": receiver }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2974,5 +3170,6 @@ def update_order_callfor():
 		return { "msg": "call for updated" }
 	else:
 		errormsg = "Schedule doesn't exist"
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400

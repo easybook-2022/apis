@@ -143,7 +143,8 @@ class Schedule(db.Model):
 	workerId = db.Column(db.Integer)
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
-	serviceId = db.Column(db.Text)
+	serviceId = db.Column(db.Integer)
+	serviceInput = db.Column(db.String(20))
 	time = db.Column(db.String(15))
 	status = db.Column(db.String(10))
 	cancelReason = db.Column(db.String(200))
@@ -153,14 +154,15 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
-	info = db.Column(db.String(75))
+	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, serviceInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
 		self.menuId = menuId
 		self.serviceId = serviceId
+		self.serviceInput = serviceInput
 		self.time = time
 		self.status = status
 		self.cancelReason = cancelReason
@@ -205,6 +207,8 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
+	productInput = db.Column(db.String(20))
+	productPrice = db.Column(db.String(10))
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
@@ -215,9 +219,11 @@ class Cart(db.Model):
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, locationId, productId, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, productInput, productPrice, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
 		self.locationId = locationId
 		self.productId = productId
+		self.productInput = productInput
+		self.productPrice = productPrice
 		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
@@ -237,6 +243,8 @@ class Transaction(db.Model):
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	serviceId = db.Column(db.Integer)
+	nameInput = db.Column(db.String(20))
+	priceInput = db.Column(db.String(10))
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
@@ -244,11 +252,13 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(200))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, locationId, productId, serviceId, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, locationId, productId, serviceId, nameInput, priceInput, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.locationId = locationId
 		self.productId = productId
 		self.serviceId = serviceId
+		self.nameInput = nameInput
+		self.priceInput = priceInput
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
@@ -454,12 +464,13 @@ def get_cart_items(id):
 				size['key'] = "size-" + str(k)
 
 			if len(callfor) == 0:
-				if product.price == "":
-					for size in sizes:
-						if size['selected'] == True:
-							cost += quantity * float(size['price'])
-				else:
-					cost += quantity * float(product.price)
+				if product != None:
+					if product.price == "":
+						for size in sizes:
+							if size['selected'] == True:
+								cost += quantity * float(size['price'])
+					else:
+						cost += quantity * float(product.price)
 
 				for other in others:
 					if other['selected'] == True:
@@ -481,9 +492,11 @@ def get_cart_items(id):
 			items.append({
 				"key": "cart-item-" + str(data.id),
 				"id": str(data.id),
-				"name": product.name,
-				"productId": product.id, "note": data.note, "image": product.image, "options": options, "others": others,
-				"sizes": sizes, "quantity": quantity, "price": cost, "pst": pst, "hst": hst,
+				"name": product.name if product != None else data.productInput,
+				"productId": product.id if product != None else None, 
+				"note": data.note, 
+				"image": product.image if product != None else None, 
+				"options": options, "others": others, "sizes": sizes, "quantity": quantity, "price": cost, "pst": pst, "hst": hst,
 				"totalcost": totalcost, "nofee": nofee, "fee": fee, "orderers": friends, "status": data.status
 			})
 
@@ -577,7 +590,9 @@ def add_item_to_cart():
 	content = request.get_json()
 
 	userid = content['userid']
+	locationid = content['locationid']
 	productid = content['productid']
+	productinfo = content['productinfo']
 	quantity = content['quantity']
 	callfor = content['callfor']
 	options = content['options']
@@ -587,10 +602,11 @@ def add_item_to_cart():
 
 	user = User.query.filter_by(id=userid).first()
 	product = Product.query.filter_by(id=productid).first()
+
 	errormsg = ""
 	status = ""
 
-	if user != None and product != None:
+	if user != None and (product != None or productinfo != ""):
 		info = json.loads(user.info)
 		customerid = info["customerId"]
 
@@ -602,9 +618,10 @@ def add_item_to_cart():
 		cards = len(customer.data)
 
 		if cards > 0 or len(callfor) > 0:
-			if product.price == '':
-				if "true" not in json.dumps(sizes):
-					errormsg = "Please choose a size"
+			if product != None:
+				if product.price == '':
+					if "true" not in json.dumps(sizes):
+						errormsg = "Please choose a size"
 		else:
 			errormsg = "A payment method is required"
 			status = "cardrequired"
@@ -620,7 +637,7 @@ def add_item_to_cart():
 		others = json.dumps(others)
 		sizes = json.dumps(sizes)
 
-		cartitem = Cart(product.locationId, productid, quantity, userid, callfor, options, others, sizes, note, "unlisted", "")
+		cartitem = Cart(locationid, productid, productinfo, 0, quantity, userid, callfor, options, others, sizes, note, "unlisted", "")
 
 		db.session.add(cartitem)
 		db.session.commit()
@@ -698,7 +715,8 @@ def checkout():
 
 			push(pushmessages)
 
-		query("update cart set status = 'checkout', orderNumber = '" + orderNumber + "' where adder = " + str(adder), False)
+		query("update cart set status = 'checkout', orderNumber = '" + orderNumber + "' where adder = " + str(adder) + " and productId != '-1'", False)
+		query("update cart set status = 'requested', orderNumber = '" + orderNumber + "' where adder = " + str(adder) + " and productId = '-1'", False)
 
 		return { "msg": "order sent", "receiver": receiver }
 	else:
@@ -790,18 +808,24 @@ def receive_payment():
 						groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
 
 					product = Product.query.filter_by(id=data['productId']).first()
-					location = Location.query.filter_by(id=product.locationId).first()
+
+					if product != None:
+						location = Location.query.filter_by(id=product.locationId).first()
+
 					sizes = json.loads(data['sizes'])
 					others = json.loads(data['others'])
 					quantity = int(data['quantity'])
 					cost = 0
 
-					if product.price == "":
-						for size in sizes:
-							if size["selected"] == True:
-								cost += quantity * float(size["price"])
+					if product != None:
+						if product.price == "":
+							for size in sizes:
+								if size["selected"] == True:
+									cost += quantity * float(size["price"])
+						else:
+							cost += quantity * float(product.price)
 					else:
-						cost += quantity * float(product.price)
+						cost += quantity * float(data['productPrice'])
 
 					for other in others:
 						if other['selected'] == True:
@@ -841,7 +865,13 @@ def receive_payment():
 							}
 
 					for k in range(quantity):
-						transaction = Transaction(groupId, 0, product.id, 0, adder, json.dumps(friends), options, others, sizes, time)
+						transaction = Transaction(
+							groupId, 0, 
+							product.id if product != None else -1, 
+							0, 
+							product.name if product != None else data['productInput'], 
+							cost, adder, json.dumps(friends), options, others, sizes, time
+						)
 
 						db.session.add(transaction)
 						db.session.commit()
@@ -1081,6 +1111,30 @@ def remove_call_for():
 		db.session.commit()
 
 		return { "msg": "callfor is removed" }
+	else:
+		errormsg = "Cart item doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/set_product_price", methods=["POST"])
+def set_product_price():
+	content = request.get_json()
+
+	cartid = content['cartid']
+	name = content['name']
+	price = float(content['price'])
+
+	cartitem = Cart.query.filter_by(id=cartid).first()
+	errormsg = ""
+	status = ""
+
+	if cartitem != None:
+		cartitem.status = 'checkout'
+		cartitem.productPrice = price
+
+		db.session.commit()
+
+		return { "msg": "" }
 	else:
 		errormsg = "Cart item doesn't exist"
 

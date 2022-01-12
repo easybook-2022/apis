@@ -144,7 +144,8 @@ class Schedule(db.Model):
 	workerId = db.Column(db.Integer)
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
-	serviceId = db.Column(db.Text)
+	serviceId = db.Column(db.Integer)
+	serviceInput = db.Column(db.String(20))
 	time = db.Column(db.String(15))
 	status = db.Column(db.String(10))
 	cancelReason = db.Column(db.String(200))
@@ -154,14 +155,15 @@ class Schedule(db.Model):
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
-	info = db.Column(db.String(75))
+	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, serviceInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
 		self.menuId = menuId
 		self.serviceId = serviceId
+		self.serviceInput = serviceInput
 		self.time = time
 		self.status = status
 		self.cancelReason = cancelReason
@@ -206,6 +208,8 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
+	productInput = db.Column(db.String(20))
+	productPrice = db.Column(db.String(10))
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
@@ -216,9 +220,11 @@ class Cart(db.Model):
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, locationId, productId, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, productInput, productPrice, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
 		self.locationId = locationId
 		self.productId = productId
+		self.productInput = productInput
+		self.productPrice = productPrice
 		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
@@ -238,6 +244,8 @@ class Transaction(db.Model):
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	serviceId = db.Column(db.Integer)
+	serviceInput = db.Column(db.String(20))
+	serviceInputPrice = db.Column(db.String(10))
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
@@ -245,11 +253,13 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(200))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, locationId, productId, serviceId, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, locationId, productId, serviceId, serviceInput, serviceInputPrice, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.locationId = locationId
 		self.productId = productId
 		self.serviceId = serviceId
+		self.serviceInput = serviceInput
+		self.serviceInputPrice = serviceInputPrice
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
@@ -388,7 +398,7 @@ def welcome_locations():
 @app.route("/setup_location", methods=["POST"])
 def setup_location():
 	name = request.form['storeName']
-	phonenumber = request.form['phonenumber']
+	phonenumber = request.form['phonenumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 	addressOne = request.form['addressOne']
 	addressTwo = request.form['addressTwo']
 	city = request.form['city']
@@ -475,7 +485,7 @@ def setup_location():
 
 				accountid = connectedaccount.id
 
-				locationInfo = json.dumps({"accountId": str(accountid), "listed": False, "cut": 100, "trialstart": trialtime })
+				locationInfo = json.dumps({"accountId": str(accountid), "listed": False, "cut": 100, "trialstart": trialtime, "menuPhotos": []})
 				location = Location(
 					name, addressOne, addressTwo, 
 					city, province, postalcode, phonenumber, logoname,
@@ -503,7 +513,7 @@ def setup_location():
 @app.route("/update_location", methods=["POST"])
 def update_location():
 	name = request.form['storeName']
-	phonenumber = request.form['phonenumber']
+	phonenumber = request.form['phonenumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 	addressOne = request.form['addressOne']
 	addressTwo = request.form['addressTwo']
 	city = request.form['city']
@@ -603,7 +613,9 @@ def update_location():
 
 @app.route("/fetch_num_requests/<id>")
 def fetch_num_requests(id):
-	numRequests = query("select count(*) as num from schedule where locationId = " + str(id) + " and (status = 'requested' or status = 'change' or status = 'accepted')", True)[0]["num"]
+	numRequests = 0
+	numRequests += query("select count(*) as num from schedule where locationId = " + str(id) + " and (status = 'requested' or status = 'change' or status = 'accepted')", True)[0]["num"]
+	numRequests += query("select count(*) as num from cart where status = 'requested'", True)[0]["num"]
 
 	return { "numRequests": numRequests }
 
@@ -951,6 +963,14 @@ def get_location_profile():
 
 				hours[k] = info
 
+		phonenumber = location.phonenumber
+
+		f3 = str(phonenumber[0:3])
+		s3 = str(phonenumber[3:6])
+		l4 = str(phonenumber[6:len(phonenumber)])
+
+		phonenumber = "(" + f3 + ") " + s3 + "-" + l4
+
 		info = {
 			"id": location.id,
 			"name": location.name,
@@ -959,7 +979,7 @@ def get_location_profile():
 			"city": location.city,
 			"province": location.province,
 			"postalcode": location.postalcode,
-			"phonenumber": location.phonenumber,
+			"phonenumber": phonenumber,
 			"distance": distance,
 			"logo": location.logo,
 			"longitude": float(location.longitude),
@@ -1099,6 +1119,7 @@ def change_location_state(id):
 	if location != None:
 		locationInfo = json.loads(location.info)
 		locationListed = locationInfo["listed"]
+		menuPhotos = len(locationInfo["menuPhotos"])
 		numproducts = Product.query.filter_by(locationId=id).count()
 		numservices = Service.query.filter_by(locationId=id).count()
 
@@ -1107,7 +1128,7 @@ def change_location_state(id):
 		account = stripe.Account.list_external_accounts(accountid, object="bank_account", limit=1)
 		bankaccounts = len(account.data)
 
-		if (locationListed == False and ((numproducts > 0 or numservices > 0) and bankaccounts == 1)) or (locationListed == True):
+		if (locationListed == False and ((numproducts > 0 or numservices > 0 or menuPhotos > 0) and bankaccounts == 1)) or (locationListed == True):
 			locationInfo["listed"] = False if locationInfo["listed"] == True else True
 			location.info = json.dumps(locationInfo)
 
@@ -1116,7 +1137,7 @@ def change_location_state(id):
 			return { "msg": "Change location state", "listed": locationInfo["listed"] }
 		else:
 			if locationListed == False:
-				if numproducts == 0 and numservices == 0:
+				if numproducts == 0 and numservices == 0 and menuPhotos == 0:
 					errormsg = "Menu setup required"
 					status = "menusetuprequired"
 				else:
