@@ -73,7 +73,7 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	info = db.Column(db.String(100))
+	info = db.Column(db.Text)
 
 	def __init__(
 		self, 
@@ -145,7 +145,7 @@ class Schedule(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	serviceId = db.Column(db.Integer)
-	serviceInput = db.Column(db.String(20))
+	userInput = db.Column(db.Text)
 	time = db.Column(db.String(15))
 	status = db.Column(db.String(10))
 	cancelReason = db.Column(db.String(200))
@@ -157,13 +157,13 @@ class Schedule(db.Model):
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, serviceInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
 		self.menuId = menuId
 		self.serviceId = serviceId
-		self.serviceInput = serviceInput
+		self.userInput = userInput
 		self.time = time
 		self.status = status
 		self.cancelReason = cancelReason
@@ -208,8 +208,7 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
-	productInput = db.Column(db.String(20))
-	productPrice = db.Column(db.String(10))
+	userInput = db.Column(db.Text)
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
@@ -220,11 +219,10 @@ class Cart(db.Model):
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, locationId, productId, productInput, productPrice, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, userInput, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
 		self.locationId = locationId
 		self.productId = productId
-		self.productInput = productInput
-		self.productPrice = productPrice
+		self.userInput = userInput
 		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
@@ -244,8 +242,8 @@ class Transaction(db.Model):
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	serviceId = db.Column(db.Integer)
-	serviceInput = db.Column(db.String(20))
-	serviceInputPrice = db.Column(db.String(10))
+	userInput = db.Column(db.Text)
+	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
@@ -253,13 +251,13 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(200))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, locationId, productId, serviceId, serviceInput, serviceInputPrice, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, locationId, productId, serviceId, userInput, quantity, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.locationId = locationId
 		self.productId = productId
 		self.serviceId = serviceId
-		self.serviceInput = serviceInput
-		self.serviceInputPrice = serviceInputPrice
+		self.userInput = userInput
+		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
@@ -329,28 +327,28 @@ def getRanStr():
 
 	return strid
 
-def stripeFee(amount):
-	return (amount + 0.30) / (1 - 0.029)
+def stripeFee(cost):
+	return (cost + 0.30) / (1 - 0.029)
 
-def calcTax(amount):
-	pst = 0.08 * amount
-	hst = 0.05 * amount
+def calcTax(cost):
+	pst = 0.08 * cost
+	hst = 0.05 * cost
 
 	return pst + hst
 
 def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
 
-def customerPay(amount, userid, locationid):
-	chargeamount = stripeFee(amount + calcTax(amount))
-	transferamount = amount + calcTax(amount)
+def customerPay(cost, userid, locationid):
+	chargecost = stripeFee(cost + calcTax(cost))
+	transfercost = cost + calcTax(cost)
 
 	user = User.query.filter_by(id=userid).first()
 	info = json.loads(user.info)
 	customerid = info["customerId"]
 
 	charge = stripe.Charge.create(
-		amount=int(chargeamount * 100),
+		amount=int(chargecost * 100),
 		currency="cad",
 		customer=customerid
 	)
@@ -361,7 +359,7 @@ def customerPay(amount, userid, locationid):
 		accountid = info["accountId"]
 
 		transfer = stripe.Transfer.create(
-			amount=int(transferamount * 100),
+			amount=int(transfercost * 100),
 			currency="cad",
 			destination=accountid,
 		)
@@ -492,6 +490,7 @@ def setup_location():
 					longitude, latitude, '["' + str(ownerid) + '"]',
 					type, hours, locationInfo
 				)
+
 				db.session.add(location)
 				db.session.commit()
 
@@ -619,11 +618,16 @@ def fetch_num_requests(id):
 
 	return { "numRequests": numRequests }
 
-@app.route("/fetch_num_appointments/<id>")
-def fetch_num_appointments(id):
-	numAppointments = query("select count(*) as num from schedule where locationId = " + str(id) + " and status = 'confirmed'", True)[0]["num"]
+@app.route("/fetch_num_appointments/<ownerid>")
+def fetch_num_appointments(ownerid):
+	numAppointments = query("select count(*) as num from schedule where status = 'confirmed' and workerId = " + str(ownerid), True)
 
-	return { "numAppointments": numAppointments }
+	if len(numAppointments) == 1:
+		num = numAppointments[0]["num"]
+	else:
+		num = 0
+
+	return { "numAppointments": num }
 
 @app.route("/fetch_num_cartorderers/<id>")
 def fetch_num_cartorderers(id):
@@ -1015,96 +1019,86 @@ def make_reservation():
 	if user != None:
 		info = json.loads(user.info)
 		customerid = info['customerId']
+		location = Location.query.filter_by(id=locationid).first()
 
-		customer = stripe.Customer.list_sources(
-			customerid,
-			object="card",
-			limit=1
-		)
-		cards = len(customer.data)
+		if location != None:
+			info = json.loads(location.info)
 
-		if cards > 0:
-			location = Location.query.filter_by(id=locationid).first()
+			receivingUsers = []
+			receivingLocations = []
 
-			if location != None:
-				info = json.loads(location.info)
+			owners = query("select id from owner where info like '%\"locationId\": \"" + str(locationid) + "\"%'", True)
+			
+			for owner in owners:
+				receivingLocations.append("owner" + str(owner["id"]))
 
-				receivingUsers = []
-				receivingLocations = []
+			if scheduleid != None: # existing schedule
+				sql = "select * from schedule where locationId = " + str(locationid)
+				sql += " and (userId = " + str(userid) + " or customers like '%\"userid\": \"" + str(userid) + "\"%')"
+				data = query(sql, True)
 
-				owners = query("select id from owner where info like '%\"locationId\": \"" + str(locationid) + "\"%'", True)
-				
-				for owner in owners:
-					receivingLocations.append("owner" + str(owner["id"]))
+				if data != None:
+					schedule = data[0]
 
-				if scheduleid != None: # existing schedule
-					sql = "select * from schedule where locationId = " + str(locationid)
-					sql += " and (userId = " + str(userid) + " or customers like '%\"userid\": \"" + str(userid) + "\"%')"
-					data = query(sql, True)
+					customers = json.loads(schedule["customers"])
 
-					if data != None:
-						schedule = data[0]
+					for customer in customers:
+						receivingUsers.append("user" + str(customer["userid"]))
 
-						customers = json.loads(schedule["customers"])
-
-						for customer in customers:
-							receivingUsers.append("user" + str(customer["userid"]))
-
-						if schedule["status"] == 'accepted': # reschedule
-							if oldtime == 0: # get old time
-								return {
-									"msg": "reservation already made",
-									"status": "existed",
-									"oldtime": int(schedule["time"]),
-									"note": schedule["note"]
-								}
-							else:
-								sql = "update schedule set status = 'change', nextTime = '" + str(time) + "', "
-								sql += "note = '" + note + "', userId = " + str(userid) + " where id = " + str(schedule["id"])
-
-								query(sql, False)
-
-								return { "msg": "reservation updated", "status": "updated", "receivingUsers": receivingUsers, "receivingLocations": receivingLocations }
+					if schedule["status"] == 'accepted': # reschedule
+						if oldtime == 0: # get old time
+							return {
+								"msg": "reservation already made",
+								"status": "existed",
+								"oldtime": int(schedule["time"]),
+								"note": schedule["note"]
+							}
 						else:
-							sql = "update schedule set status = 'requested', time = '" + str(time) + "', nextTime = '', "
+							sql = "update schedule set status = 'change', nextTime = '" + str(time) + "', "
 							sql += "note = '" + note + "', userId = " + str(userid) + " where id = " + str(schedule["id"])
 
 							query(sql, False)
 
-							return { "msg": "reservation re-requested", "status": "requested", "receivingUsers": receivingUsers, "receivingLocations": receivingLocations }
+							return { "msg": "reservation updated", "status": "updated", "receivingUsers": receivingUsers, "receivingLocations": receivingLocations }
 					else:
-						errormsg = "Schedule doesn't exist"
-				else: # new schedule
-					for customer in customers:
-						receivingUsers.append("user" + str(customer["userid"]))
+						sql = "update schedule set status = 'requested', time = '" + str(time) + "', nextTime = '', "
+						sql += "note = '" + note + "', userId = " + str(userid) + " where id = " + str(schedule["id"])
 
-					charges = { str(str(userid)): {
+						query(sql, False)
+
+						return { "msg": "reservation re-requested", "status": "requested", "receivingUsers": receivingUsers, "receivingLocations": receivingLocations }
+				else:
+					errormsg = "Schedule doesn't exist"
+			else: # new schedule
+				for customer in customers:
+					receivingUsers.append("user" + str(customer["userid"]))
+
+				charges = { str(str(userid)): {
+					"charge": 0.00,
+					"allowpayment": False,
+					"paid": False,
+					"tip": 0.00
+				}}
+
+				for customer in customers:
+					charges[customer["userid"]] = {
 						"charge": 0.00,
 						"allowpayment": False,
-						"paid": False
-					}}
+						"paid": False,
+						"tip": 0.00
+					}
 
-					for customer in customers:
-						charges[customer["userid"]] = {
-							"charge": 0.00,
-							"allowpayment": False,
-							"paid": False
-						}
+				orders = json.dumps({"groups": [], "charges": charges })
+				info = json.dumps({"donedining": False, "dinersseated": False, "cut": int(info["cut"]) })
 
-					orders = json.dumps({"groups": [], "charges": charges })
-					info = json.dumps({"donedining": False, "dinersseated": False, "cut": int(info["cut"]) })
+				schedule = Schedule(userid, -1, locationid, -1, -1, '{}', time, "requested", '', '', location.type, json.dumps(customers), note, orders, '', info)
 
-					schedule = Schedule(userid, -1, locationid, "", "", time, "requested", '', '', location.type, json.dumps(customers), note, orders, '', info)
+				db.session.add(schedule)
+				db.session.commit()
 
-					db.session.add(schedule)
-					db.session.commit()
-
-					return { "msg": "reservation added", "status": "new", "receivingUsers": receivingUsers, "receivingLocations": receivingLocations }
-			else:
-				errormsg = "Location doesn't exist"
+				return { "msg": "reservation added", "status": "new", "receivingUsers": receivingUsers, "receivingLocations": receivingLocations }
 		else:
-			errormsg = "A payment method is required"
-			status = "cardrequired"
+			errormsg = "Location doesn't exist"
 	else:
 		errormsg = "User doesn't exist"
 
@@ -1128,7 +1122,7 @@ def change_location_state(id):
 		account = stripe.Account.list_external_accounts(accountid, object="bank_account", limit=1)
 		bankaccounts = len(account.data)
 
-		if (locationListed == False and ((numproducts > 0 or numservices > 0 or menuPhotos > 0) and bankaccounts == 1)) or (locationListed == True):
+		if (locationListed == False and ((numproducts > 0 or numservices > 0 or menuPhotos > 0))) or (locationListed == True):
 			locationInfo["listed"] = False if locationInfo["listed"] == True else True
 			location.info = json.dumps(locationInfo)
 
@@ -1140,9 +1134,6 @@ def change_location_state(id):
 				if numproducts == 0 and numservices == 0 and menuPhotos == 0:
 					errormsg = "Menu setup required"
 					status = "menusetuprequired"
-				else:
-					errormsg = "Bank account required"
-					status = "bankaccountrequired"
 	else:
 		errormsg = "Location doesn't exist"
 

@@ -72,7 +72,7 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	info = db.Column(db.String(100))
+	info = db.Column(db.Text)
 
 	def __init__(
 		self, 
@@ -144,7 +144,7 @@ class Schedule(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	serviceId = db.Column(db.Integer)
-	serviceInput = db.Column(db.String(20))
+	userInput = db.Column(db.Text)
 	time = db.Column(db.String(15))
 	status = db.Column(db.String(10))
 	cancelReason = db.Column(db.String(200))
@@ -156,13 +156,13 @@ class Schedule(db.Model):
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, serviceInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
 		self.menuId = menuId
 		self.serviceId = serviceId
-		self.serviceInput = serviceInput
+		self.userInput = userInput
 		self.time = time
 		self.status = status
 		self.cancelReason = cancelReason
@@ -207,8 +207,7 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
-	productInput = db.Column(db.String(20))
-	productPrice = db.Column(db.String(10))
+	userInput = db.Column(db.Text)
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
@@ -219,11 +218,10 @@ class Cart(db.Model):
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, locationId, productId, productInput, productPrice, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, userInput, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
 		self.locationId = locationId
 		self.productId = productId
-		self.productInput = productInput
-		self.productPrice = productPrice
+		self.userInput = userInput
 		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
@@ -243,8 +241,8 @@ class Transaction(db.Model):
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	serviceId = db.Column(db.Integer)
-	nameInput = db.Column(db.String(20))
-	priceInput = db.Column(db.String(10))
+	userInput = db.Column(db.Text)
+	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
@@ -252,13 +250,13 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(200))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, locationId, productId, serviceId, nameInput, priceInput, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, locationId, productId, serviceId, userInput, quantity, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.locationId = locationId
 		self.productId = productId
 		self.serviceId = serviceId
-		self.nameInput = nameInput
-		self.priceInput = priceInput
+		self.userInput = userInput
+		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
@@ -419,6 +417,7 @@ def get_cart_items(id):
 			options = json.loads(data.options)
 			others = json.loads(data.others)
 			sizes = json.loads(data.sizes)
+			userInput = json.loads(data.userInput)
 			friends = []
 			row = []
 			cost = 0
@@ -472,9 +471,12 @@ def get_cart_items(id):
 					else:
 						cost += quantity * float(product.price)
 
-				for other in others:
-					if other['selected'] == True:
-						cost += float(other['price'])
+					for other in others:
+						if other['selected'] == True:
+							cost += float(other['price'])
+				else:
+					if "price" in userInput:
+						cost += quantity * float(userInput["price"])
 
 			if len(datas) == 1:
 				pst = cost * 0.08
@@ -489,10 +491,13 @@ def get_cart_items(id):
 				nofee = 0.00
 				fee = 0.00
 
+			if product == None:
+				userInput = json.loads(data.userInput)
+
 			items.append({
 				"key": "cart-item-" + str(data.id),
 				"id": str(data.id),
-				"name": product.name if product != None else data.productInput,
+				"name": product.name if product != None else userInput["name"],
 				"productId": product.id if product != None else None, 
 				"note": data.note, 
 				"image": product.image if product != None else None, 
@@ -544,19 +549,24 @@ def get_cart_items_total(id):
 			options = json.loads(data.options)
 			others = json.loads(data.others)
 			sizes = json.loads(data.sizes)
+			userInput = json.loads(data.userInput)
 			cost = 0
 
 			if len(callfor) == 0:
-				if product.price == "":
-					for size in sizes:
-						if size['selected'] == True:
-							cost += quantity * float(size['price'])
-				else:
-					cost += quantity * float(product.price)
+				if product != None:
+					if product.price == "":
+						for size in sizes:
+							if size['selected'] == True:
+								cost += quantity * float(size['price'])
+					else:
+						cost += quantity * float(product.price)
 
-				for other in others:
-					if other['selected'] == True:
-						cost += float(other['price'])
+					for other in others:
+						if other['selected'] == True:
+							cost += float(other['price'])
+				else:
+					if "price" in userInput:
+						cost += quantity * float(userInput["price"])
 
 			if len(datas) > 1:
 				total += cost
@@ -637,7 +647,8 @@ def add_item_to_cart():
 		others = json.dumps(others)
 		sizes = json.dumps(sizes)
 
-		cartitem = Cart(locationid, productid, productinfo, 0, quantity, userid, callfor, options, others, sizes, note, "unlisted", "")
+		userInput = json.dumps({ "name": productinfo, "type": "cartorder" })
+		cartitem = Cart(locationid, productid, userInput, quantity, userid, callfor, options, others, sizes, note, "unlisted", "")
 
 		db.session.add(cartitem)
 		db.session.commit()
@@ -704,16 +715,17 @@ def checkout():
 			receiver.append("owner" + str(owner["id"]))
 
 		if len(pushids) > 0:
-			pushmessages = []
-			for pushid in pushids:
-				pushmessages.append(pushInfo(
-					pushid, 
-					"An order requested",
-					"A customer requested an order",
-					content
-				))
+			if send_msg == True:
+				pushmessages = []
+				for pushid in pushids:
+					pushmessages.append(pushInfo(
+						pushid, 
+						"An order requested",
+						"A customer requested an order",
+						content
+					))
 
-			push(pushmessages)
+				push(pushmessages)
 
 		query("update cart set status = 'checkout', orderNumber = '" + orderNumber + "' where adder = " + str(adder) + " and productId != '-1'", False)
 		query("update cart set status = 'requested', orderNumber = '" + orderNumber + "' where adder = " + str(adder) + " and productId = '-1'", False)
@@ -749,12 +761,15 @@ def order_ready():
 			adderInfo = json.loads(adderInfo.info)
 			
 			if adderInfo["pushToken"] != "":
-				resp = push(pushInfo(
-					adderInfo["pushToken"],
-					"Order ready",
-					"Your order: " + str(ordernumber) + " is ready for pick up",
-					content
-				))
+				if send_msg == True:
+					resp = push(pushInfo(
+						adderInfo["pushToken"],
+						"Order ready",
+						"Your order: " + str(ordernumber) + " is ready for pick up",
+						content
+					))
+				else:
+					resp = { "status": "ok" }
 			else:
 				resp = { "status": "ok" }
 
@@ -815,6 +830,7 @@ def receive_payment():
 					sizes = json.loads(data['sizes'])
 					others = json.loads(data['others'])
 					quantity = int(data['quantity'])
+					userInput = json.loads(data['userInput'])
 					cost = 0
 
 					if product != None:
@@ -824,12 +840,13 @@ def receive_payment():
 									cost += quantity * float(size["price"])
 						else:
 							cost += quantity * float(product.price)
-					else:
-						cost += quantity * float(data['productPrice'])
 
-					for other in others:
-						if other['selected'] == True:
-							cost += float(other['price'])
+						for other in others:
+							if other['selected'] == True:
+								cost += float(other['price'])
+					else:
+						if "price" in userInput:
+							cost += quantity * float(userInput["price"])
 
 					quantity = int(data['quantity'])
 					callfor = json.loads(data['callfor'])
@@ -868,9 +885,7 @@ def receive_payment():
 						transaction = Transaction(
 							groupId, 0, 
 							product.id if product != None else -1, 
-							0, 
-							product.name if product != None else data['productInput'], 
-							cost, adder, json.dumps(friends), options, others, sizes, time
+							-1, data['userInput'], quantity, adder, json.dumps(friends), options, others, sizes, time
 						)
 
 						db.session.add(transaction)
@@ -887,7 +902,7 @@ def receive_payment():
 
 					customerPay(charge, info, locationid)
 
-					if pushToken != "":
+					if send_msg == True and pushToken != "":
 						push(pushInfo(
 							pushToken,
 							"Payment sent",
@@ -914,6 +929,7 @@ def edit_cart_item(id):
 	if cartitem != None:
 		product = Product.query.filter_by(id=cartitem.productId).first()
 		quantity = int(cartitem.quantity)
+		userInput = json.loads(cartitem.userInput)
 		cost = 0
 
 		options = json.loads(cartitem.options)
@@ -928,28 +944,32 @@ def edit_cart_item(id):
 		for k, size in enumerate(sizes):
 			size["key"] = "size-" + str(k)
 
-		if product.price == "":
-			for size in sizes:
-				if size["selected"] == True:
-					cost += quantity * float(size["price"])
-		else:
-			cost += quantity * float(product.price)
+		if product != None:
+			if product.price == "":
+				for size in sizes:
+					if size["selected"] == True:
+						cost += quantity * float(size["price"])
+			else:
+				cost += quantity * float(product.price)
 
-		for other in others:
-			if other["selected"] == True:
-				cost += float(other["price"])
+			for other in others:
+				if other["selected"] == True:
+					cost += float(other["price"])
+		else:
+			if "price" in userInput:
+				cost += quantity * float(userInput["price"])
 
 		info = {
-			"name": product.name,
-			"info": product.info,
-			"image": product.image,
-			"price": float(product.price) if product.price != "" else 0,
+			"name": product.name if product != None else (userInput["name"] if "name" in userInput else ""),
+			"info": product.info if product != None else "",
+			"image": product.image if product != None else "",
+			"price": float(product.price) if product != None else (userInput["price"] if "price" in userInput else 0),
 			"quantity": quantity,
 			"options": options,
 			"others": others,
 			"sizes": sizes,
 			"note": cartitem.note,
-			"cost": cost
+			"cost": cost if cost > 0 else None
 		}
 
 		return { "cartItem": info, "msg": "cart item fetched" }
@@ -997,6 +1017,7 @@ def edit_call_for(id):
 	if cartitem != None:
 		callfor = json.loads(cartitem.callfor)
 		product = Product.query.filter_by(id=cartitem.productId).first()
+		userInput = json.loads(cartitem.userInput)
 		searchedfriends = []
 		row = []
 		key = 0
@@ -1038,16 +1059,20 @@ def edit_call_for(id):
 		for k, size in enumerate(sizes):
 			size["key"] = "size-" + str(k)
 
-		if product.price == "":
-			for size in sizes:
-				if size["selected"] == True:
-					cost += cartitem.quantity * float(size["price"])
-		else:
-			cost += cartitem.quantity * float(product.price)
+		if product != None:
+			if product.price == "":
+				for size in sizes:
+					if size["selected"] == True:
+						cost += cartitem.quantity * float(size["price"])
+			else:
+				cost += cartitem.quantity * float(product.price)
 
-		for other in others:
-			if other["selected"] == True:
-				cost += float(other["price"])
+			for other in others:
+				if other["selected"] == True:
+					cost += float(other["price"])
+		else:
+			if "price" in userInput:
+				cost += cartitem.quantity * float(userInput["price"])
 
 		orderingItem = {
 			"name": product.name,
@@ -1129,12 +1154,17 @@ def set_product_price():
 	status = ""
 
 	if cartitem != None:
+		userInput = json.loads(cartitem.userInput)
+
 		cartitem.status = 'checkout'
-		cartitem.productPrice = price
+
+		userInput['price'] = float(price)
+
+		cartitem.userInput = json.dumps(userInput)
 
 		db.session.commit()
 
-		return { "msg": "" }
+		return { "msg": "", "receiver": "user" + str(cartitem.adder) }
 	else:
 		errormsg = "Cart item doesn't exist"
 

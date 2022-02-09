@@ -73,7 +73,7 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	info = db.Column(db.String(100))
+	info = db.Column(db.Text)
 
 	def __init__(
 		self, 
@@ -145,7 +145,7 @@ class Schedule(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	serviceId = db.Column(db.Integer)
-	serviceInput = db.Column(db.String(20))
+	userInput = db.Column(db.Text)
 	time = db.Column(db.String(15))
 	status = db.Column(db.String(10))
 	cancelReason = db.Column(db.String(200))
@@ -157,13 +157,13 @@ class Schedule(db.Model):
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, serviceInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
 		self.menuId = menuId
 		self.serviceId = serviceId
-		self.serviceInput = serviceInput
+		self.userInput = userInput
 		self.time = time
 		self.status = status
 		self.cancelReason = cancelReason
@@ -208,8 +208,7 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
-	productInput = db.Column(db.String(20))
-	productPrice = db.Column(db.String(10))
+	userInput = db.Column(db.Text)
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
@@ -220,11 +219,10 @@ class Cart(db.Model):
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, locationId, productId, productInput, productPrice, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, userInput, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
 		self.locationId = locationId
 		self.productId = productId
-		self.productInput = productInput
-		self.productPrice = productPrice
+		self.userInput = userInput
 		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
@@ -244,8 +242,8 @@ class Transaction(db.Model):
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	serviceId = db.Column(db.Integer)
-	serviceInput = db.Column(db.String(20))
-	serviceInputPrice = db.Column(db.String(10))
+	userInput = db.Column(db.Text)
+	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
@@ -253,13 +251,13 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(200))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, locationId, productId, serviceId, serviceInput, serviceInputPrice, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, locationId, productId, serviceId, userInput, quantity, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.locationId = locationId
 		self.productId = productId
 		self.serviceId = serviceId
-		self.serviceInput = serviceInput
-		self.serviceInputPrice = serviceInputPrice
+		self.userInput = userInput
+		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
@@ -468,8 +466,8 @@ def owner_verify(cellnumber):
 
 @app.route("/register", methods=["POST"])
 def owner_register():
-	username = request.form['username']
 	cellnumber = request.form['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
+	username = request.form['username']
 	password = request.form['password']
 	confirmPassword = request.form['confirmPassword']
 	profilepath = request.files.get('profile', False)

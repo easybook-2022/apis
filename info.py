@@ -9,6 +9,7 @@ test = True
 local = test
 test_stripe = test
 test_sms = test
+send_msg = False
 
 host = 'localhost'
 user = 'geottuse'
@@ -16,7 +17,7 @@ password = 'G3ottu53?'
 database = 'easygo'
 server_url = "0.0.0.0"
 local_url = "192.168.0.172"
-apphost = server_url if local == False else local_url
+apphost = server_url if test == False else local_url
 stripe.api_key = "sk_test_lft1B76yZfF2oEtD5rI3y8dz" if test_stripe == True else "sk_live_AeoXx4kxjfETP2fTR7IkdTYC"
 fee = 0.98
 

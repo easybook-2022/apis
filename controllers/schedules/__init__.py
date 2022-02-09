@@ -72,7 +72,7 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	info = db.Column(db.String(100))
+	info = db.Column(db.Text)
 
 	def __init__(
 		self, 
@@ -144,7 +144,7 @@ class Schedule(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	serviceId = db.Column(db.Integer)
-	serviceInput = db.Column(db.String(20))
+	userInput = db.Column(db.Text)
 	time = db.Column(db.String(15))
 	status = db.Column(db.String(10))
 	cancelReason = db.Column(db.String(200))
@@ -156,13 +156,13 @@ class Schedule(db.Model):
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, serviceInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
 		self.menuId = menuId
 		self.serviceId = serviceId
-		self.serviceInput = serviceInput
+		self.userInput = userInput
 		self.time = time
 		self.status = status
 		self.cancelReason = cancelReason
@@ -207,8 +207,7 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
-	productInput = db.Column(db.String(20))
-	productPrice = db.Column(db.String(10))
+	userInput = db.Column(db.Text)
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
@@ -219,11 +218,10 @@ class Cart(db.Model):
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, locationId, productId, productInput, productPrice, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, userInput, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
 		self.locationId = locationId
 		self.productId = productId
-		self.productInput = productInput
-		self.productPrice = productPrice
+		self.userInput = userInput
 		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
@@ -243,8 +241,8 @@ class Transaction(db.Model):
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	serviceId = db.Column(db.Integer)
-	serviceInput = db.Column(db.String(20))
-	serviceInputPrice = db.Column(db.String(10))
+	userInput = db.Column(db.Text)
+	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
@@ -252,13 +250,13 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(200))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, locationId, productId, serviceId, serviceInput, serviceInputPrice, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, locationId, productId, serviceId, userInput, quantity, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.locationId = locationId
 		self.productId = productId
 		self.serviceId = serviceId
-		self.serviceInput = serviceInput
-		self.serviceInputPrice = serviceInputPrice
+		self.userInput = userInput
+		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
@@ -328,28 +326,28 @@ def getRanStr():
 
 	return strid
 
-def stripeFee(amount):
-	return (amount + 0.30) / (1 - 0.029)
+def stripeFee(cost):
+	return (cost + 0.30) / (1 - 0.029)
 
-def calcTax(amount):
-	pst = 0.08 * amount
-	hst = 0.05 * amount
+def calcTax(cost):
+	pst = 0.08 * cost
+	hst = 0.05 * cost
 
 	return pst + hst
 
 def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
 
-def customerPay(amount, userid, locationid):
-	chargeamount = stripeFee(amount + calcTax(amount))
-	transferamount = amount + calcTax(amount)
+def customerPay(cost, userid, locationid):
+	chargecost = stripeFee(cost + calcTax(cost))
+	transfercost = cost + calcTax(cost)
 
 	user = User.query.filter_by(id=userid).first()
 	info = json.loads(user.info)
 	customerid = info["customerId"]
 
 	charge = stripe.Charge.create(
-		amount=int(chargeamount * 100),
+		amount=int(chargecost * 100),
 		currency="cad",
 		customer=customerid
 	)
@@ -360,7 +358,7 @@ def customerPay(amount, userid, locationid):
 		accountid = info["accountId"]
 
 		transfer = stripe.Transfer.create(
-			amount=int(transferamount * 100),
+			amount=int(transfercost * 100),
 			currency="cad",
 			destination=accountid,
 		)
@@ -428,6 +426,7 @@ def get_requests():
 			else:
 				worker = None
 
+			userInput = json.loads(data['userInput'])
 			requests.append({
 				"key": "request-" + str(data['id']),
 				"id": str(data['id']),
@@ -436,7 +435,7 @@ def get_requests():
 				"userId": user.id,
 				"username": user.username,
 				"time": int(data['nextTime']) if data['nextTime'] != "" else int(data['time']),
-				"name": service.name if service != None else data["serviceInput"],
+				"name": service.name if service != None else userInput['name'] if 'name' in userInput else "",
 				"image": service.image if service != None else None,
 				"note": data['note'],
 				"diners": len(json.loads(data['customers'])) if data['locationType'] == 'restaurant' else False,
@@ -447,10 +446,12 @@ def get_requests():
 		datas = query("select * from cart where status = 'requested'", True)
 
 		for data in datas:
+			userInput = json.loads(data['userInput'])
+
 			requests.append({
 				"key": "order-request-" + str(data['id']),
 				"id": str(data['id']),
-				"product": data['productInput'],
+				"product": userInput['name'],
 				"quantity": data['quantity']
 			})
 
@@ -471,9 +472,19 @@ def get_appointment_info(id):
 		locationId = schedule.locationId
 		serviceId = schedule.serviceId
 
-		info = { "locationId": int(locationId) }
+		worker = None
+		if schedule.workerId > 0:
+			workerInfo = Owner.query.filter_by(id=schedule.workerId).first()
+			worker = { "id": schedule.workerId, "username": workerInfo.username, "profile": workerInfo.profile }
 
-		if serviceId != "-1":
+		info = { 
+			"locationId": int(locationId), 
+			"serviceId": int(serviceId), 
+			"time": int(schedule.nextTime if schedule.nextTime != "" else schedule.time), 
+			"worker": worker
+		}
+
+		if serviceId != -1:
 			service = Service.query.filter_by(id=serviceId).first()
 
 			if service != None:
@@ -482,7 +493,9 @@ def get_appointment_info(id):
 				errormsg = "Service doesn't exist"
 				status = "nonexist"
 		else:
-			info["name"] = schedule.serviceInput
+			userInput = json.loads(schedule.userInput)
+
+			info["name"] = userInput["name"]
 
 		if errormsg == "":
 			return { "appointmentInfo": info }
@@ -528,7 +541,8 @@ def get_reservation_info(id):
 				"numdiners": len(json.loads(schedule.customers)),
 				"diners": column,
 				"note": schedule.note,
-				"table": schedule.table
+				"table": schedule.table,
+				"time": int(schedule.nextTime if schedule.nextTime != "" else schedule.time)
 			}
 
 			return { "reservationInfo": info }
@@ -569,6 +583,7 @@ def reschedule_appointment():
 			service = Service.query.filter_by(id=schedule.serviceId).first()
 			user = User.query.filter_by(id=schedule.userId).first()
 			userInfo = json.loads(user.info)
+			userInput = json.loads(schedule.userInput)
 
 			workerInfo = Owner.query.filter_by(id=ownerid).first()
 			worker = {
@@ -577,12 +592,15 @@ def reschedule_appointment():
 			}
 
 			if userInfo["pushToken"] != "":
-				resp = push(pushInfo(
-					userInfo["pushToken"],
-					"Appointment for service rescheduled",
-					location.name + " chose another time for you for service: " + service.name,
-					content
-				))
+				if send_msg == True:
+					resp = push(pushInfo(
+						userInfo["pushToken"],
+						"Appointment for service rescheduled",
+						location.name + " chose another time for you for service: " + (service.name if service != None else userInput["name"]),
+						content
+					))
+				else:
+					resp = { "status": "ok" }
 			else:
 				resp = { "status": "ok" }
 
@@ -657,14 +675,13 @@ def request_appointment():
 			servicename = service.name
 			menuid = service.menuId
 		else:
-			schedule = Schedule.query.filter_by(userId=userid, serviceInput=serviceinfo).first()
+			schedule = Schedule.query.filter(Schedule.userId==userid, Schedule.userInput.like("%\"name\": \"" + str(serviceinfo) + "\"%")).first()
 			servicename = serviceinfo
 			menuid = -1
 
 		if location != None:
 			owners = query("select id, info from owner where info like '%\"locationId\": \"" + str(location.id) + "\"%'", True)
 			locationInfo = json.loads(location.info)
-
 			receiver = []
 			pushids = []
 
@@ -705,8 +722,11 @@ def request_appointment():
 									"A client re-requested an appointment for service: " + servicename,
 									content
 								))
-							
-							resp = push(pushmessages)
+
+							if send_msg == True:
+								resp = push(pushmessages)
+							else:
+								resp = { "status": "ok" }
 						else:
 							resp = { "status": "ok" }
 
@@ -730,7 +750,10 @@ def request_appointment():
 								content
 							))
 						
-						resp = push(pushmessages)
+						if send_msg == True:
+							resp = push(pushmessages)
+						else:
+							resp = { "status": "ok" }
 					else:
 						resp = { "status": "ok" }
 
@@ -738,22 +761,26 @@ def request_appointment():
 						return { "msg": "appointment re-requested", "status": "requested", "receiver": receiver }
 			else: # new schedule
 				info = json.dumps({"allowpayment": False,"chargedUser": False,"workerId":0,"cut": locationInfo["cut"]})
-				appointment = Schedule(userid, workerid, locationid, menuid, serviceid, serviceinfo, time, "requested", '', '', location.type, 1, note, '[]', '', info)
+				userInput = json.dumps({ "name": serviceinfo })
+				appointment = Schedule(userid, workerid, locationid, menuid, serviceid, userInput, time, "requested", '', '', location.type, 1, note, '[]', '', info)
 
 				db.session.add(appointment)
 				db.session.commit()
 
 				if len(pushids) > 0:
-					pushmessages = []
-					for pushid in pushids:
-						pushmessages.append(pushInfo(
-							pushid, 
-							"Appointment requesting",
-							"A client requested an appointment for service: " + servicename,
-							content
-						))
-				
-					resp = push(pushmessages)
+					if send_msg == True:
+						pushmessages = []
+						for pushid in pushids:
+							pushmessages.append(pushInfo(
+								pushid, 
+								"Appointment requesting",
+								"A client requested an appointment for service: " + servicename,
+								content
+							))
+
+						resp = push(pushmessages)
+					else:
+						resp = { "status": "ok" }
 				else:
 					resp = { "status": "ok" }
 
@@ -787,6 +814,7 @@ def accept_request():
 		location = Location.query.filter_by(id=locationId).first()
 		appointment.status = "accepted"
 		appointment.table = tablenum
+		userInput = json.loads(appointment.userInput)
 
 		if 'ownerid' in content:
 			workerId = appointment.workerId
@@ -851,19 +879,22 @@ def accept_request():
 		content["tablenum"] = tablenum
 
 		if len(pushids) > 0:
-			pushmessages = []
+			if send_msg == True:
+				pushmessages = []
 
-			if location.type == "restaurant":
-				title = "Reservation accepted"
-				message = "The restaurant accepted your reservation"
+				if location.type == "restaurant":
+					title = "Reservation accepted"
+					message = "The restaurant accepted your reservation"
+				else:
+					title = "Appointment accepted"
+					message = "The salon accepted your appointment for service: " + (service.name if service != None else userInput["name"])
+				
+				for pushid in pushids:
+					pushmessages.append(pushInfo(pushid, title, message, content))
+
+				resp = push(pushmessages)
 			else:
-				title = "Appointment accepted"
-				message = "The salon accepted your appointment for service: " + service.name
-			
-			for pushid in pushids:
-				pushmessages.append(pushInfo(pushid, title, message, content))
-		
-			resp = push(pushmessages)
+				resp = { "status": "ok" }
 		else:
 			resp = { "status": "ok" }
 
@@ -895,6 +926,7 @@ def confirm_request():
 		user = User.query.filter_by(id=userid).first()
 		location = Location.query.filter_by(id=locationId).first()
 		service = Service.query.filter_by(id=appointment.serviceId).first()
+		userInput = json.loads(appointment.userInput)
 		chargedUser = False
 		pushids = []
 
@@ -977,24 +1009,27 @@ def confirm_request():
 		db.session.commit()
 
 		if len(pushids) > 0:
-			pushmessages = []
+			if send_msg == True:
+				pushmessages = []
 
-			if location.type == "restaurant":
-				title = "Reservation confirmed"
-				message = "The customer confirmed the reservation"
+				if location.type == "restaurant":
+					title = "Reservation confirmed"
+					message = "The customer confirmed the reservation"
+				else:
+					title = "Appointment confirmed"
+					message = "The client confirmed the appointment for service: " + (service.name if service != None else userInput["name"])
+				
+				for pushid in pushids:
+					pushmessages.append(pushInfo(pushid, title, message, content))
+
+				resp = push(pushmessages)
 			else:
-				title = "Appointment confirmed"
-				message = "The client confirmed the appointment for service: " + service.name
-			
-			for pushid in pushids:
-				pushmessages.append(pushInfo(pushid, title, message, content))
-		
-			resp = push(pushmessages)
+				resp = { "status": "ok" }
 		else:
 			resp = { "status": "ok" }
 
 		if resp["status"] == "ok":
-			return { "msg": "Appointment confirmed", "receivers": receivers, "chargedUser": chargedUser }
+			return { "msg": "Appointment confirmed", "receivers": receivers, "chargedUser": chargedUser, "time": appointment.time }
 
 		errormsg = "Push notification failed"
 	else:
@@ -1003,8 +1038,8 @@ def confirm_request():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/cancel_request", methods=["POST"])
-def cancel_request():
+@app.route("/cancel_schedule", methods=["POST"])
+def cancel_schedule():
 	content = request.get_json()
 
 	id = content['id']
@@ -1015,14 +1050,17 @@ def cancel_request():
 	status = ""
 
 	if appointment != None:
-		if appointment.status == "requested" or appointment.status == "change":
+		locationType = appointment.locationType
+
+		if appointment.status == "requested" or appointment.status == "change" or appointment.status == "confirmed":
 			appointment.status = "cancel"
 			appointment.cancelReason = reason
 
 			db.session.commit()
 
 			receiver = []
-			if '[' in appointment.customers:
+
+			if locationType == "restaurant":
 				customers = json.loads(appointment.customers)
 
 				for customer in customers:
@@ -1033,16 +1071,23 @@ def cancel_request():
 			user = User.query.filter_by(id=appointment.userId).first()
 			info = json.loads(user.info)
 
-			if info["pushToken"] != "":
-				message = "The salon cancelled your appointment with"
-				message += " no reason" if reason == "" else " a reason"
+			if send_msg == True:
+				if info["pushToken"] != "":
+					message = "The "
+					message += "restaurant" if locationType == "restaurant" else "salon"
+					message += " cancelled your "
+					message == "reservation" if locationType == "restaurant" else "appointment"
+					message += " with"
+					message += " no reason" if reason == "" else " a reason"
 
-				resp = push(pushInfo(
-					info["pushToken"],
-					"Appointment cancelled",
-					message,
-					content
-				))
+					resp = push(pushInfo(
+						info["pushToken"],
+						("Reservation" if locationType == "restaurant" else "Appointment") + " cancelled",
+						message,
+						content
+					))
+				else:
+					resp = { "status": "ok" }
 			else:
 				resp = { "status": "ok" }
 
@@ -1058,15 +1103,17 @@ def cancel_request():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/close_request/<id>")
-def close_request(id):
+@app.route("/close_schedule/<id>")
+def close_schedule(id):
 	appointment = Schedule.query.filter_by(id=id).first()
 	errormsg = ""
 	status = ""
 
 	if appointment != None:
+		locationType = appointment.locationType
+
 		if appointment.status == "cancel" or appointment.status == "rebook":
-			if "[" in appointment.customers: # restaurant
+			if locationType == "restaurant":
 				customers = json.loads(appointment.customers)
 				receiver = []
 
@@ -1131,58 +1178,39 @@ def accept_reservation_joining():
 	status = ""
 
 	if user != None:
-		info = json.loads(user.info)
-		customerid = info["customerId"]
+		schedule = Schedule.query.filter_by(id=scheduleid).first()
 
-		stripeCustomer = stripe.Customer.list_sources(
-			customerid,
-			object="card",
-			limit=1
-		)
-		cards = len(stripeCustomer.data)
+		if schedule != None:
+			locationId = str(schedule.locationId)
+			diners = json.loads(schedule.customers)
+			confirmed = False
+			receiver = ["user" + str(schedule.userId)]
+			trialinfo = trialInfo()
 
-		if cards > 0:
-			schedule = Schedule.query.filter_by(id=scheduleid).first()
+			for k, diner in enumerate(diners):
+				if diner['userid'] == userid:
+					confirmed = True
+					diner['status'] = 'confirmed'
+					diners[k] = diner
 
-			if schedule != None:
-				locationId = str(schedule.locationId)
-				diners = json.loads(schedule.customers)
-				confirmed = False
-				receiver = ["user" + str(schedule.userId)]
-				chargeUser = False
-				trialinfo = trialInfo()
+					schedule.customers = json.dumps(diners)
 
-				for k, diner in enumerate(diners):
-					if diner['userid'] == userid:
-						confirmed = True
-						diner['status'] = 'confirmed'
-						diners[k] = diner
+					data = User.query.filter_by(id=userid).first()
+					info = json.loads(data.info)
 
-						schedule.customers = json.dumps(diners)
+				if diner['status'] == 'confirmed' and diner['userid'] != userid:
+					receiver.append("user" + str(diner['userid']))
 
-						data = User.query.filter_by(id=userid).first()
-						info = json.loads(data.info)
+			db.session.commit()
 
-						if trialinfo["status"] == "trialover":
-							customerPay(0.17, userid, None)
-							chargeUser = True
+			if confirmed == True:
+				return { "msg": "diner accepted", "receiver": receiver }
 
-					if diner['status'] == 'confirmed' and diner['userid'] != userid:
-						receiver.append("user" + str(diner['userid']))
-
-				db.session.commit()
-
-				if confirmed == True:
-					return { "msg": "diner accepted", "receiver": receiver, "chargeUser": chargeUser }
-
-				errormsg = "Diner doesn't exist"
-				status = "nonexist"
-			else:
-				errormsg = "Schedule doesn't exist"
-				status = "nonexist"
+			errormsg = "Diner doesn't exist"
+			status = "nonexist"
 		else:
-			errormsg = "A payment method is required"
-			status = "cardrequired"
+			errormsg = "Schedule doesn't exist"
+			status = "nonexist"
 	else:
 		errormsg = "User doesn't exist"
 		status = "nonexist"
@@ -1216,48 +1244,6 @@ def add_diner():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/cancel_reservation/<id>")
-def cancel_reservation(id):
-	schedule = Schedule.query.filter_by(id=id).first()
-	errormsg = ""
-	status = ""
-
-	if schedule != None:
-		customers = json.loads(schedule.customers)
-		receiver = []
-
-		for customer in customers:
-			receiver.append("user" + str(customer["userid"]))
-
-		db.session.delete(schedule)
-		db.session.commit()
-
-		return { "msg": "Schedule cancelled", "receiver": receiver }
-	else:
-		errormsg = "Schedule doesn't exist"
-		status = "nonexist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/cancel_appointment/<id>")
-def cancel_appointment(id):
-	schedule = Schedule.query.filter_by(id=id).first()
-	errormsg = ""
-	status = ""
-
-	if schedule != None:
-		receiver = ["user" + str(schedule.userId)]
-
-		db.session.delete(schedule)
-		db.session.commit()
-
-		return { "msg": "Schedule cancelled", "receiver": receiver }
-	else:
-		errormsg = "Schedule doesn't exist"
-		status = "nonexist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
 @app.route("/request_payment", methods=["POST"])
 def request_payment():
 	content = request.get_json()
@@ -1275,12 +1261,6 @@ def request_payment():
 	if schedule != None and owner != None:
 		receiver = ["user" + str(schedule.userId)]
 
-		worker = {
-			"id": owner.id,
-			"username": owner.username,
-			"requestprice": float(serviceprice)
-		}
-
 		info = json.loads(schedule.info)
 		info["workerId"] = int(owner.id)
 
@@ -1288,7 +1268,14 @@ def request_payment():
 
 		db.session.commit()
 
-		return { "msg": "success", "receiver": receiver, "worker": worker }
+		workerInfo = {
+			"id": owner.id,
+			"username": owner.username,
+			"requestprice": float(serviceprice),
+			"tip": 0
+		}
+
+		return { "msg": "success", "receiver": receiver, "workerInfo": workerInfo }
 	else:
 		errormsg = "Schedule doesn't exist"
 		status = "nonexist"
@@ -1337,13 +1324,15 @@ def get_diners_payments():
 				user = User.query.filter_by(id=userid).first()
 
 				charge = float(charges[userid]["charge"])
+				tip = float(charges[userid]["tip"])
 				allowPayment = charges[userid]["allowpayment"]
 				paid = charges[userid]["paid"]
 
 				if paid == False:
 					if allowPayment == True:
 						if charge > 0:
-							customerPay(charge, userid, schedule.locationId)
+							chargeAmount = charge + tip
+							customerPay(chargeAmount, userid, schedule.locationId)
 
 						charges[userid]["paid"] = True
 						charges[userid]["charge"] = None
@@ -1373,6 +1362,7 @@ def get_diners_payments():
 										if collect == True:
 											product = Product.query.filter_by(id=order['productid']).first()
 
+											userInput = order['userInput']
 											quantity = int(order['quantity'])
 											options = order['options']
 											others = order['others']
@@ -1384,15 +1374,18 @@ def get_diners_payments():
 												if "key" in option:
 													del option["key"]
 
-											if len(sizes) > 0:
-												for size in sizes:
-													if "key" in size:
-														del size["key"]
+											if product != None:
+												if len(sizes) > 0:
+													for size in sizes:
+														if "key" in size:
+															del size["key"]
 
-													if size["selected"] == True:
-														price = quantity * float(size["price"])
+														if size["selected"] == True:
+															price = quantity * float(size["price"])
+												else:
+													price = quantity * float(product.price)
 											else:
-												price = quantity * float(product.price)
+												price = quantity * float(userInput["price"])
 
 											for other in others:
 												if "key" in other:
@@ -1401,7 +1394,9 @@ def get_diners_payments():
 												if other["selected"] == True:
 													price += float(other["price"])
 
-											transaction = Transaction(groupId, location.id, order['productid'], 0, "", 0, userid, '[]', json.dumps(options), json.dumps(others), json.dumps(sizes), time)
+											userInput['type'] = 'dining'
+											userInput['globalTip'] = charges[round]["tip"]
+											transaction = Transaction(groupId, location.id, order['productid'], 0, json.dumps(userInput), 0, userid, '[]', json.dumps(options), json.dumps(others), json.dumps(sizes), time)
 
 											db.session.add(transaction)
 											db.session.commit()
@@ -1456,6 +1451,7 @@ def receive_epayment():
 			client = User.query.filter_by(id=clientId).first()
 			clientInfo = json.loads(client.info)
 			price = float(service.price)
+			tip = float(info["tip"])
 
 			if info["allowpayment"] == True and info["workerId"] == str(ownerid):
 				customerid = clientInfo["customerId"]
@@ -1477,7 +1473,8 @@ def receive_epayment():
 
 				if bankaccounts > 0:
 					if cards > 0:
-						customerPay(price, clientId, locationid)
+						chargeAmount = price + tip
+						customerPay(chargeAmount, clientId, locationid)
 					else:
 						errormsg = "cardrequired"
 						status = "cardrequired"
@@ -1488,7 +1485,8 @@ def receive_epayment():
 						for k in range(20):
 							groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
 
-						transaction = Transaction(groupId, locationid, 0, schedule.serviceId, "", 0, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
+						userInput = {"tip": tip, "type": "service"}
+						transaction = Transaction(groupId, locationid, 0, schedule.serviceId, json.dumps(userInput), 0, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
 
 						db.session.add(transaction)
 						db.session.delete(schedule)
@@ -1496,21 +1494,25 @@ def receive_epayment():
 
 						user = User.query.filter_by(id=schedule.userId).first()
 						userInfo = json.loads(user.info)
+						userInput = json.loads(schedule.userInput)
 
 						if userInfo["pushToken"] != "":
-							resp = push(pushInfo(
-								userInfo["pushToken"],
-								"Payment received by salon",
-								location.name + " has received your payment for service: " + service.name,
-								content
-							))
+							if send_msg == True:
+								resp = push(pushInfo(
+									userInfo["pushToken"],
+									"Payment received by salon",
+									location.name + " has received your payment for service: " + (service.name if service != None else userInput["name"]),
+									content
+								))
+							else:
+								resp = { "status": "ok" }
 						else:
 							resp = { "status": "ok" }
 
 						if resp["status"] == "ok":
 							receiver = ["user" + str(schedule.userId)]
 
-							return { "msg": "Payment received", "clientName": client.username, "name": service.name, "price": service.price, "receiver": receiver }
+							return { "msg": "Payment received", "clientName": client.username, "name": service.name, "price": chargeAmount, "receiver": receiver }
 						else:
 							errormsg = "Push notification failed"
 				else:
@@ -1568,7 +1570,7 @@ def receive_inpersonpayment():
 					for k in range(20):
 						groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
 
-					transaction = Transaction(groupId, locationid, 0, schedule.serviceId, "", 0, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
+					transaction = Transaction(groupId, locationid, 0, schedule.serviceId, "{}", 0, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
 
 					db.session.add(transaction)
 					db.session.delete(schedule)
@@ -1576,14 +1578,18 @@ def receive_inpersonpayment():
 
 					user = User.query.filter_by(id=schedule.userId).first()
 					userInfo = json.loads(user.info)
+					userInput = json.loads(schedule.userInput)
 
 					if userInfo["pushToken"] != "":
-						resp = push(pushInfo(
-							userInfo["pushToken"],
-							"Payment received by salon",
-							location.name + " has received your payment for service: " + service.name,
-							content
-						))
+						if send_msg == True:
+							resp = push(pushInfo(
+								userInfo["pushToken"],
+								"Payment received by salon",
+								location.name + " has received your payment for service: " + (service.name if service != None else userInput["name"]),
+								content
+							))
+						else:
+							resp = { "status": "ok" }
 					else:
 						resp = { "status": "ok" }
 
@@ -1608,9 +1614,14 @@ def receive_inpersonpayment():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/cancel_service/<id>")
-def cancel_service(id):
-	schedule = Schedule.query.filter_by(id=id).first()
+@app.route("/cancel_request", methods=["POST"])
+def cancel_request():
+	content = request.get_json()
+
+	userid = content['userid']
+	scheduleid = content['scheduleid']
+
+	schedule = Schedule.query.filter_by(id=scheduleid).first()
 	errormsg = ""
 	status = ""
 
@@ -1618,15 +1629,22 @@ def cancel_service(id):
 		locationId = str(schedule.locationId)
 
 		owners = query("select id from owner where info like '%\"locationId\": \"" + locationId + "\"%'", True)
-		receiver = []
+		receivers = { "owners": [], "users": [] }
 
 		for owner in owners:
-			receiver.append("owner" + str(owner["id"]))
+			receivers["owners"].append("owner" + str(owner["id"]))
+
+		if schedule.locationType == "restaurant":
+			customers = json.loads(schedule.customers)
+
+			for customer in customers:
+				if userid != customer["userid"]:
+					receivers["users"].append("user" + str(customer["userid"]))
 
 		db.session.delete(schedule)
 		db.session.commit()
 
-		return { "msg": "appointment cancelled", "receiver": receiver }
+		return { "msg": "schedule cancelled", "receivers": receivers }
 	else:
 		errormsg = "Schedule doens't exist"
 
@@ -1652,22 +1670,25 @@ def can_serve_diners(id):
 			if customer["status"] == "confirmed":
 				receiver.append("user" + str(customer["userid"]))
 
-		pushmessages = []
-		for info in receiver:
-			user = User.query.filter_by(id=info[4:]).first()
-			userInfo = json.loads(user.info)
+		if send_msg == True:
+			pushmessages = []
+			for info in receiver:
+				user = User.query.filter_by(id=info[4:]).first()
+				userInfo = json.loads(user.info)
 
-			if userInfo["pushToken"] != "":
-				content = { "id": id, "type": "canServeDiners" }
-				pushmessages.append(pushInfo(
-					userInfo["pushToken"],
-					"You are seated",
-					"You can start sending your orders now",
-					content
-				))
+				if userInfo["pushToken"] != "":
+					content = { "id": id, "type": "canServeDiners" }
+					pushmessages.append(pushInfo(
+						userInfo["pushToken"],
+						"You are seated",
+						"You can start sending your orders now",
+						content
+					))
 
-		if len(pushmessages) > 0:
-			resp = push(pushmessages)
+			if len(pushmessages) > 0:
+				resp = push(pushmessages)
+			else:
+				resp = { "status": "ok" }
 		else:
 			resp = { "status": "ok" }
 
@@ -1687,6 +1708,7 @@ def allow_payment():
 
 	scheduleid = content['scheduleid']
 	workerid = content['workerid']
+	tip = float(content['tip'])
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
 	errormsg = ""
@@ -1696,6 +1718,7 @@ def allow_payment():
 		info = json.loads(schedule.info)
 		info["allowpayment"] = True
 		info["workerId"] = str(workerid)
+		info["tip"] = tip
 
 		schedule.info = json.dumps(info)
 
@@ -1706,12 +1729,15 @@ def allow_payment():
 		workerInfo = json.loads(worker.info)
 
 		if workerInfo["pushToken"] != "":
-			resp = push(pushInfo(
-				workerInfo["pushToken"],
-				"Payment allowed by client: " + client.username,
-				"You can now receive your payment",
-				content
-			))
+			if send_msg == True:
+				resp = push(pushInfo(
+					workerInfo["pushToken"],
+					"Payment allowed by client: " + client.username,
+					"You can now receive your payment",
+					content
+				))
+			else:
+				resp = { "status": "ok" }
 		else:
 			resp = { "status": "ok" }
 
@@ -1728,70 +1754,96 @@ def allow_payment():
 @app.route("/send_dining_payment", methods=["POST"])
 def send_dining_payment():
 	content = request.get_json()
+	errormsg = ""
+	status = ""
 
 	userid = str(content['userid'])
 	scheduleid = content['scheduleid']
 
+	user = User.query.filter_by(id=userid).first()
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	errormsg = ""
-	status = ""
 
-	if 'getinfo' in content:
-		orders = json.loads(schedule.orders)
-		amount = 0.00
+	if user != None and schedule != None:
+		userInfo = json.loads(user.info)
+		customerId = userInfo["customerId"]
 
-		for rounds in orders["groups"]:
-			for round in rounds:
-				if round != "status" and round != "id" and round == userid:
-					user_orders = rounds[round]
+		stripeCustomer = stripe.Customer.list_sources(
+			customerId,
+			object="card",
+			limit=1
+		)
 
-					for order in user_orders:
-						collect = False
+		cards = len(stripeCustomer.data)
 
-						if "\"userid\": \"" + userid + "\"" in json.dumps(order["callfor"]):
-							collect = True
-						elif round == userid:
-							collect = True
+		if cards > 0:
+			if 'getinfo' in content: # 'getinfo' indicates to get payment details
+				orders = json.loads(schedule.orders)
+				cost = 0.00
 
-						if collect == True:
-							product = Product.query.filter_by(id=order['productid']).first()
+				for rounds in orders["groups"]:
+					for round in rounds:
+						if round != "status" and round != "id" and round == userid:
+							user_orders = rounds[round]
 
-							quantity = int(order['quantity'])
-							others = order['others']
-							sizes = order['sizes']
-							callfor = order['callfor']
+							for order in user_orders:
+								collect = False
 
-							if len(sizes) > 0:
-								for size in sizes:
-									if size["selected"] == True:
-										amount += quantity * float(size["price"])
-							else:
-								amount += quantity * float(product.price)
+								if "\"userid\": \"" + userid + "\"" in json.dumps(order["callfor"]):
+									collect = True
+								elif round == userid:
+									collect = True
 
-							for other in others:
-								if other["selected"] == True:
-									amount += float(other["price"])
+								if collect == True:
+									product = Product.query.filter_by(id=order['productid']).first()
 
-		return { "msg": "Amount received", "amount": amount }
+									quantity = int(order['quantity'])
+									others = order['others']
+									sizes = order['sizes']
+									callfor = order['callfor']
+									userInput = order['userInput']
+
+									if len(sizes) > 0:
+										for size in sizes:
+											if size["selected"] == True:
+												cost += quantity * float(size["price"])
+									else:
+										cost += quantity * float(product.price if product != None else (userInput["price"] if "price" in userInput else 13.99))
+
+									for other in others:
+										if other["selected"] == True:
+											cost += float(other["price"])
+
+				return { "msg": "Cost received", "cost": cost }
+			else:
+				locationId = str(schedule.locationId)
+				orders = json.loads(schedule.orders)
+
+				if str(userid) not in orders["charges"]:
+					orders["charges"][str(userid)] = {}
+
+				orders["charges"][str(userid)]["allowpayment"] = True
+				orders["charges"][str(userid)]["tip"] = float(content['tip'])
+
+				schedule.orders = json.dumps(orders)
+
+				db.session.commit()
+
+				owners = query("select id from owner where info like '%\"locationId\": \"" + locationId + "\"%'", True)
+				receiver = []
+				for owner in owners:
+					receiver.append("owner" + str(owner["id"]))
+
+				return { "msg": "Payment sent", "receiver": receiver }
+		else:
+			errormsg = "Payment required"
+			status = "cardrequired"
 	else:
-		if schedule != None:
-			locationId = str(schedule.locationId)
-			orders = json.loads(schedule.orders)
-			orders["charges"][str(userid)]["allowpayment"] = True
-
-			schedule.orders = json.dumps(orders)
-
-			db.session.commit()
-
-			owners = query("select id from owner where info like '%\"locationId\": \"" + locationId + "\"%'", True)
-			receiver = []
-			for owner in owners:
-				receiver.append("owner" + str(owner["id"]))
-
-			return { "msg": "Payment sent", "receiver": receiver }
+		if user == None:
+			errormsg = "User doesn't exist"
 		else:
 			errormsg = "Schedule doesn't exist"
-			status = "nonexist"
+
+		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -1802,7 +1854,7 @@ def send_service_payment():
 	scheduleid = content['scheduleid']
 	userid = content['userid']
 	service = content['service']
-	workerinfo = content['workerinfo']
+	workerinfo = content['workerInfo']
 
 	user = User.query.filter_by(id=userid).first()
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
@@ -1810,7 +1862,8 @@ def send_service_payment():
 	status = ""
 
 	if user != None and schedule != None:
-		price = workerinfo["requestprice"]
+		price = float(workerinfo["requestprice"])
+		tip = float(workerinfo["tip"])
 		info = json.loads(user.info)
 
 		customerId = info["customerId"]
@@ -1822,14 +1875,16 @@ def send_service_payment():
 		cards = len(stripeCustomer.data)
 
 		if cards > 0:
-			customerPay(price, userid, schedule.locationId)
+			charge = price + tip
+			customerPay(charge, userid, schedule.locationId)
 
 			groupId = ""
 
 			for k in range(20):
 				groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
 
-			transaction = Transaction(groupId, schedule.locationId, 0, schedule.serviceId, service, price, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
+			userInput = json.dumps({ "name": service, "price": price, "tip": tip, "type": "service" })
+			transaction = Transaction(groupId, schedule.locationId, 0, schedule.serviceId, userInput, 0, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
 
 			db.session.add(transaction)
 			db.session.delete(schedule)
@@ -1866,6 +1921,7 @@ def get_appointments():
 			"username": user.username
 		}
 
+		userInput = json.loads(data['userInput'])
 		appointments.append({
 			"key": "appointment-" + str(data['id']),
 			"id": str(data['id']),
@@ -1873,7 +1929,7 @@ def get_appointments():
 			"client": client,
 			"time": int(data['time']),
 			"serviceid": service.id if service != None else "",
-			"name": service.name if service != None else data['serviceInput'],
+			"name": service.name if service != None else userInput['name'],
 			"image": service.image if service != None else None,
 			"gettingPayment": False,
 			"allowPayment": info["allowpayment"]
@@ -1976,6 +2032,7 @@ def see_user_orders():
 		options = json.loads(data['options'])
 		others = json.loads(data['others'])
 		sizes = json.loads(data['sizes'])
+		userInput = json.loads(data['userInput'])
 		row = []
 		cost = 0
 
@@ -1996,11 +2053,11 @@ def see_user_orders():
 							cost += quantity * float(size['price'])
 							totaloverallcost += quantity * float(size['price'])
 				else:
-					cost += quantity * float(product.price)
-					totaloverallcost += quantity * float(product.price)
+					cost += quantity * float(product.price if product != None else (userInput["price"] if "price" in userInput else 13.99))
+					totaloverallcost += quantity * float(product.price if product != None else (userInput["price"] if "price" in userInput else 13.99))
 			else:
-				cost += quantity * float(data['productPrice'])
-				totaloverallcost += quantity * float(data['productPrice'])
+				cost += quantity * float(product.price if product != None else (userInput["price"] if "price" in userInput else 13.99))
+				totaloverallcost += quantity * float(product.price if product != None else (userInput["price"] if "price" in userInput else 13.99))
 
 			for other in others:
 				if other['selected'] == True:
@@ -2023,7 +2080,7 @@ def see_user_orders():
 		orders.append({
 			"key": "cart-item-" + str(data['id']),
 			"id": str(data['id']),
-			"name": product.name if product != None else data['productInput'],
+			"name": product.name if product != None else userInput['name'],
 			"productId": product.id if product != None else "",
 			"note": data['note'],
 			"image": product.image if product != None else None,
@@ -2069,23 +2126,27 @@ def get_diners_orders(id):
 
 		if str(schedule.userId) in charges:
 			allowPayment = charges[str(schedule.userId)]["allowpayment"] if str(schedule.userId) in charges else False
+			tip = charges[str(schedule.userId)]["tip"] if str(schedule.userId) in charges else 0
 			paid = charges[str(schedule.userId)]["paid"] if str(schedule.userId) in charges else False
 
 			user_charges[str(schedule.userId)] = {
-				"charge": 0,
+				"charge": 0.00,
 				"allowpayment": allowPayment,
-				"paid": paid
+				"paid": paid,
+				"tip": tip
 			}
 
 		for customer in customers:
 			if customer["status"] == "confirmed":
 				allowPayment = charges[customer["userid"]]["allowpayment"] if customer["userid"] in charges else False
+				tip = charges[customer["userid"]]["tip"] if customer["userid"] in charges else 0
 				paid = charges[customer["userid"]]["paid"] if customer["userid"] in charges else False
 
 				user_charges[customer["userid"]] = {
-					"charge": 0,
+					"charge": 0.00,
 					"allowpayment": allowPayment,
-					"paid": paid
+					"paid": paid,
+					"tip": tip
 				}
 
 		diners = []
@@ -2097,6 +2158,7 @@ def get_diners_orders(id):
 					for orderer in rounds[round]:
 						product = Product.query.filter_by(id=orderer['productid']).first()
 
+						userInput = orderer['userInput']
 						quantity = int(orderer['quantity'])
 						sizes = orderer['sizes']
 						others = orderer['others']
@@ -2108,7 +2170,7 @@ def get_diners_orders(id):
 								if size["selected"] == True:
 									price = quantity * float(size["price"])
 						else:
-							price = quantity * float(product.price)
+							price = quantity * float(product.price if product != None else (userInput["price"] if "price" in userInput else 13.99))
 
 						for other in others:
 							if other["selected"] == True:
@@ -2124,7 +2186,6 @@ def get_diners_orders(id):
 							user_charges[round]["charge"] += price
 							user_charges[round]["charge"] = str(user_charges[round]["charge"])
 
-
 			orders["charges"] = user_charges
 
 			schedule.orders = json.dumps(orders)
@@ -2133,7 +2194,7 @@ def get_diners_orders(id):
 
 		for index, charge in enumerate(user_charges):
 			user = User.query.filter_by(id=charge).first()
-			amount = float(user_charges[charge]["charge"])
+			cost = float(user_charges[charge]["charge"])
 
 			user_charges[charge]["key"] = "user-" + str(index)
 			user_charges[charge]["userId"] = user.id
@@ -2142,9 +2203,9 @@ def get_diners_orders(id):
 			user_charges[charge]["payed"] = False
 			user_charges[charge]["paying"] = False
 
-			if amount > 0:
-				user_charges[charge]["charge"] = stripeFee(amount + calcTax(amount))
-				total += float(user_charges[charge]["charge"])
+			if cost > 0:
+				user_charges[charge]["charge"] = stripeFee(cost + calcTax(cost))
+				total += float(user_charges[charge]["charge"]) + float(user_charges[charge]["tip"])
 
 				diners.append(user_charges[charge])
 
@@ -2233,6 +2294,7 @@ def add_item_to_order():
 	userid = str(content['userid'])
 	scheduleid = content['scheduleid']
 	productid = content['productid']
+	name = content['name']
 	quantity = content['quantity']
 	callfor = content['callfor']
 	options = content['options']
@@ -2247,10 +2309,11 @@ def add_item_to_order():
 	if user != None:
 		product = Product.query.filter_by(id=productid).first()
 
-		if product != None:
-			if product.price == '':
-				if "true" not in json.dumps(sizes):
-					errormsg = "Please choose a size"
+		if product != None or name != '':
+			if product != None:
+				if product.price == '':
+					if "true" not in json.dumps(sizes):
+						errormsg = "Please choose a size"
 
 			if errormsg == "":
 				schedule = Schedule.query.filter_by(id=scheduleid).first()
@@ -2278,9 +2341,9 @@ def add_item_to_order():
 						receiver.append("user" + str(info["userid"]))
 
 					if userid in first_group:
-						first_group[userid].append({ "id": getRanStr(), "productid": productid, "options": options, "others": others, "sizes": sizes, "quantity": quantity, "note": note, "callfor": callfor })
+						first_group[userid].append({ "id": getRanStr(), "productid": productid, "userInput": {"name": name}, "options": options, "others": others, "sizes": sizes, "quantity": quantity, "note": note, "callfor": callfor })
 					else:
-						first_group[userid] = [{ "id": getRanStr(), "productid": productid, "options": options, "others": others, "sizes": sizes, "quantity": quantity, "note": note, "callfor": callfor }]
+						first_group[userid] = [{ "id": getRanStr(), "productid": productid, "userInput": {"name": name}, "options": options, "others": others, "sizes": sizes, "quantity": quantity, "note": note, "callfor": callfor }]
 
 					groups[0] = first_group
 					orders['groups'] = groups
@@ -2288,25 +2351,28 @@ def add_item_to_order():
 
 					db.session.commit()
 
-					pushids = []
-					for info in callfor:
-						userInfo = User.query.filter_by(id=info["userid"]).first()
-						info = json.loads(userInfo.info)
+					if send_msg == True:
+						pushids = []
+						for info in callfor:
+							userInfo = User.query.filter_by(id=info["userid"]).first()
+							info = json.loads(userInfo.info)
 
 						if info["pushToken"] != "":
 							pushids.append(info["pushToken"])
 
-					if len(pushids) > 0:
-						pushmessages = []
-						for pushid in pushids:
-							pushmessages.append(pushInfo(
-								pushid,
-								"An order for you",
-								user.username + " made an order call for you\nPlease reject or accept it",
-								content
-							))
+						if len(pushids) > 0:
+							pushmessages = []
+							for pushid in pushids:
+								pushmessages.append(pushInfo(
+									pushid,
+									"An order for you",
+									user.username + " made an order call for you\nPlease reject or accept it",
+									content
+								))
 
-						resp = push(pushmessages)
+							resp = push(pushmessages)
+						else:
+							resp = { "status": "ok" }
 					else:
 						resp = { "status": "ok" }
 
@@ -2394,6 +2460,7 @@ def see_dining_orders(id):
 						others = order['others']
 						sizes = order['sizes']
 						quantity = int(order['quantity'])
+						userInput = order['userInput']
 						cost = 0
 
 						for k, option in enumerate(options):
@@ -2405,24 +2472,27 @@ def see_dining_orders(id):
 						for k, size in enumerate(sizes):
 							size['key'] = "size-" + str(k)
 
-						if product.price == "":
-							for size in sizes:
-								if size['selected'] == True:
-									cost += quantity * float(size['price'])
+						if product != None:
+							if product.price == "":
+								for size in sizes:
+									if size['selected'] == True:
+										cost += quantity * float(size['price'])
+							else:
+								cost += quantity * float(product.price)
 						else:
-							cost += quantity * float(product.price)
+							cost += quantity * (float(userInput["price"]) if "price" in userInput else 0)
 
 						for other in others:
 							if other['selected'] == True:
 								cost += float(other['price'])
 
 						orderer = User.query.filter_by(id=ordererid).first()
-
+						userInput = order["userInput"]
 						each_orders.append({
 							"id": order['id'],
-							"image": product.image,
+							"image": product.image if product != None else None,
 							"key": "meal-" + order['id'],
-							"name": product.name,
+							"name": product.name if product != None else userInput["name"],
 							"note": order['note'],
 							"options": options,
 							"others": others,
@@ -2431,7 +2501,8 @@ def see_dining_orders(id):
 							"cost": cost,
 							"orderers": orderers,
 							"orderer": { "id": ordererid, "username": orderer.username },
-							"numorderers": numorderers
+							"numorderers": numorderers,
+							"priceUnset": False if product != None or "price" in userInput else True
 						})
 						each_callfor_num = 0
 						each_order_num += 1
@@ -2551,15 +2622,17 @@ def get_dining_orders(id):
 							for k, size in enumerate(sizes):
 								size["key"] = "size-" + str(k)
 
+							userInput = order["userInput"]
 							each_orders.append({
 								"id": order['id'],
-								"image": product.image,
+								"image": product.image if product != None else "",
 								"key": "meal-" + order['id'],
-								"name": product.name,
+								"name": product.name if product != None else userInput["name"],
 								"note": order['note'],
 								"options": options, "others": others, "sizes": sizes,
 								"quantity": quantity,
-								"callfor": len(order['callfor'])
+								"callfor": len(order['callfor']),
+								"priceUnset": False if product != None or "price" in userInput else True
 							})
 							each_callfor_num = 0
 							each_order_num += 1
@@ -2588,8 +2661,8 @@ def get_dining_orders(id):
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/deliver_round", methods=["POST"])
-def deliver_round():
+@app.route("/serve_round", methods=["POST"])
+def serve_round():
 	content = request.get_json()
 
 	ownerid = content['ownerid']
@@ -2615,21 +2688,97 @@ def deliver_round():
 				receiver.append("owner" + str(owner["id"]))
 
 		groups = orders['groups']
+		invalid = False
 
 		for rounds in groups:
 			if rounds['id'] == roundid:
-				rounds['status'] = 'served'
+				for orderer in rounds:
+					if orderer != "status" and orderer != "id":
+						roundOrders = rounds[orderer]
 
-		orders['groups'] = groups
+						for order in roundOrders:
+							price = 0.00
 
-		schedule.orders = json.dumps(orders)
+							if order['productid'] > -1:
+								product = Product.query.filter_by(id=order['productid']).first()
+								options = json.loads(product.others)
+								others = json.loads(product.others)
+								sizes = json.loads(product.sizes)
 
-		db.session.commit()
+								if product.price == "":
+									if product.price == "":
+										for size in sizes:
+											if size['selected'] == True:
+												cost += quantity * float(size['price'])
+									else:
+										cost += quantity * float(product.price)
 
-		return { "msg": "round served", "receiver": receiver }
+									for other in others:
+										if other['selected'] == True:
+											cost += float(other['price'])
+								else:
+									price = float(product.price)
+							else:
+								userInput = order['userInput']
+								price = float(userInput['price']) if 'price' in userInput else 0
+
+							if price == 0.00:
+								invalid = True
+
+				if invalid == False:
+					rounds['status'] = 'served'
+
+		if invalid == False:
+			orders['groups'] = groups
+
+			schedule.orders = json.dumps(orders)
+
+			db.session.commit()
+
+			return { "msg": "round served", "receiver": receiver }
+		else:
+			errormsg = "Some price not set"
+			status = "unsetprices"
 	else:
 		errormsg = "Schedule doesn't exist"
 		status = "nonexist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/set_order_price", methods=["POST"])
+def set_order_price():
+	content = request.get_json()
+	errormsg = ""
+	status = ""
+
+	orderid = content['orderid']
+	name = content['name']
+	price = content['price']
+
+	reservation = Schedule.query.filter(Schedule.orders.like("%\"id\": \"" + str(orderid) + "\"%")).first()
+
+	if reservation != None:
+		orders = json.loads(reservation.orders)
+		groups = orders['groups']
+		receiver = []
+
+		for rounds in groups:
+			for k in rounds:
+				if k != "status" and k != "id":
+					for orderer in rounds[k]:
+						if orderer['id'] == orderid:
+							userInput = orderer['userInput']
+
+							userInput['price'] = float(price)
+							receiver = ["user" + str(k)]
+
+		reservation.orders = json.dumps(orders)
+
+		db.session.commit()
+
+		return { "msg": "success", "receiver": receiver }
+	else:
+		errormsg = "Reservation doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -2705,7 +2854,6 @@ def edit_order():
 
 	if schedule != None:
 		orders = json.loads(schedule.orders)
-
 		groups = orders['groups']
 
 		for rounds in groups:
@@ -2719,6 +2867,7 @@ def edit_order():
 							others = orderer['others']
 							sizes = orderer['sizes']
 							quantity = int(orderer['quantity'])
+							userInput = orderer['userInput']
 							cost = 0
 
 							for k, option in enumerate(options):
@@ -2730,25 +2879,29 @@ def edit_order():
 							for k, size in enumerate(sizes):
 								size['key'] = "size-" + str(k)
 
-							if product.price == "":
-								for size in sizes:
-									if size['selected'] == True:
-										cost += quantity * float(size['price'])
+							if product != None:
+								if product.price == "":
+									for size in sizes:
+										if size['selected'] == True:
+											cost += quantity * float(size['price'])
+								else:
+									cost += quantity * float(product.price)
 							else:
-								cost += quantity * float(product.price)
+								cost += quantity * (float(userInput["price"]) if "price" in userInput else 0)
 
 							for other in others:
 								if other['selected'] == True:
 									cost += float(other['price'])
 
+							userInput = orderer['userInput']
 							info = {
-								"name": product.name,
-								"info": product.info,
-								"image": product.image,
+								"name": product.name if product != None else userInput["name"],
+								"info": product.info if product != None else orderer["note"],
+								"image": product.image if product != None else "",
 								"quantity": quantity,
 								"options": options, "others": others, "sizes": sizes,
 								"note": orderer['note'],
-								"price": float(product.price) if product.price != "" else 0,
+								"price": float(product.price) if product != None else (userInput["price"] if "price" in userInput else 0),
 								"cost": cost
 							}
 
@@ -2878,17 +3031,20 @@ def add_diners():
 				if info["pushToken"] != "":
 					pushids.append(info["pushToken"])
 
-		if len(pushids) > 0:
-			pushmessages = []
-			for pushid in pushids:
-				pushmessages.append(pushInfo(
-					pushid,
-					"Join a reservation",
-					"You have been added to a reservation at " + location.name,
-					content
-				))
+		if send_msg == True:
+			if len(pushids) > 0:
+				pushmessages = []
+				for pushid in pushids:
+					pushmessages.append(pushInfo(
+						pushid,
+						"Join a reservation",
+						"You have been added to a reservation at " + location.name,
+						content
+					))
 
-			resp = push(pushmessages)
+				resp = push(pushmessages)
+			else:
+				resp = { "status": "ok" }
 		else:
 			resp = { "status": "ok" }
 
@@ -2957,6 +3113,7 @@ def edit_order_callfor():
 							others = orderer['others']
 							sizes = orderer['sizes']
 							quantity = int(orderer['quantity'])
+							userInput = orderer['userInput']
 							cost = 0
 
 							for k, option in enumerate(options):
@@ -2968,20 +3125,24 @@ def edit_order_callfor():
 							for k, size in enumerate(sizes):
 								size['key'] = "size-" + str(k)
 
-							if product.price == "":
-								for size in sizes:
-									if size['selected'] == True:
-										cost += quantity * float(size['price'])
+							if product != None:
+								if product.price == "":
+									for size in sizes:
+										if size['selected'] == True:
+											cost += quantity * float(size['price'])
+								else:
+									cost += quantity * float(product.price)
 							else:
-								cost += quantity * float(product.price)
+								cost += quantity * (float(userInput["price"]) if "price" in userInput else 0)
 
 							for other in others:
 								if other['selected'] == True:
 									cost += float(other['price'])
 
+							userInput = orderer['userInput']
 							orderingItem = {
-								"name": product.name,
-								"image": product.image,
+								"name": product.name if product != None else userInput["name"],
+								"image": product.image if product != None else "",
 								"options": options, "others": others, "sizes": sizes,
 								"quantity": int(orderer['quantity']),
 								"cost": cost

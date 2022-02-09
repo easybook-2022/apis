@@ -72,7 +72,7 @@ class Location(db.Model):
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
 	hours = db.Column(db.Text)
-	info = db.Column(db.String(100))
+	info = db.Column(db.Text)
 
 	def __init__(
 		self, 
@@ -144,7 +144,7 @@ class Schedule(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	serviceId = db.Column(db.Integer)
-	serviceInput = db.Column(db.String(20))
+	userInput = db.Column(db.Text)
 	time = db.Column(db.String(15))
 	status = db.Column(db.String(10))
 	cancelReason = db.Column(db.String(200))
@@ -156,13 +156,13 @@ class Schedule(db.Model):
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, serviceInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
 		self.menuId = menuId
 		self.serviceId = serviceId
-		self.serviceInput = serviceInput
+		self.userInput = userInput
 		self.time = time
 		self.status = status
 		self.cancelReason = cancelReason
@@ -207,8 +207,7 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
-	productInput = db.Column(db.String(20))
-	productPrice = db.Column(db.String(10))
+	userInput = db.Column(db.Text)
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
@@ -219,11 +218,10 @@ class Cart(db.Model):
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, locationId, productId, productInput, productPrice, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, userInput, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
 		self.locationId = locationId
 		self.productId = productId
-		self.productInput = productInput
-		self.productPrice = productPrice
+		self.userInput = userInput
 		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
@@ -243,8 +241,8 @@ class Transaction(db.Model):
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
 	serviceId = db.Column(db.Integer)
-	serviceInput = db.Column(db.String(20))
-	serviceInputPrice = db.Column(db.String(10))
+	userInput = db.Column(db.Text)
+	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
@@ -252,13 +250,13 @@ class Transaction(db.Model):
 	sizes = db.Column(db.String(200))
 	time = db.Column(db.String(15))
 
-	def __init__(self, groupId, locationId, productId, serviceId, serviceInput, serviceInputPrice, adder, callfor, options, others, sizes, time):
+	def __init__(self, groupId, locationId, productId, serviceId, userInput, quantity, adder, callfor, options, others, sizes, time):
 		self.groupId = groupId
 		self.locationId = locationId
 		self.productId = productId
 		self.serviceId = serviceId
-		self.serviceInput = serviceInput
-		self.serviceInputPrice = serviceInputPrice
+		self.userInput = userInput
+		self.quantity = quantity
 		self.adder = adder
 		self.callfor = callfor
 		self.options = options
@@ -641,10 +639,18 @@ def get_user_info(id):
 	status = ""
 
 	if user != None:
+		cellnumber = user.cellnumber
+
+		f3 = str(cellnumber[0:3])
+		s3 = str(cellnumber[3:6])
+		l4 = str(cellnumber[6:len(cellnumber)])
+
+		cellnumber = "(" + f3 + ") " + s3 + "-" + l4
+
 		info = {
 			"id": id,
 			"username": user.username,
-			"cellnumber": user.cellnumber,
+			"cellnumber": cellnumber,
 			"profile": user.profile
 		}
 
@@ -944,6 +950,8 @@ def get_notifications(id):
 							cost += float(size["price"])
 				else:
 					cost += float(product.price)
+			else:
+				userInput = json.loads(data['userInput'])
 
 			for other in others:
 				if other["selected"] == True:
@@ -960,7 +968,7 @@ def get_notifications(id):
 				"type": "cart-order-self",
 				"id": str(data['id']),
 				"productid": product.id if product != None else "",
-				"name": product.name if product != None else data['productInput'],
+				"name": product.name if product != None else userInput['name'],
 				"image": product.image if product != None else None,
 				"options": options,
 				"others": others,
@@ -1210,7 +1218,7 @@ def get_notifications(id):
 			if data['locationId'] != "":
 				location = Location.query.filter_by(id=data['locationId']).first()
 
-			if data['serviceId'] != "-1":
+			if data['serviceId'] != -1:
 				service = Service.query.filter_by(id=data['serviceId']).first()
 
 			booker = User.query.filter_by(id=data['userId']).first()
@@ -1247,6 +1255,18 @@ def get_notifications(id):
 			else:
 				worker = None
 
+			orders = json.loads(data["orders"])
+			numOrders = None
+
+			if "groups" in orders:
+				groups = orders["groups"]
+				
+				for rounds in groups:
+					for k in rounds:
+						if k != "status" and k != "id" and k == str(id):
+							numOrders = len(rounds[k])
+
+			userInput = json.loads(data['userInput'])
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
 				"type": "service",
@@ -1255,12 +1275,12 @@ def get_notifications(id):
 				"location": location.name,
 				"worker": worker,
 				"menuid": int(data['menuId']) if data['menuId'] != "" else "",
-				"serviceid": int(data['serviceId']) if data['serviceId'] != "-1" else "",
-				"service": service.name if service != None else data["serviceInput"],
+				"serviceid": int(data['serviceId']) if data['serviceId'] != -1 else "",
+				"service": service.name if service != None else userInput['name'] if 'name' in userInput else "",
 				"locationimage": location.logo,
 				"locationtype": location.type,
 				"serviceimage": service.image if service != None else "",
-				"serviceprice": float(service.price) if service != None else "",
+				"serviceprice": float(service.price) if service != None else float(userInput['price']) if 'price' in userInput else "",
 				"time": int(data['time']),
 				"action": data['status'],
 				"nextTime": int(data['nextTime']) if data['nextTime'] != "" else "",
@@ -1272,6 +1292,7 @@ def get_notifications(id):
 				"confirm": confirm,
 				"chargedUser": chargedUser,
 				"allowPayment": allowPayment,
+				"numOrders": numOrders,
 				"seated": info["dinersseated"] if "dinersseated" in info else None,
 				"requestPayment": False,
 				"workerInfo": {}
