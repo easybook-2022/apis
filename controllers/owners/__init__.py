@@ -598,72 +598,87 @@ def add_owner():
 @app.route("/update_owner", methods=["POST"])
 def update_owner():
 	ownerid = request.form['ownerid']
-	username = request.form['username']
-	cellnumber = request.form['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
-	password = request.form['password']
-	confirmPassword = request.form['confirmPassword']
-	profilepath = request.files.get('profile', False)
-	profileexist = False if profilepath == False else True
-	hours = request.form['hours']
-	permission = request.form['permission']
+	type = request.form['type']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
 	errormsg = ""
 	status = ""
 
 	if owner != None:
-		if hours != "[]":
-			owner.hours = hours
+		if type == "cellnumber":
+			cellnumber = request.form['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 
-		if username != "" and owner.username != username:
-			exist_username = Owner.query.filter_by(username=username).count()
+			if cellnumber != "" and owner.cellnumber != cellnumber:
+				exist_cellnumber = Owner.query.filter_by(cellnumber=cellnumber).count()
 
-			if exist_username == 0:
-				owner.username = username
-			else:
-				errormsg = "The username is already taken"
-				status = "sameusername"
+				if exist_cellnumber == 0:
+					owner.cellnumber = cellnumber
+				else:
+					errormsg = "This cell number is already taken"
+					status = "samecellnumber"
+		elif type == "username":
+			username = request.form['username']
 
-		if cellnumber != "" and owner.cellnumber != cellnumber:
-			exist_cellnumber = Owner.query.filter_by(cellnumber=cellnumber).count()
+			if username != "" and owner.username != username:
+				exist_username = Owner.query.filter_by(username=username).count()
 
-			if exist_cellnumber == 0:
-				owner.cellnumber = cellnumber
-			else:
-				errormsg = "This cell number is already taken"
-				status = "samecellnumber"
+				if exist_username == 0:
+					owner.username = username
+				else:
+					errormsg = "The username is already taken"
+					status = "sameusername"
+		elif type == "profile":
+			profilepath = request.files.get('profile', False)
+			profileexist = False if profilepath == False else True
+			permission = request.form['permission']
 
-		if profileexist == True:
-			profile = request.files['profile']
-			newprofilename = profile.filename
-			oldprofile = owner.profile
+			if profileexist == True:
+				profile = request.files['profile']
+				newprofilename = profile.filename
+				oldprofile = owner.profile
 
-			if oldprofile != "" and oldprofile != None and os.path.exists("static/" + oldprofile):
-				os.remove("static/" + oldprofile)
+				if oldprofile != "" and oldprofile != None and os.path.exists("static/" + oldprofile):
+					os.remove("static/" + oldprofile)
 
-			profile.save(os.path.join('static', newprofilename))
-			owner.profile = newprofilename
+				profile.save(os.path.join('static', newprofilename))
+				owner.profile = newprofilename
+		elif type == "password":
+			currentPassword = request.form['currentPassword']
+			newPassword = request.form['newPassword']
+			confirmPassword = request.form['confirmPassword']
 
-		if password != "" or confirmPassword != "":
-			if password != "" and confirmPassword != "":
-				if len(password) >= 6:
-					if password == confirmPassword:
-						password = generate_password_hash(password)
+			if check_password_hash(owner.password, currentPassword):
+				if newPassword != "" and confirmPassword != "":
+					if newPassword != "" and confirmPassword != "":
+						if len(newPassword) >= 6:
+							if newPassword == confirmPassword:
+								password = generate_password_hash(newPassword)
 
-						owner.password = password
+								owner.password = password
+							else:
+								errormsg = "Password is mismatch"
+						else:
+							errormsg = "Password needs to be atleast 6 characters long"
 					else:
-						errormsg = "Password is mismatch"
+						if newPassword == "":
+							errormsg = "Please enter a password"
+						else:
+							errormsg = "Please confirm your password"
 				else:
-					errormsg = "Password needs to be atleast 6 characters long"
+					if newPassword == "":
+						errormsg = "New password is blank"
+					else:
+						errormsg = "Please confirm your new password"
 			else:
-				if password == "":
-					errormsg = "Please enter a password"
-				else:
-					errormsg = "Please confirm your password"
+				errormsg = "Current password is incorrect"
+		elif type == "hours":
+			if hours != "[]":
+				owner.hours = hours
 
-		db.session.commit()
+		if errormsg == "":
+			db.session.commit()
 
-		return { "id": owner.id, "msg": "Owner's info updated" }
+			return { "id": owner.id, "msg": "Owner's info updated" }
 	else:
 		errormsg = "Owner doesn't exist"
 
@@ -712,81 +727,39 @@ def owner_update_notification_token():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/get_workers", methods=["POST"])
-def get_workers():
-	content = request.get_json()
+@app.route("/get_workers/<locationid>")
+def get_workers(locationid):
+	datas = Owner.query.filter(Owner.info.like("%\"locationId\": \"" + str(locationid) + "\"%")).all()
+	owners = []
+	row = []
+	key = 0
+	numWorkers = 0
 
-	locationid = content['locationid']
-	dateStr = content['dateStr']
-	timeStr = content['timeStr']
-	day = content['day']
+	for data in datas:
+		row.append({
+			"key": "worker-" + str(key),
+			"id": data.id,
+			"username": data.username,
+			"profile": data.profile,
+			"selected": False
+		})
+		key += 1
+		numWorkers += 1
 
-	days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-	location = Location.query.filter_by(id=locationid).first()
-	errormsg = ""
-	status = ""
+		if len(row) >= 3:
+			owners.append({ "key": str(len(owners)), "row": row })
+			row = []
 
-	if location != None:
-		datas = query("select * from owner where info like '%\"locationId\": \"" + str(locationid) + "\"%'", True)
-		owners = []
-		row = []
-		key = 0
-		numWorkers = 0
+	if len(row) > 0:
+		leftover = 3 - len(row)
 
-		for data in datas:
-			hours = json.loads(data['hours'])
+		for k in range(leftover):
+			row.append({ "key": "worker-" + str(key) })
+			key += 1
 
-			if days[day] in hours:
-				info = hours[days[day]]
+		owners.append({ "key": str(len(owners)), "row": row })
 
-				if info["working"] == True:
-					opentime = info["opentime"]
-					closetime = info["closetime"]
-
-					openhour = opentime["hour"]
-					openminute = opentime["minute"]
-
-					closehour = closetime["hour"]
-					closeminute = closetime["minute"]
-
-					opentime = dateStr + openhour + ":" + openminute + ":00"
-					workertime = dateStr + timeStr
-					closetime = dateStr + closehour + ":" + closeminute + ":00"
-
-					opentime = int(datetime.strptime(opentime, "%d.%m.%Y %H:%M:%S").timestamp() * 1000)
-					workertime = int(datetime.strptime(workertime, "%d.%m.%Y %H:%M:%S").timestamp() * 1000)
-					closetime = int(datetime.strptime(closetime, "%d.%m.%Y %H:%M:%S").timestamp() * 1000)
-
-					if workertime >= opentime and workertime <= closetime:
-						for data in datas:
-							row.append({
-								"key": "worker-" + str(key),
-								"id": data['id'],
-								"username": data['username'],
-								"profile": data["profile"],
-								"selected": False
-							})
-							key += 1
-							numWorkers += 1
-
-							if len(row) >= 3:
-								owners.append({ "key": str(len(owners)), "row": row })
-								row = []
-
-						if len(row) > 0 and len(row) < 3:
-							leftover = 3 - len(row)
-
-							for k in range(leftover):
-								row.append({ "key": "worker-" + str(key) })
-								key += 1
-
-							owners.append({ "key": str(len(owners)), "row": row })
-
-		return { "msg": "get workers", "owners": owners, "numWorkers": numWorkers }
-	else:
-		errormsg = "Location doesn't exist"
-		
-	return { "errormsg": errormsg, "status": status }, 400
+	return { "msg": "get workers", "owners": owners, "numWorkers": numWorkers }
 
 @app.route("/get_worker_info/<id>")
 def get_worker_info(id):
@@ -800,11 +773,12 @@ def get_worker_info(id):
 		info = {}
 
 		for day in days:
-			info[day] = {
-				"start": hours[day]["opentime"]["hour"] + ":" + hours[day]["opentime"]["minute"],
-				"end": hours[day]["closetime"]["hour"] + ":" + hours[day]["closetime"]["minute"],
-				"working": hours[day]["working"]
-			}
+			if hours[day]["working"] == True:
+				info[day] = {
+					"start": hours[day]["opentime"]["hour"] + ":" + hours[day]["opentime"]["minute"],
+					"end": hours[day]["closetime"]["hour"] + ":" + hours[day]["closetime"]["minute"],
+					"working": hours[day]["working"]
+				}
 
 		return { "days": info }
 	else:
@@ -858,6 +832,72 @@ def search_workers():
 		errormsg = "Schedule doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/get_workers_time/<locationid>")
+def get_workers_time(locationid):
+	owners = Owner.query.filter(Owner.info.like("%\"locationId\": \"" + str(locationid) + "\"%")).all()
+	workerHours = []
+
+	for owner in owners:
+		hours = [
+			{ "key": "0", "header": "Sunday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
+			{ "key": "1", "header": "Monday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
+			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
+			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
+			{ "key": "4", "header": "Thursday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
+			{ "key": "5", "header": "Friday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
+			{ "key": "6", "header": "Saturday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True }
+		]
+
+		data = json.loads(owner.hours)
+		day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+		for k, info in enumerate(hours):
+			openhour = int(data[day[k][:3]]["opentime"]["hour"])
+			closehour = int(data[day[k][:3]]["closetime"]["hour"])
+			working = data[day[k][:3]]["working"]
+
+			openperiod = "PM" if openhour > 12 else "AM"
+			openhour = int(openhour)
+
+			if openhour == 0:
+				openhour = 12
+			elif openhour > 12:
+				openhour -= 12
+
+			openhour = "0" + str(openhour) if openhour < 10 else str(openhour)
+
+			closeperiod = "PM" if closehour > 12 else "AM"
+			closehour = int(closehour)
+
+			if closehour == 0:
+				closehour = 12
+			elif closehour > 12:
+				closehour -= 12
+
+			closehour = "0" + str(closehour) if closehour < 10 else str(closehour)
+
+			if working == True:
+				info["opentime"]["hour"] = openhour
+				info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
+				info["opentime"]["period"] = openperiod
+
+				info["closetime"]["hour"] = closehour
+				info["closetime"]["minute"] = data[day[k][:3]]["closetime"]["minute"]
+				info["closetime"]["period"] = closeperiod
+				info["working"] = working
+
+				hours[k] = info
+
+		workerHours.append({ 
+			"key": str(owner.id),
+			"day": info["header"],
+			"name": owner.username,
+			"profile": owner.profile,
+			"hours": hours
+		})
+
+	return { "workerHours": workerHours }
 
 @app.route("/add_bankaccount", methods=["POST"])
 def add_bankaccount():

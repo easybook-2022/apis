@@ -1294,8 +1294,13 @@ def get_notifications(id):
 				"allowPayment": allowPayment,
 				"numOrders": numOrders,
 				"seated": info["dinersseated"] if "dinersseated" in info else None,
-				"requestPayment": False,
-				"workerInfo": {}
+				"requestPayment": True if "price" in userInput else False,
+				"workerInfo": {
+					"id": owner.id,
+					"username": owner.username,
+					"requestprice": float(userInput["price"]) if "price" in userInput else 0,
+					"tip": 0
+				} if data["workerId"] > -1 else {}
 			})
 
 		return { "notifications": notifications }

@@ -1180,9 +1180,11 @@ def get_hours():
 	times = []
 	errormsg = ""
 	status = ""
+	days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 	if location != None:
 		hours = json.loads(location.hours)
+		openDays = []
 
 		openTime = hours[day]["opentime"]
 		closeTime = hours[day]["closetime"]
@@ -1191,7 +1193,11 @@ def get_hours():
 			time = int(data.nextTime) if data.nextTime != "" else int(data.time)
 			times.append(time)
 
-		return { "openTime": openTime, "closeTime": closeTime, "scheduled": times }
+		for day in days:
+			if hours[day]["close"] == False:
+				openDays.append(day)
+
+		return { "openTime": openTime, "closeTime": closeTime, "scheduled": times, "openDays": openDays }
 	else:
 		errormsg = "Location doesn't exist"
 

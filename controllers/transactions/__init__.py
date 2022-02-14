@@ -446,6 +446,8 @@ def get_transactions():
 					else:
 						cost += quantity * float(userInput["price"])
 
+						print(quantity * float(userInput["price"]))
+
 					for other in others:
 						if other["selected"] == True:
 							cost += float(other["price"])

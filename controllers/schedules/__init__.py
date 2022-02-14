@@ -475,7 +475,19 @@ def get_appointment_info(id):
 		worker = None
 		if schedule.workerId > 0:
 			workerInfo = Owner.query.filter_by(id=schedule.workerId).first()
-			worker = { "id": schedule.workerId, "username": workerInfo.username, "profile": workerInfo.profile }
+
+			days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+			hours = json.loads(workerInfo.hours)
+			info = {}
+			for day in days:
+				if hours[day]["working"] == True:
+					info[day] = {
+						"start": hours[day]["opentime"]["hour"] + ":" + hours[day]["opentime"]["minute"],
+						"end": hours[day]["closetime"]["hour"] + ":" + hours[day]["closetime"]["minute"],
+						"working": hours[day]["working"]
+					}
+
+			worker = { "id": schedule.workerId, "username": workerInfo.username, "profile": workerInfo.profile, "days": info }
 
 		info = { 
 			"locationId": int(locationId), 
@@ -568,48 +580,45 @@ def reschedule_appointment():
 	status = ""
 
 	if schedule != None:
-		if schedule.status == "requested":
-			info = json.loads(schedule.info)
-			info["allowpayment"] = False
+		info = json.loads(schedule.info)
+		info["allowpayment"] = False
 
-			schedule.status = "rebook"
-			schedule.nextTime = time
-			schedule.info = json.dumps(info)
-			schedule.workerId = ownerid
+		schedule.status = "rebook"
+		schedule.nextTime = time
+		schedule.info = json.dumps(info)
+		schedule.workerId = ownerid
 
-			db.session.commit()
+		db.session.commit()
 
-			location = Location.query.filter_by(id=schedule.locationId).first()
-			service = Service.query.filter_by(id=schedule.serviceId).first()
-			user = User.query.filter_by(id=schedule.userId).first()
-			userInfo = json.loads(user.info)
-			userInput = json.loads(schedule.userInput)
+		location = Location.query.filter_by(id=schedule.locationId).first()
+		service = Service.query.filter_by(id=schedule.serviceId).first()
+		user = User.query.filter_by(id=schedule.userId).first()
+		userInfo = json.loads(user.info)
+		userInput = json.loads(schedule.userInput)
 
-			workerInfo = Owner.query.filter_by(id=ownerid).first()
-			worker = {
-				"id": ownerid,
-				"username": workerInfo.username
-			}
+		workerInfo = Owner.query.filter_by(id=ownerid).first()
+		worker = {
+			"id": ownerid,
+			"username": workerInfo.username
+		}
 
-			if userInfo["pushToken"] != "":
-				if send_msg == True:
-					resp = push(pushInfo(
-						userInfo["pushToken"],
-						"Appointment for service rescheduled",
-						location.name + " chose another time for you for service: " + (service.name if service != None else userInput["name"]),
-						content
-					))
-				else:
-					resp = { "status": "ok" }
+		if userInfo["pushToken"] != "":
+			if send_msg == True:
+				resp = push(pushInfo(
+					userInfo["pushToken"],
+					"Appointment for service rescheduled",
+					location.name + " chose another time for you for service: " + (service.name if service != None else userInput["name"]),
+					content
+				))
 			else:
 				resp = { "status": "ok" }
+		else:
+			resp = { "status": "ok" }
 
-			if resp["status"] == "ok":
-				return { "msg": "appointment rescheduled", "receiver": "user" + str(schedule.userId), "worker": worker }
-			else:
-				errormsg = "Push notification failed"
-
-		errormsg = "Action is denied"
+		if resp["status"] == "ok":
+			return { "msg": "appointment rescheduled", "receiver": "user" + str(schedule.userId), "worker": worker }
+		else:
+			errormsg = "Push notification failed"
 	else:
 		errormsg = "Appointment doesn't exist"
 		status = "nonexist"
@@ -648,8 +657,8 @@ def reschedule_reservation():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/request_appointment", methods=["POST"])
-def request_appointment():
+@app.route("/make_appointment", methods=["POST"])
+def make_appointment():
 	content = request.get_json()
 
 	userid = content['userid']
@@ -660,7 +669,6 @@ def request_appointment():
 	oldtime = content['oldtime']
 	time = content['time']
 	note = content['note']
-	currTime = int(content['currTime'])
 
 	user = User.query.filter_by(id=userid).first()
 	errormsg = ""
@@ -697,72 +705,36 @@ def request_appointment():
 				info = json.loads(schedule.info)
 				info["allowpayment"] = False
 				schedule.info = json.dumps(info)
+				schedule.time = time
+				schedule.nextTime = ''
+				schedule.note = note
+				schedule.workerId = workerid
 
-				if schedule.status == 'accepted': # reschedule
-					if oldtime == 0: # get old time
-						return { 
-							"msg": "appointment already made", 
-							"status": "existed",
-							"oldtime": int(schedule.time),
-							"note": schedule.note
-						}
-					else:
-						schedule.status = 'change'
-						schedule.nextTime = time
-						schedule.note = note
+				db.session.commit()
 
-						db.session.commit()
-
-						if len(pushids) > 0:
-							pushmessages = []
-							for pushid in pushids:
-								pushmessages.append(pushInfo(
-									pushid, 
-									"Appointment requesting time change",
-									"A client re-requested an appointment for service: " + servicename,
-									content
-								))
-
-							if send_msg == True:
-								resp = push(pushmessages)
-							else:
-								resp = { "status": "ok" }
-						else:
-							resp = { "status": "ok" }
-
-						if resp["status"] == "ok":
-							return { "msg": "appointment updated", "status": "updated", "receiver": receiver }
-				else:
-					schedule.status = 'requested'
-					schedule.time = time
-					schedule.nextTime = ''
-					schedule.note = note
-
-					db.session.commit()
-
-					if len(pushids) > 0:
-						pushmessages = []
-						for pushid in pushids:
-							pushmessages.append(pushInfo(
-								pushid, 
-								"Appointment re-requesting",
-								"A client re-requested an appointment for service: " + servicename,
-								content
-							))
-						
-						if send_msg == True:
-							resp = push(pushmessages)
-						else:
-							resp = { "status": "ok" }
+				if len(pushids) > 0:
+					pushmessages = []
+					for pushid in pushids:
+						pushmessages.append(pushInfo(
+							pushid, 
+							"Appointment remade",
+							"A client remade an appointment for service: " + servicename,
+							content
+						))
+					
+					if send_msg == True:
+						resp = push(pushmessages)
 					else:
 						resp = { "status": "ok" }
+				else:
+					resp = { "status": "ok" }
 
-					if resp["status"] == "ok":
-						return { "msg": "appointment re-requested", "status": "requested", "receiver": receiver }
+				if resp["status"] == "ok":
+					return { "msg": "appointment remade", "receiver": receiver, "time": time }
 			else: # new schedule
 				info = json.dumps({"allowpayment": False,"chargedUser": False,"workerId":0,"cut": locationInfo["cut"]})
 				userInput = json.dumps({ "name": serviceinfo })
-				appointment = Schedule(userid, workerid, locationid, menuid, serviceid, userInput, time, "requested", '', '', location.type, 1, note, '[]', '', info)
+				appointment = Schedule(userid, workerid, locationid, menuid, serviceid, userInput, time, 'confirmed', '', '', location.type, 1, note, '[]', '', info)
 
 				db.session.add(appointment)
 				db.session.commit()
@@ -773,8 +745,8 @@ def request_appointment():
 						for pushid in pushids:
 							pushmessages.append(pushInfo(
 								pushid, 
-								"Appointment requesting",
-								"A client requested an appointment for service: " + servicename,
+								"Appointment made",
+								"A client made an appointment for service: " + servicename,
 								content
 							))
 
@@ -785,7 +757,7 @@ def request_appointment():
 					resp = { "status": "ok" }
 
 				if resp["status"] == "ok":
-					return { "msg": "appointment added", "status": "new", "receiver": receiver }
+					return { "msg": "appointment added", "receiver": receiver }
 				
 				errormsg = "Push notification failed"
 		else:
@@ -1042,7 +1014,7 @@ def confirm_request():
 def cancel_schedule():
 	content = request.get_json()
 
-	id = content['id']
+	id = content['scheduleid']
 	reason = content['reason']
 
 	appointment = Schedule.query.filter_by(id=id).first()
@@ -1261,9 +1233,13 @@ def request_payment():
 	if schedule != None and owner != None:
 		receiver = ["user" + str(schedule.userId)]
 
+		userInput = json.loads(schedule.userInput)
+		userInput["price"] = float(serviceprice)
+
 		info = json.loads(schedule.info)
 		info["workerId"] = int(owner.id)
 
+		schedule.userInput = json.dumps(userInput)
 		schedule.info = json.dumps(info)
 
 		db.session.commit()
@@ -1298,8 +1274,8 @@ def done_dining(id):
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/get_diners_payments", methods=["POST"])
-def get_diners_payments():
+@app.route("/receive_diners_payments", methods=["POST"])
+def receive_diners_payments():
 	content = request.get_json()
 
 	scheduleid = content['scheduleid']
@@ -1332,7 +1308,7 @@ def get_diners_payments():
 					if allowPayment == True:
 						if charge > 0:
 							chargeAmount = charge + tip
-							customerPay(chargeAmount, userid, schedule.locationId)
+							#customerPay(chargeAmount, userid, schedule.locationId)
 
 						charges[userid]["paid"] = True
 						charges[userid]["charge"] = None
@@ -1396,7 +1372,7 @@ def get_diners_payments():
 
 											userInput['type'] = 'dining'
 											userInput['globalTip'] = charges[round]["tip"]
-											transaction = Transaction(groupId, location.id, order['productid'], 0, json.dumps(userInput), 0, userid, '[]', json.dumps(options), json.dumps(others), json.dumps(sizes), time)
+											transaction = Transaction(groupId, location.id, order['productid'], 0, json.dumps(userInput), quantity, userid, '[]', json.dumps(options), json.dumps(others), json.dumps(sizes), time)
 
 											db.session.add(transaction)
 											db.session.commit()
@@ -1644,7 +1620,7 @@ def cancel_request():
 		db.session.delete(schedule)
 		db.session.commit()
 
-		return { "msg": "schedule cancelled", "receivers": receivers }
+		return { "msg": "schedule cancelled", "receivers": receivers, "type": schedule.locationType }
 	else:
 		errormsg = "Schedule doens't exist"
 
