@@ -344,29 +344,47 @@ def customerPay(cost, userid, locationid):
 	transfercost = cost + calcTax(cost)
 
 	user = User.query.filter_by(id=userid).first()
-	info = json.loads(user.info)
-	customerid = info["customerId"]
+	location = Location.query.filter_by(id=locationid).first()
 
-	charge = stripe.Charge.create(
-		amount=int(chargecost * 100),
-		currency="cad",
-		customer=customerid
-	)
+	if user != None and location != None:
+		userInfo = json.loads(user.info)
+		locationInfo = json.loads(location.info)
 
-	if locationid != None:
-		location = Location.query.filter_by(id=locationid).first()
-		info = json.loads(location.info)
-		accountid = info["accountId"]
+		customerid = userInfo["customerId"]
+		accountid = locationInfo["accountId"]
 
-		transfer = stripe.Transfer.create(
-			amount=int(transfercost * 100),
-			currency="cad",
-			destination=accountid,
-		)
+		paymentmethods = stripe.Customer.list_sources(customerid, object="card").data
+		bankaccounts = stripe.Account.retrieve(accountid).external_accounts.data
+
+		if len(paymentmethods) > 0 and len(bankaccounts) > 0:
+			try:
+				charge = stripe.Charge.create(
+					amount=int(chargecost * 100),
+					currency="cad",
+					customer=customerid,
+					transfer_data={
+						"destination": accountid
+					}
+				)
+
+				return { "error": "", "msg": "success" }
+			except stripe.error.CardError as e:
+				print(e.http_status)
+				print(e.code)
+
+				return { "error": e.http_status, "code": e.code, "msg": "" }
+			except stripe.error.InvalidRequestError as e:
+				print(e.http_status)
+				print(e.code)
+
+				return { "error": e.http_status, "code": e.code, "msg": "" }
+		else:
+			if len(paymentmethods) == 0:
+				return { "error": "cardrequired", "msg": "" }
+			else:
+				return { "error": "bankaccountrequired", "msg": "" }
 	else:
-		transfer = None
-
-	return charge != None and (transfer != None or locationid == None)
+		return { "error": "idnonexist", "msg": "" }
 
 def push(messages):
 	if type(messages) == type([]):
@@ -1180,7 +1198,7 @@ def get_hours():
 	times = []
 	errormsg = ""
 	status = ""
-	days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+	daysArr = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 	if location != None:
 		hours = json.loads(location.hours)
@@ -1193,11 +1211,51 @@ def get_hours():
 			time = int(data.nextTime) if data.nextTime != "" else int(data.time)
 			times.append(time)
 
-		for day in days:
+		for day in daysArr:
 			if hours[day]["close"] == False:
 				openDays.append(day)
 
-		return { "openTime": openTime, "closeTime": closeTime, "scheduled": times, "openDays": openDays }
+		workers = {}
+
+		if location.type != "restaurant":
+			owners = Owner.query.filter(Owner.info.like("%\"locationId\": \"" + str(locationid) + "\"%")).all()
+			for owner in owners:
+				hours = json.loads(owner.hours)
+
+				for time in hours:
+					if hours[time]["working"] == True or hours[time]["takeShift"] != "":
+						if hours[time]["working"] == True:
+							if time not in workers:
+								workers[time] = [{
+									"workerId": owner.id,
+									"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
+									"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
+								}]
+							else:
+								workers[time].append({
+									"workerId": owner.id,
+									"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
+									"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
+								})
+						else:
+							if hours[time]["takeShift"] != "":
+								coworker = Owner.query.filter_by(id=hours[time]["takeShift"]).first()
+								coworkerHours = json.loads(coworker.hours)
+
+								if time not in workers:
+									workers[time] = [{
+										"workerId": owner.id,
+										"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
+										"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
+									}]
+								else:
+									workers[time].append({
+										"workerId": owner.id,
+										"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
+										"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
+									})
+
+		return { "openTime": openTime, "closeTime": closeTime, "scheduled": times, "openDays": openDays, "workers": workers }
 	else:
 		errormsg = "Location doesn't exist"
 

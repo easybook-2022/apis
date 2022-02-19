@@ -338,34 +338,52 @@ def calcTax(amount):
 def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
 
-def customerPay(amount, userid, locationid):
-	chargeamount = stripeFee(amount + calcTax(amount))
-	transferamount = amount + calcTax(amount)
+def customerPay(cost, userid, locationid):
+	chargecost = stripeFee(cost + calcTax(cost))
+	transfercost = cost + calcTax(cost)
 
 	user = User.query.filter_by(id=userid).first()
-	info = json.loads(user.info)
-	customerid = info["customerId"]
+	location = Location.query.filter_by(id=locationid).first()
 
-	charge = stripe.Charge.create(
-		amount=int(chargeamount * 100),
-		currency="cad",
-		customer=customerid
-	)
+	if user != None and location != None:
+		userInfo = json.loads(user.info)
+		locationInfo = json.loads(location.info)
 
-	if locationid != None:
-		location = Location.query.filter_by(id=locationid).first()
-		info = json.loads(location.info)
-		accountid = info["accountId"]
+		customerid = userInfo["customerId"]
+		accountid = locationInfo["accountId"]
 
-		transfer = stripe.Transfer.create(
-			amount=int(transferamount * 100),
-			currency="cad",
-			destination=accountid,
-		)
+		paymentmethods = stripe.Customer.list_sources(customerid, object="card").data
+		bankaccounts = stripe.Account.retrieve(accountid).external_accounts.data
+
+		if len(paymentmethods) > 0 and len(bankaccounts) > 0:
+			try:
+				charge = stripe.Charge.create(
+					amount=int(chargecost * 100),
+					currency="cad",
+					customer=customerid,
+					transfer_data={
+						"destination": accountid
+					}
+				)
+
+				return { "error": "", "msg": "success" }
+			except stripe.error.CardError as e:
+				print(e.http_status)
+				print(e.code)
+
+				return { "error": e.http_status, "code": e.code, "msg": "" }
+			except stripe.error.InvalidRequestError as e:
+				print(e.http_status)
+				print(e.code)
+
+				return { "error": e.http_status, "code": e.code, "msg": "" }
+		else:
+			if len(paymentmethods) == 0:
+				return { "error": "cardrequired", "msg": "" }
+			else:
+				return { "error": "bankaccountrequired", "msg": "" }
 	else:
-		transfer = None
-
-	return charge != None and (transfer != None or locationid == None)
+		return { "error": "idnonexist", "msg": "" }
 
 def push(messages):
 	if type(messages) == type([]):
@@ -562,11 +580,15 @@ def payout():
 
 @app.route("/charge")
 def charge():
-	amount = 120.00
+	amount = 5.00
 
-	pay = customerPay(amount, 1, 1)
+	paymentInfo = customerPay(amount, 4, 7)
+	status = paymentInfo["error"]
 
-	return { "error": False, "pay": pay }
+	if status == "":
+		return { "error": False, "payment": paymentInfo }
+
+	return { "error": True, "payment": paymentInfo }
 
 @app.route("/restore_balance")
 def restore_balance():
@@ -690,6 +712,115 @@ def delete_transaction():
 	db.session.commit()
 
 	return { "deleted": True }
+
+@app.route("/delete_owner/<id>")
+def delete_owner(id):
+	owner = Owner.query.filter_by(id=id).first()
+	errormsg = ""
+	status = ""
+
+	if owner != None:
+		profile = owner.profile
+
+		if os.path.exists("static/" + profile):
+			os.remove("static/" + profile)
+
+		db.session.delete(owner)
+		db.session.commit()
+
+		return { "msg": "Owner delete" }
+	else:
+		errormsg = "Owner doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/delete_location/<id>")
+def delete_location(id):
+	location = Location.query.filter_by(id=id).first()
+	errormsg = ""
+	status = ""
+
+	if location != None:
+		logo = location.logo
+
+		if os.path.exists("static/" + logo):
+			os.remove("static/" + logo)
+
+		info = json.loads(location.info)
+		accountId = info["accountId"]
+		menuPhotos = info["menuPhotos"]
+
+		accounts = stripe.Account.list().data
+
+		for account in accounts:
+			if account.id == accountId:
+				stripe.Account.delete(accountId)
+
+		for photo in menuPhotos:
+			if os.path.exists("static/" + photo):
+				os.remove("static/" + photo)
+
+		menus = Menu.query.filter_by(locationId=id).all()
+
+		for menu in menus:
+			if os.path.exists("static/" + menu.image):
+				os.remove("static/" + menu.image)
+
+			db.session.delete(menu)
+
+		products = Product.query.filter_by(locationId=id).all()
+
+		for product in products:
+			if os.path.exists("static/" + product.image):
+				os.remove("static/" + product.image)
+
+			db.session.delete(product)
+
+		db.session.delete(location)
+		db.session.commit()
+
+		return { "msg": "Location deleted" }
+	else:
+		errormsg = "Location doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/delete_user/<id>")
+def delete_user(id):
+	user = User.query.filter_by(id=id).first()
+	errormsg = ""
+	status = ""
+
+	if user != None:
+		profile = user.profile
+		info = json.loads(user.info)
+
+		customerId = info["customerId"]
+
+		if os.path.exists("static/" + profile):
+			os.remove("static/" + profile)
+
+		stripe.Customer.delete(customerId)
+
+		db.session.delete(user)
+		db.session.commit()
+
+		return { "msg": "User deleted" }
+	else:
+		errormsg = "User doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/get_bankaccounts/<id>")
+def get_bankaccounts(id):
+	location = Location.query.filter_by(id=id).first()
+	info = json.loads(location.info)
+
+	accountId = info["accountId"]
+
+	account = stripe.Account.retrieve(accountId).external_accounts.data
+
+	return { "account": account }
 
 @app.route("/getin", methods=["POST"])
 def getin():

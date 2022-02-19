@@ -343,29 +343,47 @@ def customerPay(cost, userid, locationid):
 	transfercost = cost + calcTax(cost)
 
 	user = User.query.filter_by(id=userid).first()
-	info = json.loads(user.info)
-	customerid = info["customerId"]
+	location = Location.query.filter_by(id=locationid).first()
 
-	charge = stripe.Charge.create(
-		amount=int(chargecost * 100),
-		currency="cad",
-		customer=customerid
-	)
+	if user != None and location != None:
+		userInfo = json.loads(user.info)
+		locationInfo = json.loads(location.info)
 
-	if locationid != None:
-		location = Location.query.filter_by(id=locationid).first()
-		info = json.loads(location.info)
-		accountid = info["accountId"]
+		customerid = userInfo["customerId"]
+		accountid = locationInfo["accountId"]
 
-		transfer = stripe.Transfer.create(
-			amount=int(transfercost * 100),
-			currency="cad",
-			destination=accountid,
-		)
+		paymentmethods = stripe.Customer.list_sources(customerid, object="card").data
+		bankaccounts = stripe.Account.retrieve(accountid).external_accounts.data
+
+		if len(paymentmethods) > 0 and len(bankaccounts) > 0:
+			try:
+				charge = stripe.Charge.create(
+					amount=int(chargecost * 100),
+					currency="cad",
+					customer=customerid,
+					transfer_data={
+						"destination": accountid
+					}
+				)
+
+				return { "error": "", "msg": "success" }
+			except stripe.error.CardError as e:
+				print(e.http_status)
+				print(e.code)
+
+				return { "error": e.http_status, "code": e.code, "msg": "" }
+			except stripe.error.InvalidRequestError as e:
+				print(e.http_status)
+				print(e.code)
+
+				return { "error": e.http_status, "code": e.code, "msg": "" }
+		else:
+			if len(paymentmethods) == 0:
+				return { "error": "cardrequired", "msg": "" }
+			else:
+				return { "error": "bankaccountrequired", "msg": "" }
 	else:
-		transfer = None
-
-	return charge != None and (transfer != None or locationid == None)
+		return { "error": "idnonexist", "msg": "" }
 
 def push(messages):
 	if type(messages) == type([]):
@@ -732,8 +750,8 @@ def make_appointment():
 				if resp["status"] == "ok":
 					return { "msg": "appointment remade", "receiver": receiver, "time": time }
 			else: # new schedule
-				info = json.dumps({"allowpayment": False,"chargedUser": False,"workerId":0,"cut": locationInfo["cut"]})
-				userInput = json.dumps({ "name": serviceinfo })
+				info = json.dumps({"allowpayment": False,"chargedUser": False,"workerId":0,"cut": locationInfo["cut"],"tip":0})
+				userInput = json.dumps({ "name": serviceinfo, "type": "service" })
 				appointment = Schedule(userid, workerid, locationid, menuid, serviceid, userInput, time, 'confirmed', '', '', location.type, 1, note, '[]', '', info)
 
 				db.session.add(appointment)
@@ -930,7 +948,8 @@ def confirm_request():
 					cards = len(stripeCustomer.data)
 
 					if cards > 0 and trialinfo["status"] == "trialover":
-						customerPay(0.17, userid, None)
+						paymentInfo = customerPay(0.17, userid, None)
+						status = paymentInfo["error"]
 						chargedUser = True
 
 					appointment.customers = json.dumps(customers)
@@ -964,7 +983,8 @@ def confirm_request():
 				cards = len(stripeCustomer.data)
 
 				if cards > 0 and trialinfo["status"] == "trialover":
-					customerPay(0.17, userid, None)
+					paymentInfo = customerPay(0.17, userid, None)
+					status = paymentInfo["status"]
 
 				chargedUser = True
 
@@ -1231,27 +1251,40 @@ def request_payment():
 	status = ""
 
 	if schedule != None and owner != None:
-		receiver = ["user" + str(schedule.userId)]
+		location = Location.query.filter_by(id=schedule.locationId).first()
 
-		userInput = json.loads(schedule.userInput)
-		userInput["price"] = float(serviceprice)
+		if location != None:
+			info = json.loads(location.info)
 
-		info = json.loads(schedule.info)
-		info["workerId"] = int(owner.id)
+			bankaccounts = stripe.Account.retrieve(info["accountId"]).external_accounts.data
 
-		schedule.userInput = json.dumps(userInput)
-		schedule.info = json.dumps(info)
+			if len(bankaccounts) > 0:
+				receiver = ["user" + str(schedule.userId)]
 
-		db.session.commit()
+				userInput = json.loads(schedule.userInput)
+				userInput["price"] = float(serviceprice)
 
-		workerInfo = {
-			"id": owner.id,
-			"username": owner.username,
-			"requestprice": float(serviceprice),
-			"tip": 0
-		}
+				info = json.loads(schedule.info)
+				info["workerId"] = int(owner.id)
 
-		return { "msg": "success", "receiver": receiver, "workerInfo": workerInfo }
+				schedule.userInput = json.dumps(userInput)
+				schedule.info = json.dumps(info)
+
+				db.session.commit()
+
+				workerInfo = {
+					"id": owner.id,
+					"username": owner.username,
+					"requestprice": float(serviceprice),
+					"tip": 0
+				}
+
+				return { "msg": "success", "receiver": receiver, "workerInfo": workerInfo }
+			else:
+				errormsg = "No bank accounts provided"
+				status = "bankaccountrequired"
+		else:
+			errormsg = "Location doesn't exist"
 	else:
 		errormsg = "Schedule doesn't exist"
 		status = "nonexist"
@@ -1308,7 +1341,8 @@ def receive_diners_payments():
 					if allowPayment == True:
 						if charge > 0:
 							chargeAmount = charge + tip
-							#customerPay(chargeAmount, userid, schedule.locationId)
+							paymentInfo = customerPay(chargeAmount, userid, schedule.locationId)
+							status = paymentInfo["error"]
 
 						charges[userid]["paid"] = True
 						charges[userid]["charge"] = None
@@ -1450,7 +1484,8 @@ def receive_epayment():
 				if bankaccounts > 0:
 					if cards > 0:
 						chargeAmount = price + tip
-						customerPay(chargeAmount, clientId, locationid)
+						paymentInfo = customerPay(chargeAmount, clientId, locationid)
+						errormsg = paymentInfo["error"]
 					else:
 						errormsg = "cardrequired"
 						status = "cardrequired"
@@ -1527,9 +1562,10 @@ def receive_inpersonpayment():
 		info = json.loads(schedule.info)
 
 		location = Location.query.filter_by(id=locationid).first()
-		service = Service.query.filter_by(id=serviceid).first()
 
-		if location != None and service != None:
+		if location != None:
+			service = Service.query.filter_by(id=serviceid).first()
+
 			locationInfo = json.loads(location.info)
 			clientId = schedule.userId
 			workerId = int(info["workerId"])
@@ -1537,16 +1573,17 @@ def receive_inpersonpayment():
 			client = User.query.filter_by(id=clientId).first()
 			clientInfo = json.loads(client.info)
 			customerid = clientInfo["customerId"]
-			price = float(service.price)
+			userInput = json.loads(schedule.userInput)
+			price = float(service.price) if service != None else 0
 
 			if workerId > 0:
-				if info["workerId"] == str(ownerid):
+				if str(workerId) == str(ownerid):
 					groupId = ""
 
 					for k in range(20):
 						groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
 
-					transaction = Transaction(groupId, locationid, 0, schedule.serviceId, "{}", 0, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
+					transaction = Transaction(groupId, locationid, 0, schedule.serviceId, schedule.userInput, 0, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
 
 					db.session.add(transaction)
 					db.session.delete(schedule)
@@ -1572,7 +1609,12 @@ def receive_inpersonpayment():
 					if resp["status"] == "ok":
 						receiver = ["user" + str(schedule.userId)]
 
-						return { "msg": "Payment received", "clientName": client.username, "name": service.name, "price": service.price, "receiver": receiver }
+						return { 
+							"msg": "Payment received", "clientName": client.username, 
+							"name": service.name if service != None else userInput["name"], 
+							"price": service.price if service != None else userInput["price"] if "price" in userInput else None, 
+							"receiver": receiver 
+						}
 					else:
 						errormsg = "Push notification failed"
 				else:
@@ -1840,20 +1882,13 @@ def send_service_payment():
 	if user != None and schedule != None:
 		price = float(workerinfo["requestprice"])
 		tip = float(workerinfo["tip"])
-		info = json.loads(user.info)
 
-		customerId = info["customerId"]
-		stripeCustomer = stripe.Customer.list_sources(
-			customerId,
-			object="card",
-			limit=1
-		)
-		cards = len(stripeCustomer.data)
+		charge = price + tip
+		paymentInfo = customerPay(charge, userid, schedule.locationId)
 
-		if cards > 0:
-			charge = price + tip
-			customerPay(charge, userid, schedule.locationId)
+		status = paymentInfo["error"]
 
+		if status == "":
 			groupId = ""
 
 			for k in range(20):
@@ -1868,8 +1903,7 @@ def send_service_payment():
 
 			return { "msg": "success" }
 		else:
-			errormsg = "cardrequired"
-			status = "cardrequired"
+			errormsg = paymentInfo["error"]
 	else:
 		errormsg = "Schedule doesn't exist"
 		status = "nonexist"
@@ -1883,7 +1917,7 @@ def get_appointments():
 	ownerid = content['ownerid']
 	locationid = content['locationid']
 
-	datas = query("select * from schedule where locationId = " + str(locationid) + " and status = 'confirmed' and (workerId = -1 or workerId = " + str(ownerid) + ")", True)
+	datas = query("select * from schedule where locationId = " + str(locationid) + " and status = 'confirmed' and (workerId = -1 or workerId = " + str(ownerid) + ") order by time", True)
 	appointments = []
 
 	for data in datas:
@@ -2333,8 +2367,8 @@ def add_item_to_order():
 							userInfo = User.query.filter_by(id=info["userid"]).first()
 							info = json.loads(userInfo.info)
 
-						if info["pushToken"] != "":
-							pushids.append(info["pushToken"])
+							if info["pushToken"] != "":
+								pushids.append(info["pushToken"])
 
 						if len(pushids) > 0:
 							pushmessages = []

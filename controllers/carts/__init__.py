@@ -338,34 +338,52 @@ def calcTax(amount):
 def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
 
-def customerPay(amount, userid, locationid):
-	chargeamount = stripeFee(amount + calcTax(amount))
-	transferamount = amount + calcTax(amount)
+def customerPay(cost, userid, locationid):
+	chargecost = stripeFee(cost + calcTax(cost))
+	transfercost = cost + calcTax(cost)
 
 	user = User.query.filter_by(id=userid).first()
-	info = json.loads(user.info)
-	customerid = info["customerId"]
+	location = Location.query.filter_by(id=locationid).first()
 
-	charge = stripe.Charge.create(
-		amount=int(chargeamount * 100),
-		currency="cad",
-		customer=customerid
-	)
+	if user != None and location != None:
+		userInfo = json.loads(user.info)
+		locationInfo = json.loads(location.info)
 
-	if locationid != None:
-		location = Location.query.filter_by(id=locationid).first()
-		info = json.loads(location.info)
-		accountid = info["accountId"]
+		customerid = userInfo["customerId"]
+		accountid = locationInfo["accountId"]
 
-		transfer = stripe.Transfer.create(
-			amount=int(transferamount * 100),
-			currency="cad",
-			destination=accountid,
-		)
+		paymentmethods = stripe.Customer.list_sources(customerid, object="card").data
+		bankaccounts = stripe.Account.retrieve(accountid).external_accounts.data
+
+		if len(paymentmethods) > 0 and len(bankaccounts) > 0:
+			try:
+				charge = stripe.Charge.create(
+					amount=int(chargecost * 100),
+					currency="cad",
+					customer=customerid,
+					transfer_data={
+						"destination": accountid
+					}
+				)
+
+				return { "error": "", "msg": "success" }
+			except stripe.error.CardError as e:
+				print(e.http_status)
+				print(e.code)
+
+				return { "error": e.http_status, "code": e.code, "msg": "" }
+			except stripe.error.InvalidRequestError as e:
+				print(e.http_status)
+				print(e.code)
+
+				return { "error": e.http_status, "code": e.code, "msg": "" }
+		else:
+			if len(paymentmethods) == 0:
+				return { "error": "cardrequired", "msg": "" }
+			else:
+				return { "error": "bankaccountrequired", "msg": "" }
 	else:
-		transfer = None
-
-	return charge != None and (transfer != None or locationid == None)
+		return { "error": "idnonexist", "msg": "" }
 
 def push(messages):
 	if type(messages) == type([]):
@@ -900,9 +918,10 @@ def receive_payment():
 					userInfo = User.query.filter_by(id=info).first()
 					customerid = json.loads(userInfo.info)["customerId"]
 
-					customerPay(charge, info, locationid)
+					paymentInfo = customerPay(charge, info, locationid)
+					status = paymentInfo["error"]
 
-					if send_msg == True and pushToken != "":
+					if send_msg == True and pushToken != "" and status == "":
 						push(pushInfo(
 							pushToken,
 							"Payment sent",

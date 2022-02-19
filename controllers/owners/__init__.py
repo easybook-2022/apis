@@ -339,34 +339,52 @@ def calcTax(amount):
 def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
 
-def customerPay(amount, userid, locationid):
-	chargeamount = stripeFee(amount + calcTax(amount))
-	transferamount = amount + calcTax(amount)
+def customerPay(cost, userid, locationid):
+	chargecost = stripeFee(cost + calcTax(cost))
+	transfercost = cost + calcTax(cost)
 
 	user = User.query.filter_by(id=userid).first()
-	info = json.loads(user.info)
-	customerid = info["customerId"]
+	location = Location.query.filter_by(id=locationid).first()
 
-	charge = stripe.Charge.create(
-		amount=int(chargeamount * 100),
-		currency="cad",
-		customer=customerid
-	)
+	if user != None and location != None:
+		userInfo = json.loads(user.info)
+		locationInfo = json.loads(location.info)
 
-	if locationid != None:
-		location = Location.query.filter_by(id=locationid).first()
-		info = json.loads(location.info)
-		accountid = info["accountId"]
+		customerid = userInfo["customerId"]
+		accountid = locationInfo["accountId"]
 
-		transfer = stripe.Transfer.create(
-			amount=int(transferamount * 100),
-			currency="cad",
-			destination=accountid,
-		)
+		paymentmethods = stripe.Customer.list_sources(customerid, object="card").data
+		bankaccounts = stripe.Account.retrieve(accountid).external_accounts.data
+
+		if len(paymentmethods) > 0 and len(bankaccounts) > 0:
+			try:
+				charge = stripe.Charge.create(
+					amount=int(chargecost * 100),
+					currency="cad",
+					customer=customerid,
+					transfer_data={
+						"destination": accountid
+					}
+				)
+
+				return { "error": "", "msg": "success" }
+			except stripe.error.CardError as e:
+				print(e.http_status)
+				print(e.code)
+
+				return { "error": e.http_status, "code": e.code, "msg": "" }
+			except stripe.error.InvalidRequestError as e:
+				print(e.http_status)
+				print(e.code)
+
+				return { "error": e.http_status, "code": e.code, "msg": "" }
+		else:
+			if len(paymentmethods) == 0:
+				return { "error": "cardrequired", "msg": "" }
+			else:
+				return { "error": "bankaccountrequired", "msg": "" }
 	else:
-		transfer = None
-
-	return charge != None and (transfer != None or locationid == None)
+		return { "error": "idnonexist", "msg": "" }
 
 def push(messages):
 	if type(messages) == type([]):
@@ -672,6 +690,8 @@ def update_owner():
 			else:
 				errormsg = "Current password is incorrect"
 		elif type == "hours":
+			hours = request.form['hours']
+
 			if hours != "[]":
 				owner.hours = hours
 
@@ -727,9 +747,9 @@ def owner_update_notification_token():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/get_workers/<locationid>")
-def get_workers(locationid):
-	datas = Owner.query.filter(Owner.info.like("%\"locationId\": \"" + str(locationid) + "\"%")).all()
+@app.route("/get_workers/<id>")
+def get_workers(id):
+	datas = Owner.query.filter(Owner.info.like("%\"locationId\": \"" + str(id) + "\"%")).all()
 	owners = []
 	row = []
 	key = 0
@@ -766,25 +786,83 @@ def get_worker_info(id):
 	owner = Owner.query.filter_by(id=id).first()
 	errormsg = ""
 	status = ""
-	days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+	daysArr = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 	if owner != None:
 		hours = json.loads(owner.hours)
-		info = {}
+		days = {}
 
-		for day in days:
-			if hours[day]["working"] == True:
-				info[day] = {
-					"start": hours[day]["opentime"]["hour"] + ":" + hours[day]["opentime"]["minute"],
-					"end": hours[day]["closetime"]["hour"] + ":" + hours[day]["closetime"]["minute"],
-					"working": hours[day]["working"]
-				}
+		for time in hours:
+			if hours[time]["working"] == True or hours[time]["takeShift"] != "":
+				if hours[time]["working"] == True:
+					days[time] = {
+						"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
+						"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
+					}
+				else:
+					if hours[time]["takeShift"] != "":
+						coworker = Owner.query.filter_by(id=hours[time]["takeShift"]).first()
+						coworkerHours = json.loads(coworker.hours)
 
-		return { "days": info }
+						days[time] = {
+							"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
+							"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
+						}
+
+		info = {
+			"username": owner.username,
+			"profile": owner.profile,
+			"days": days
+		}
+
+		return info
 	else:
 		errormsg = "Owner doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/get_all_workers_time/<id>")
+def get_all_workers_time(id):
+	owners = Owner.query.filter(Owner.info.like("%\"locationId\": \"" + str(id) + "\"%")).all()
+	workers = {}
+
+	for owner in owners:
+		hours = json.loads(owner.hours)
+
+		for time in hours:
+			if hours[time]["working"] == True or hours[time]["takeShift"] != "":
+				if hours[time]["working"] == True:
+					if time not in workers:
+						workers[time] = [{
+							"workerId": owner.id,
+							"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
+							"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
+						}]
+					else:
+						workers[time].append({
+							"workerId": owner.id,
+							"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
+							"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
+						})
+				else:
+					if hours[time]["takeShift"] != "":
+						coworker = Owner.query.filter_by(id=hours[time]["takeShift"]).first()
+						coworkerHours = json.loads(coworker.hours)
+
+						if time not in workers:
+							workers[time] = [{
+								"workerId": owner.id,
+								"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
+								"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
+							}]
+						else:
+							workers[time].append({
+								"workerId": owner.id,
+								"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
+								"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
+							})
+
+	return { "workers": workers }
 
 @app.route("/search_workers", methods=["POST"])
 def search_workers():
@@ -833,20 +911,20 @@ def search_workers():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/get_workers_time/<locationid>")
-def get_workers_time(locationid):
-	owners = Owner.query.filter(Owner.info.like("%\"locationId\": \"" + str(locationid) + "\"%")).all()
+@app.route("/get_workers_time/<id>") # salon profile
+def get_workers_time(id):
+	owners = Owner.query.filter(Owner.info.like("%\"locationId\": \"" + str(id) + "\"%")).all()
 	workerHours = []
 
 	for owner in owners:
 		hours = [
-			{ "key": "0", "header": "Sunday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
-			{ "key": "1", "header": "Monday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
-			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
-			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
-			{ "key": "4", "header": "Thursday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
-			{ "key": "5", "header": "Friday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
-			{ "key": "6", "header": "Saturday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True }
+			{ "key": "0", "header": "Sunday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "1", "header": "Monday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "4", "header": "Thursday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "5", "header": "Friday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "6", "header": "Saturday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" }
 		]
 
 		data = json.loads(owner.hours)
@@ -898,6 +976,78 @@ def get_workers_time(locationid):
 		})
 
 	return { "workerHours": workerHours }
+
+@app.route("/get_other_workers", methods=["POST"])
+def get_other_workers():
+	content = request.get_json()
+	errormsg = ""
+	status = ""
+
+	ownerid = content['ownerid']
+	locationid = content['locationid']
+	day = content['day']
+
+	location = Location.query.filter_by(id=locationid).first()
+	
+	if location != None:
+		owners = Owner.query.filter(Owner.info.like("%\"locationId\": \"" + str(locationid) + "\"%"), Owner.id!=ownerid).all()
+		workers = []
+		row = []
+		rownum = 0
+
+		for owner in owners:
+			hours = json.loads(owner.hours)
+
+			for time in hours:
+				if time == day:
+					if hours[time]["working"] == False and hours[time]["takeShift"] == "":
+						row.append({ "key": str(rownum), "id": owner.id, "username": owner.username, "profile": owner.profile })
+						rownum += 1
+
+						if len(row) == 3:
+							workers.append({ "key": "worker-" + str(len(workers)), "row": row })
+							row = []
+
+		if len(row) > 0:
+			leftover = 3 - len(row)
+
+			for k in range(leftover):
+				row.append({ "key": str(rownum) })
+				rownum += 1
+
+			workers.append({ "key": "worker-" + str(len(workers)), "row": row })
+
+		return { "workers": workers }
+	else:
+		errormsg = "Location doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/delete_owner/<id>")
+def delete_owner(id):
+	owner = Owner.query.filter_by(id=id).first()
+	errormsg = ""
+	status = ""
+
+	if owner != None:
+		info = json.loads(owner.info)
+
+		location = Location.query.filter_by(id=info["locationId"]).first()
+		owners = json.loads(location.owners)
+
+		if str(id) in owners:
+			owners.remove(str(id))
+
+			location.owners = json.dumps(owners)
+
+		db.session.delete(owner)
+		db.session.commit()
+
+		return { "msg": "Owner deleted" }
+	else:
+		errormsg = "Owner doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }
 
 @app.route("/add_bankaccount", methods=["POST"])
 def add_bankaccount():
@@ -969,13 +1119,13 @@ def get_accounts(id):
 		ownerInfo = Owner.query.filter_by(id=owner).first()
 
 		hours = [
-			{ "key": "0", "header": "Sunday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
-			{ "key": "1", "header": "Monday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
-			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
-			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
-			{ "key": "4", "header": "Thursday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
-			{ "key": "5", "header": "Friday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True },
-			{ "key": "6", "header": "Saturday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True }
+			{ "key": "0", "header": "Sunday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "1", "header": "Monday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "4", "header": "Thursday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "5", "header": "Friday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "6", "header": "Saturday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" }
 		]
 
 		if "Sun" in ownerInfo.hours:
@@ -985,7 +1135,6 @@ def get_accounts(id):
 			for k, info in enumerate(hours):
 				openhour = int(data[day[k][:3]]["opentime"]["hour"])
 				closehour = int(data[day[k][:3]]["closetime"]["hour"])
-				working = data[day[k][:3]]["working"]
 
 				openperiod = "PM" if openhour > 12 else "AM"
 				openhour = int(openhour)
@@ -1014,7 +1163,8 @@ def get_accounts(id):
 				info["closetime"]["hour"] = closehour
 				info["closetime"]["minute"] = data[day[k][:3]]["closetime"]["minute"]
 				info["closetime"]["period"] = closeperiod
-				info["working"] = working
+				info["working"] = data[day[k][:3]]["working"]
+				info["takeShift"] = data[day[k][:3]]["takeShift"]
 
 				hours[k] = info
 		else:
