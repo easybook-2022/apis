@@ -1,7 +1,7 @@
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, json, os
+import mysql.connector, pymysql.cursors, json, os, time
 from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -103,14 +103,12 @@ class Menu(db.Model):
 	locationId = db.Column(db.Integer)
 	parentMenuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 
-	def __init__(self, locationId, parentMenuId, name, info, image):
+	def __init__(self, locationId, parentMenuId, name, image):
 		self.locationId = locationId
 		self.parentMenuId = parentMenuId
 		self.name = name
-		self.info = info
 		self.image = image
 
 	def __repr__(self):
@@ -121,16 +119,14 @@ class Service(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	info = db.Column(db.Text)
 	image = db.Column(db.String(20))
 	price = db.Column(db.String(10))
 	duration = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image, price, duration):
+	def __init__(self, locationId, menuId, name, image, price, duration):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
-		self.info = info
 		self.image = image
 		self.price = price
 		self.duration = duration
@@ -183,18 +179,16 @@ class Product(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(150))
 	price = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image, options, others, sizes, price):
+	def __init__(self, locationId, menuId, name, image, options, others, sizes, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
-		self.info = info
 		self.image = image
 		self.options = options
 		self.others = others
@@ -211,7 +205,6 @@ class Cart(db.Model):
 	userInput = db.Column(db.Text)
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
-	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(225))
@@ -219,13 +212,12 @@ class Cart(db.Model):
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, locationId, productId, userInput, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber):
 		self.locationId = locationId
 		self.productId = productId
 		self.userInput = userInput
 		self.quantity = quantity
 		self.adder = adder
-		self.callfor = callfor
 		self.options = options
 		self.others = others
 		self.sizes = sizes
@@ -235,38 +227,6 @@ class Cart(db.Model):
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
-
-class Transaction(db.Model):
-	id = db.Column(db.Integer, primary_key=True)
-	groupId = db.Column(db.String(20))
-	locationId = db.Column(db.Integer)
-	productId = db.Column(db.Integer)
-	serviceId = db.Column(db.Integer)
-	userInput = db.Column(db.Text)
-	quantity = db.Column(db.Integer)
-	adder = db.Column(db.Integer)
-	callfor = db.Column(db.Text)
-	options = db.Column(db.Text)
-	others = db.Column(db.Text)
-	sizes = db.Column(db.String(200))
-	time = db.Column(db.String(15))
-
-	def __init__(self, groupId, locationId, productId, serviceId, userInput, quantity, adder, callfor, options, others, sizes, time):
-		self.groupId = groupId
-		self.locationId = locationId
-		self.productId = productId
-		self.serviceId = serviceId
-		self.userInput = userInput
-		self.quantity = quantity
-		self.adder = adder
-		self.callfor = callfor
-		self.options = options
-		self.others = others
-		self.sizes = sizes
-		self.time = time
-
-	def __repr__(self):
-		return '<Transaction %r>' % self.groupId
 
 def query(sql, output):
 	dbconn = pymysql.connect(
@@ -283,41 +243,6 @@ def query(sql, output):
 		results = cursorobj.fetchall()
 
 		return results
-
-def trialInfo(): # days before over | cardrequired | trialover (id, time)
-	# user = User.query.filter_by(id=id).first()
-	# info = json.loads(user.info)
-
-	# customerid = info['customerId']
-
-	# stripeCustomer = stripe.Customer.list_sources(
-	# 	customerid,
-	# 	object="card",
-	# 	limit=1
-	# )
-	# cards = len(stripeCustomer.data)
-	# status = ""
-	# days = 0
-
-	# if "trialstart" in info:
-	# 	if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
-	# 		if cards == 0:
-	# 			status = "cardrequired"
-	# 		else:
-	# 			status = "trialover"
-	# 	else:
-	# 		days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
-	# 		status = "notover"
-	# else:
-	# 	if cards == 0:
-	# 		status = "cardrequired"
-	# 	else:
-	# 		status = "trialover"
-
-	days = 30
-	status = "notover"
-
-	return { "days": days, "status": status }
 
 def getRanStr():
 	strid = ""
@@ -444,7 +369,7 @@ def owner_login():
 						if locationhours == '{}':
 							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": "", "msg": "locationsetup" }
 						else:
-							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "workinghours" }
+							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "register" }
 				else:
 					return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": None, "locationtype": "", "msg": "locationsetup" }
 			else:
@@ -484,18 +409,13 @@ def owner_verify(cellnumber):
 
 @app.route("/register", methods=["POST"])
 def owner_register():
-	cellnumber = request.form['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
-	username = request.form['username']
-	password = request.form['password']
-	confirmPassword = request.form['confirmPassword']
-	profilepath = request.files.get('profile', False)
-	profileexist = False if profilepath == False else True
-	permission = request.form['permission']
+	content = request.get_json()
+
+	cellnumber = content['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
+	password = content['password']
+	confirmPassword = content['confirmPassword']
 	errormsg = ""
 	status = ""
-
-	if username == "":
-		errormsg = "Please provide a username for identification"
 
 	if cellnumber == "":
 		errormsg = "Cell number is blank"
@@ -517,24 +437,41 @@ def owner_register():
 		else:
 			errormsg = "Please confirm your password"
 
-	profilename = ""
-	if profileexist == True:
-		profile = request.files['profile']
-		profilename = profile.filename
-
-		profile.save(os.path.join('static', profilename))
-	else:
-		profilename = ""
-	
 	if errormsg == "":
-		password = generate_password_hash(password)
-		info = json.dumps({"locationId": "","pushToken": ""})
-
-		owner = Owner(cellnumber, password, username, profilename, '{}', info)
+		info = json.dumps({ "locationId": "", "pushToken": "" })
+		owner = Owner(cellnumber, generate_password_hash(password), "", "", '{}', info)
 		db.session.add(owner)
 		db.session.commit()
 
 		return { "id": owner.id }
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/save_user_info", methods=["POST"])
+def save_user_info():
+	id = request.form['id']
+	username = request.form['username']
+	profile = request.files['profile']
+	permission = request.form['permission']
+	errormsg = ""
+	status = ""
+
+	if username == "":
+		errormsg = "Please provide a username for identification"
+
+	profilename = ""
+	profilename = profile.filename
+
+	profile.save(os.path.join('static', profilename))
+	
+	if errormsg == "":
+		owner = Owner.query.filter_by(id=id).first()
+		owner.username = username
+		owner.profile = profilename
+
+		db.session.commit()
+
+		return { "msg": "success" }
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -703,7 +640,7 @@ def update_owner():
 		errormsg = "Owner doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
-		
+
 @app.route("/set_hours", methods=["POST"])
 def set_hours():
 	content = request.get_json()

@@ -102,14 +102,12 @@ class Menu(db.Model):
 	locationId = db.Column(db.Integer)
 	parentMenuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 
-	def __init__(self, locationId, parentMenuId, name, info, image):
+	def __init__(self, locationId, parentMenuId, name, image):
 		self.locationId = locationId
 		self.parentMenuId = parentMenuId
 		self.name = name
-		self.info = info
 		self.image = image
 
 	def __repr__(self):
@@ -120,16 +118,14 @@ class Service(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	info = db.Column(db.Text)
 	image = db.Column(db.String(20))
 	price = db.Column(db.String(10))
 	duration = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image, price, duration):
+	def __init__(self, locationId, menuId, name, image, price, duration):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
-		self.info = info
 		self.image = image
 		self.price = price
 		self.duration = duration
@@ -182,18 +178,16 @@ class Product(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(150))
 	price = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image, options, others, sizes, price):
+	def __init__(self, locationId, menuId, name, image, options, others, sizes, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
-		self.info = info
 		self.image = image
 		self.options = options
 		self.others = others
@@ -210,7 +204,6 @@ class Cart(db.Model):
 	userInput = db.Column(db.Text)
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
-	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(225))
@@ -218,13 +211,12 @@ class Cart(db.Model):
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, locationId, productId, userInput, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber):
 		self.locationId = locationId
 		self.productId = productId
 		self.userInput = userInput
 		self.quantity = quantity
 		self.adder = adder
-		self.callfor = callfor
 		self.options = options
 		self.others = others
 		self.sizes = sizes
@@ -234,38 +226,6 @@ class Cart(db.Model):
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
-
-class Transaction(db.Model):
-	id = db.Column(db.Integer, primary_key=True)
-	groupId = db.Column(db.String(20))
-	locationId = db.Column(db.Integer)
-	productId = db.Column(db.Integer)
-	serviceId = db.Column(db.Integer)
-	userInput = db.Column(db.Text)
-	quantity = db.Column(db.Integer)
-	adder = db.Column(db.Integer)
-	callfor = db.Column(db.Text)
-	options = db.Column(db.Text)
-	others = db.Column(db.Text)
-	sizes = db.Column(db.String(200))
-	time = db.Column(db.String(15))
-
-	def __init__(self, groupId, locationId, productId, serviceId, userInput, quantity, adder, callfor, options, others, sizes, time):
-		self.groupId = groupId
-		self.locationId = locationId
-		self.productId = productId
-		self.serviceId = serviceId
-		self.userInput = userInput
-		self.quantity = quantity
-		self.adder = adder
-		self.callfor = callfor
-		self.options = options
-		self.others = others
-		self.sizes = sizes
-		self.time = time
-
-	def __repr__(self):
-		return '<Transaction %r>' % self.groupId
 
 def query(sql, output):
 	dbconn = pymysql.connect(
@@ -283,41 +243,6 @@ def query(sql, output):
 
 		return results
 
-def trialInfo(): # days before over | cardrequired | trialover (id, time)
-	# user = User.query.filter_by(id=id).first()
-	# info = json.loads(user.info)
-
-	# customerid = info['customerId']
-
-	# stripeCustomer = stripe.Customer.list_sources(
-	# 	customerid,
-	# 	object="card",
-	# 	limit=1
-	# )
-	# cards = len(stripeCustomer.data)
-	# status = ""
-	# days = 0
-
-	# if "trialstart" in info:
-	# 	if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
-	# 		if cards == 0:
-	# 			status = "cardrequired"
-	# 		else:
-	# 			status = "trialover"
-	# 	else:
-	# 		days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
-	# 		status = "notover"
-	# else:
-	# 	if cards == 0:
-	# 		status = "cardrequired"
-	# 	else:
-	# 		status = "trialover"
-
-	days = 30
-	status = "notover"
-
-	return { "days": days, "status": status }
-
 def getRanStr():
 	strid = ""
 
@@ -326,64 +251,8 @@ def getRanStr():
 
 	return strid
 
-def stripeFee(amount):
-	return (amount + 0.30) / (1 - 0.029)
-
-def calcTax(amount):
-	pst = 0.08 * amount
-	hst = 0.05 * amount
-
-	return pst + hst
-
 def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
-
-def customerPay(cost, userid, locationid):
-	chargecost = stripeFee(cost + calcTax(cost))
-	transfercost = cost + calcTax(cost)
-
-	user = User.query.filter_by(id=userid).first()
-	location = Location.query.filter_by(id=locationid).first()
-
-	if user != None and location != None:
-		userInfo = json.loads(user.info)
-		locationInfo = json.loads(location.info)
-
-		customerid = userInfo["customerId"]
-		accountid = locationInfo["accountId"]
-
-		paymentmethods = stripe.Customer.list_sources(customerid, object="card").data
-		bankaccounts = stripe.Account.retrieve(accountid).external_accounts.data
-
-		if len(paymentmethods) > 0 and len(bankaccounts) > 0:
-			try:
-				charge = stripe.Charge.create(
-					amount=int(chargecost * 100),
-					currency="cad",
-					customer=customerid,
-					transfer_data={
-						"destination": accountid
-					}
-				)
-
-				return { "error": "", "msg": "success" }
-			except stripe.error.CardError as e:
-				print(e.http_status)
-				print(e.code)
-
-				return { "error": e.http_status, "code": e.code, "msg": "" }
-			except stripe.error.InvalidRequestError as e:
-				print(e.http_status)
-				print(e.code)
-
-				return { "error": e.http_status, "code": e.code, "msg": "" }
-		else:
-			if len(paymentmethods) == 0:
-				return { "error": "cardrequired", "msg": "" }
-			else:
-				return { "error": "bankaccountrequired", "msg": "" }
-	else:
-		return { "error": "idnonexist", "msg": "" }
 
 def push(messages):
 	if type(messages) == type([]):
@@ -406,15 +275,6 @@ def welcome_dev():
 
 	return { "msg": "welcome to dev of easygo: " + num }
 
-@app.route("/test_like")
-def test_like():
-	location = Location.query.filter(Location.name=='Hair salon', Location.city.like("%Toro%")).first()
-
-	if location != None:
-		return { "location": location.name }
-
-	return { "nonexist": True }
-
 @app.route("/reset")
 def reset():
 	delete = False
@@ -422,12 +282,6 @@ def reset():
 	
 	for user in users:
 		delete = True
-		info = json.loads(user['info'])
-
-		try:
-			stripe.Customer.delete(info['customerId'])
-		except:
-			print("no id exist")
 
 		query("delete from user where id = " + str(user['id']), False)
 
@@ -450,12 +304,6 @@ def reset():
 		logo = location['logo']
 
 		locationInfo = json.loads(location['info'])
-		accountid = locationInfo['accountId']
-
-		try:
-			stripe.Account.delete(accountid)
-		except:
-			print("no id exist")
 
 		if logo != "" and logo != None and os.path.exists("static/" + logo):
 			os.remove("static/" + logo)
@@ -527,16 +375,6 @@ def reset():
 	if delete == True:
 		query("ALTER table cart auto_increment = 1", False)
 
-	delete = False
-	transactions = query("select * from transaction", True)
-	for transaction in transactions:
-		delete = True
-
-		query("delete from transaction where id = " + str(transaction['id']), False)
-
-	if delete == True:
-		query("ALTER table transaction auto_increment = 1", False)
-
 	files = os.listdir("static")
 
 	for file in files:
@@ -544,118 +382,7 @@ def reset():
 			if file != "" and file != None and os.path.exists("static/" + file):
 				os.remove("static/" + file)
 
-	accounts = stripe.Account.list().data
-	customers = stripe.Customer.list().data
-
-	for account in accounts:
-		try:
-			stripe.Account.delete(account.id)
-		except:
-			print(account.id)
-
-	for customer in customers:
-		stripe.Customer.delete(customer.id)
-
 	return { "reset": True }
-
-@app.route("/payout")
-def payout():
-	msg = ""
-	status = ""
-
-	accounts = stripe.Account.retrieve("acct_1K0w28PNuTzXPjNj").external_accounts.data
-	bankid = ""
-
-	for account in accounts:
-		if account["default_for_currency"] == True:
-			bankid = account["id"]
-
-	payout = stripe.Payout.create(
-		amount=50,
-		currency="cad",
-		destination=bankid
-	)
-
-	return { "payout": payout }
-
-@app.route("/charge")
-def charge():
-	amount = 5.00
-
-	paymentInfo = customerPay(amount, 4, 7)
-	status = paymentInfo["error"]
-
-	if status == "":
-		return { "error": False, "payment": paymentInfo }
-
-	return { "error": True, "payment": paymentInfo }
-
-@app.route("/restore_balance")
-def restore_balance():
-	balance = stripe.Balance.retrieve().available[0].amount
-
-	user = User.query.filter_by(id=1).first()
-	info = json.loads(user.info)
-	customerid = info["customerId"]
-
-	if balance < 0:
-		balance = -balance
-		balance = balance + 50 if balance < 50 else balance
-
-		stripe.Charge.create(
-			customer=customerid,
-			amount=balance,
-			currency="cad"
-		)
-
-	return { "balance": balance }
-
-@app.route("/return_all")
-def return_all():
-	data = stripe.Charge.list().data
-	charges = []
-
-	for info in data:
-		try:
-			stripe.Refund.create(charge=info.id)
-		except:
-			charges.append(info.id)
-
-	data = stripe.Transfer.list().data
-	transfers = []
-
-	for info in data:
-		try:
-			stripe.Transfer.retrieve_reversal(
-				info.id,
-				amount=info.amount
-			)
-		except:
-			transfers.append(info.id)
-
-	return { "charges": charges, "transfers": transfers }
-
-@app.route("/test_deposit", methods=["POST"])
-def test_deposit():
-	content = request.get_json()
-
-	action = content['action']
-
-	users = User.query.all()
-
-	for user in users:
-		info = json.loads(user.info)
-
-		if action == '-':
-			info["trialstart"] -= 100000000000
-		elif action == '+':
-			info["trialstart"] += 100000000000
-
-		user.info = json.dumps(info)
-
-	db.session.commit()
-
-	return { "error": False }
 
 @app.route("/push", methods=["POST"])
 def push():
@@ -698,21 +425,6 @@ def push():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/delete_transaction", methods=["POST"])
-def delete_transaction():
-	content = request.get_json()
-
-	ids = content['ids']
-
-	transactions = Transaction.query.filter(Transaction.id.in_(ids)).all()
-
-	for data in transactions:
-		db.session.delete(data)
-
-	db.session.commit()
-
-	return { "deleted": True }
-
 @app.route("/delete_owner/<id>")
 def delete_owner(id):
 	owner = Owner.query.filter_by(id=id).first()
@@ -747,14 +459,7 @@ def delete_location(id):
 			os.remove("static/" + logo)
 
 		info = json.loads(location.info)
-		accountId = info["accountId"]
 		menuPhotos = info["menuPhotos"]
-
-		accounts = stripe.Account.list().data
-
-		for account in accounts:
-			if account.id == accountId:
-				stripe.Account.delete(accountId)
 
 		for photo in menuPhotos:
 			if os.path.exists("static/" + photo):
@@ -795,12 +500,8 @@ def delete_user(id):
 		profile = user.profile
 		info = json.loads(user.info)
 
-		customerId = info["customerId"]
-
 		if os.path.exists("static/" + profile):
 			os.remove("static/" + profile)
-
-		stripe.Customer.delete(customerId)
 
 		db.session.delete(user)
 		db.session.commit()
@@ -810,23 +511,6 @@ def delete_user(id):
 		errormsg = "User doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/get_bankaccounts/<id>")
-def get_bankaccounts(id):
-	location = Location.query.filter_by(id=id).first()
-	info = json.loads(location.info)
-
-	accountId = info["accountId"]
-
-	account = stripe.Account.retrieve(accountId).external_accounts.data
-
-	return { "account": account }
-
-@app.route("/getin", methods=["POST"])
-def getin():
-	username = request.form['username']
-
-	return { "username": username }
 
 @app.route("/twilio_test")
 def twilio_test():

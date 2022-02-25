@@ -103,14 +103,12 @@ class Menu(db.Model):
 	locationId = db.Column(db.Integer)
 	parentMenuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 
-	def __init__(self, locationId, parentMenuId, name, info, image):
+	def __init__(self, locationId, parentMenuId, name, image):
 		self.locationId = locationId
 		self.parentMenuId = parentMenuId
 		self.name = name
-		self.info = info
 		self.image = image
 
 	def __repr__(self):
@@ -121,16 +119,14 @@ class Service(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	info = db.Column(db.Text)
 	image = db.Column(db.String(20))
 	price = db.Column(db.String(10))
 	duration = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image, price, duration):
+	def __init__(self, locationId, menuId, name, image, price, duration):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
-		self.info = info
 		self.image = image
 		self.price = price
 		self.duration = duration
@@ -183,18 +179,16 @@ class Product(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(150))
 	price = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image, options, others, sizes, price):
+	def __init__(self, locationId, menuId, name, image, options, others, sizes, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
-		self.info = info
 		self.image = image
 		self.options = options
 		self.others = others
@@ -211,7 +205,6 @@ class Cart(db.Model):
 	userInput = db.Column(db.Text)
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
-	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(225))
@@ -219,13 +212,12 @@ class Cart(db.Model):
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, locationId, productId, userInput, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber):
 		self.locationId = locationId
 		self.productId = productId
 		self.userInput = userInput
 		self.quantity = quantity
 		self.adder = adder
-		self.callfor = callfor
 		self.options = options
 		self.others = others
 		self.sizes = sizes
@@ -235,38 +227,6 @@ class Cart(db.Model):
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
-
-class Transaction(db.Model):
-	id = db.Column(db.Integer, primary_key=True)
-	groupId = db.Column(db.String(20))
-	locationId = db.Column(db.Integer)
-	productId = db.Column(db.Integer)
-	serviceId = db.Column(db.Integer)
-	userInput = db.Column(db.Text)
-	quantity = db.Column(db.Integer)
-	adder = db.Column(db.Integer)
-	callfor = db.Column(db.Text)
-	options = db.Column(db.Text)
-	others = db.Column(db.Text)
-	sizes = db.Column(db.String(200))
-	time = db.Column(db.String(15))
-
-	def __init__(self, groupId, locationId, productId, serviceId, userInput, quantity, adder, callfor, options, others, sizes, time):
-		self.groupId = groupId
-		self.locationId = locationId
-		self.productId = productId
-		self.serviceId = serviceId
-		self.userInput = userInput
-		self.quantity = quantity
-		self.adder = adder
-		self.callfor = callfor
-		self.options = options
-		self.others = others
-		self.sizes = sizes
-		self.time = time
-
-	def __repr__(self):
-		return '<Transaction %r>' % self.groupId
 
 def query(sql, output):
 	dbconn = pymysql.connect(
@@ -284,41 +244,6 @@ def query(sql, output):
 
 		return results
 
-def trialInfo(): # days before over | cardrequired | trialover (id, time)
-	# user = User.query.filter_by(id=id).first()
-	# info = json.loads(user.info)
-
-	# customerid = info['customerId']
-
-	# stripeCustomer = stripe.Customer.list_sources(
-	# 	customerid,
-	# 	object="card",
-	# 	limit=1
-	# )
-	# cards = len(stripeCustomer.data)
-	# status = ""
-	# days = 0
-
-	# if "trialstart" in info:
-	# 	if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
-	# 		if cards == 0:
-	# 			status = "cardrequired"
-	# 		else:
-	# 			status = "trialover"
-	# 	else:
-	# 		days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
-	# 		status = "notover"
-	# else:
-	# 	if cards == 0:
-	# 		status = "cardrequired"
-	# 	else:
-	# 		status = "trialover"
-
-	days = 30
-	status = "notover"
-
-	return { "days": days, "status": status }
-
 def getRanStr():
 	strid = ""
 
@@ -327,64 +252,8 @@ def getRanStr():
 
 	return strid
 
-def stripeFee(cost):
-	return (cost + 0.30) / (1 - 0.029)
-
-def calcTax(cost):
-	pst = 0.08 * cost
-	hst = 0.05 * cost
-
-	return pst + hst
-
 def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
-
-def customerPay(cost, userid, locationid):
-	chargecost = stripeFee(cost + calcTax(cost))
-	transfercost = cost + calcTax(cost)
-
-	user = User.query.filter_by(id=userid).first()
-	location = Location.query.filter_by(id=locationid).first()
-
-	if user != None and location != None:
-		userInfo = json.loads(user.info)
-		locationInfo = json.loads(location.info)
-
-		customerid = userInfo["customerId"]
-		accountid = locationInfo["accountId"]
-
-		paymentmethods = stripe.Customer.list_sources(customerid, object="card").data
-		bankaccounts = stripe.Account.retrieve(accountid).external_accounts.data
-
-		if len(paymentmethods) > 0 and len(bankaccounts) > 0:
-			try:
-				charge = stripe.Charge.create(
-					amount=int(chargecost * 100),
-					currency="cad",
-					customer=customerid,
-					transfer_data={
-						"destination": accountid
-					}
-				)
-
-				return { "error": "", "msg": "success" }
-			except stripe.error.CardError as e:
-				print(e.http_status)
-				print(e.code)
-
-				return { "error": e.http_status, "code": e.code, "msg": "" }
-			except stripe.error.InvalidRequestError as e:
-				print(e.http_status)
-				print(e.code)
-
-				return { "error": e.http_status, "code": e.code, "msg": "" }
-		else:
-			if len(paymentmethods) == 0:
-				return { "error": "cardrequired", "msg": "" }
-			else:
-				return { "error": "bankaccountrequired", "msg": "" }
-	else:
-		return { "error": "idnonexist", "msg": "" }
 
 def push(messages):
 	if type(messages) == type([]):
@@ -427,10 +296,7 @@ def setup_location():
 	longitude = request.form['longitude']
 	latitude = request.form['latitude']
 	ownerid = request.form['ownerid']
-	time = request.form['time']
-	ipAddress = request.form['ipAddress']
 	permission = request.form['permission']
-	trialtime = int(request.form['trialtime'])
 
 	owner = Owner.query.filter_by(id=ownerid).first()
 	errormsg = ""
@@ -450,58 +316,7 @@ def setup_location():
 				logoname = ""
 
 			if errormsg == "":
-				# create a connected account
-				connectedaccount = stripe.Account.create(
-					type="custom",
-					country="CA",
-					business_type="company",
-					business_profile={
-						"name": name
-					},
-					company={
-						"address": {
-							"city": city,
-							"line1": addressOne,
-							"line2": addressTwo,
-							"postal_code": postalcode,
-							"state": province 
-						},
-						"name": name,
-						"phone": phonenumber,
-					},
-					capabilities={
-						"transfers": {"requested": True},
-						"card_payments": {"requested": True}
-					},
-					tos_acceptance={
-						"date": time,
-						"ip": str(ipAddress)
-					}
-				)
-				stripe.Account.create_person(
-					connectedaccount.id,
-					first_name=name,
-					last_name=" ",
-					address={
-						"city": city,
-						"line1": addressOne,
-						"line2": addressTwo,
-						"postal_code": postalcode,
-						"state": province 
-					},
-					dob={
-						"day": 30,
-						"month": 7,
-						"year": 1996
-					},
-					relationship={
-						"representative": True
-					}
-				)
-
-				accountid = connectedaccount.id
-
-				locationInfo = json.dumps({"accountId": str(accountid), "listed": False, "cut": 100, "trialstart": trialtime, "menuPhotos": []})
+				locationInfo = json.dumps({"listed": False, "menuPhotos": []})
 				location = Location(
 					name, addressOne, addressTwo, 
 					city, province, postalcode, phonenumber, logoname,
@@ -515,7 +330,7 @@ def setup_location():
 				ownerInfo = json.loads(owner.info)
 				ownerInfo["locationId"] = str(location.id)
 				owner.info = json.dumps(ownerInfo)
-				owner.hours = json.dumps({"notrequired": True}) if type == "restaurant" else "{}"
+				owner.hours = '' if type == "restaurant" else "{}"
 
 				db.session.commit()
 
@@ -541,8 +356,6 @@ def update_location():
 	longitude = request.form['longitude']
 	latitude = request.form['latitude']
 	ownerid = request.form['ownerid']
-	time = request.form['time']
-	ipAddress = request.form['ipAddress']
 	permission = request.form['permission']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
@@ -557,44 +370,6 @@ def update_location():
 
 		if location != None:
 			locationInfo = json.loads(location.info)
-			accountid = locationInfo["accountId"]
-
-			person = stripe.Account.list_persons(accountid)
-			personid = person.data[0].id
-
-			stripe.Account.modify(
-				accountid,
-				business_profile={
-					"name": name
-				},
-				company={
-					"address": {
-						"city": city,
-						"line1": addressOne,
-						"line2": addressTwo,
-						"postal_code": postalcode,
-						"state": province 
-					},
-					"name": name,
-					"phone": phonenumber,
-				},
-				tos_acceptance={
-					"date": time,
-					"ip": str(ipAddress)
-				}
-			)
-			stripe.Account.modify_person(
-				accountid,
-				personid,
-				first_name=name,
-				address={
-					"city": city,
-					"line1": addressOne,
-					"line2": addressTwo,
-					"postal_code": postalcode,
-					"state": province 
-				}
-			)
 
 			location.name = name
 			location.addressOne = addressOne
@@ -628,14 +403,6 @@ def update_location():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/fetch_num_requests/<id>")
-def fetch_num_requests(id):
-	numRequests = 0
-	numRequests += query("select count(*) as num from schedule where locationId = " + str(id) + " and (status = 'requested' or status = 'change' or status = 'accepted')", True)[0]["num"]
-	numRequests += query("select count(*) as num from cart where status = 'requested'", True)[0]["num"]
-
-	return { "numRequests": numRequests }
-
 @app.route("/fetch_num_appointments/<ownerid>")
 def fetch_num_appointments(ownerid):
 	numAppointments = query("select count(*) as num from schedule where status = 'confirmed' and workerId = " + str(ownerid), True)
@@ -649,7 +416,7 @@ def fetch_num_appointments(ownerid):
 
 @app.route("/fetch_num_cartorderers/<id>")
 def fetch_num_cartorderers(id):
-	numCartorderers = query("select count(*) as num from cart where locationId = " + str(id) + " and (status = 'checkout' or status = 'ready') group by adder, orderNumber", True)
+	numCartorderers = query("select count(*) as num from cart where locationId = " + str(id) + " and (status = 'checkout' or status = 'ready' or status = 'requestedOrder') group by adder, orderNumber", True)
 
 	if len(numCartorderers) > 0:
 		numCartorderers = len(numCartorderers)
@@ -657,12 +424,6 @@ def fetch_num_cartorderers(id):
 		numCartorderers = 0
 
 	return { "numCartorderers": numCartorderers }
-
-@app.route("/fetch_num_reservations/<id>")
-def fetch_num_reservations(id):
-	numReservations = Schedule.query.filter_by(locationId=id, status='confirmed').count()
-
-	return { "numReservations": numReservations }
 
 @app.route("/set_type", methods=["POST"])
 def set_type():
@@ -1018,110 +779,6 @@ def get_location_profile():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/make_reservation", methods=["POST"])
-def make_reservation():
-	content = request.get_json()
-
-	userid = content['userid']
-	locationid = content['locationid']
-	scheduleid = content['scheduleid']
-	oldtime = content['oldtime']
-	time = content['time']
-	customers = content['diners']
-	note = content['note']
-
-	user = User.query.filter_by(id=userid).first()
-	errormsg = ""
-	status = ""
-
-	if user != None:
-		info = json.loads(user.info)
-		customerid = info['customerId']
-		location = Location.query.filter_by(id=locationid).first()
-
-		if location != None:
-			info = json.loads(location.info)
-
-			receivingUsers = []
-			receivingLocations = []
-
-			owners = query("select id from owner where info like '%\"locationId\": \"" + str(locationid) + "\"%'", True)
-			
-			for owner in owners:
-				receivingLocations.append("owner" + str(owner["id"]))
-
-			if scheduleid != None: # existing schedule
-				sql = "select * from schedule where locationId = " + str(locationid)
-				sql += " and (userId = " + str(userid) + " or customers like '%\"userid\": \"" + str(userid) + "\"%')"
-				data = query(sql, True)
-
-				if data != None:
-					schedule = data[0]
-
-					customers = json.loads(schedule["customers"])
-
-					for customer in customers:
-						receivingUsers.append("user" + str(customer["userid"]))
-
-					if schedule["status"] == 'accepted': # reschedule
-						if oldtime == 0: # get old time
-							return {
-								"msg": "reservation already made",
-								"status": "existed",
-								"oldtime": int(schedule["time"]),
-								"note": schedule["note"]
-							}
-						else:
-							sql = "update schedule set status = 'change', nextTime = '" + str(time) + "', "
-							sql += "note = '" + note + "', userId = " + str(userid) + " where id = " + str(schedule["id"])
-
-							query(sql, False)
-
-							return { "msg": "reservation updated", "status": "updated", "receivingUsers": receivingUsers, "receivingLocations": receivingLocations }
-					else:
-						sql = "update schedule set status = 'requested', time = '" + str(time) + "', nextTime = '', "
-						sql += "note = '" + note + "', userId = " + str(userid) + " where id = " + str(schedule["id"])
-
-						query(sql, False)
-
-						return { "msg": "reservation re-requested", "status": "requested", "receivingUsers": receivingUsers, "receivingLocations": receivingLocations }
-				else:
-					errormsg = "Schedule doesn't exist"
-			else: # new schedule
-				for customer in customers:
-					receivingUsers.append("user" + str(customer["userid"]))
-
-				charges = { str(str(userid)): {
-					"charge": 0.00,
-					"allowpayment": False,
-					"paid": False,
-					"tip": 0.00
-				}}
-
-				for customer in customers:
-					charges[customer["userid"]] = {
-						"charge": 0.00,
-						"allowpayment": False,
-						"paid": False,
-						"tip": 0.00
-					}
-
-				orders = json.dumps({"groups": [], "charges": charges })
-				info = json.dumps({"donedining": False, "dinersseated": False, "cut": int(info["cut"]) })
-
-				schedule = Schedule(userid, -1, locationid, -1, -1, '{}', time, "requested", '', '', location.type, json.dumps(customers), note, orders, '', info)
-
-				db.session.add(schedule)
-				db.session.commit()
-
-				return { "msg": "reservation added", "status": "new", "receivingUsers": receivingUsers, "receivingLocations": receivingLocations }
-		else:
-			errormsg = "Location doesn't exist"
-	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
 @app.route("/change_location_state/<id>")
 def change_location_state(id):
 	location = Location.query.filter_by(id=id).first()
@@ -1134,11 +791,6 @@ def change_location_state(id):
 		menuPhotos = len(locationInfo["menuPhotos"])
 		numproducts = Product.query.filter_by(locationId=id).count()
 		numservices = Service.query.filter_by(locationId=id).count()
-
-		accountid = locationInfo["accountId"]
-
-		account = stripe.Account.list_external_accounts(accountid, object="bank_account", limit=1)
-		bankaccounts = len(account.data)
 
 		if (locationListed == False and ((numproducts > 0 or numservices > 0 or menuPhotos > 0))) or (locationListed == True):
 			locationInfo["listed"] = False if locationInfo["listed"] == True else True

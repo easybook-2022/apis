@@ -1,7 +1,7 @@
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, stripe, json, os
+import mysql.connector, pymysql.cursors, json, os
 from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -102,14 +102,12 @@ class Menu(db.Model):
 	locationId = db.Column(db.Integer)
 	parentMenuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 
-	def __init__(self, locationId, parentMenuId, name, info, image):
+	def __init__(self, locationId, parentMenuId, name, image):
 		self.locationId = locationId
 		self.parentMenuId = parentMenuId
 		self.name = name
-		self.info = info
 		self.image = image
 
 	def __repr__(self):
@@ -120,16 +118,14 @@ class Service(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	info = db.Column(db.Text)
 	image = db.Column(db.String(20))
 	price = db.Column(db.String(10))
 	duration = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image, price, duration):
+	def __init__(self, locationId, menuId, name, image, price, duration):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
-		self.info = info
 		self.image = image
 		self.price = price
 		self.duration = duration
@@ -150,13 +146,12 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, nextTime, locationType, note, orders, table, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
@@ -168,7 +163,6 @@ class Schedule(db.Model):
 		self.cancelReason = cancelReason
 		self.nextTime = nextTime
 		self.locationType = locationType
-		self.customers = customers
 		self.note = note
 		self.orders = orders
 		self.table = table
@@ -182,18 +176,16 @@ class Product(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(150))
 	price = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image, options, others, sizes, price):
+	def __init__(self, locationId, menuId, name, image, options, others, sizes, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
-		self.info = info
 		self.image = image
 		self.options = options
 		self.others = others
@@ -210,7 +202,6 @@ class Cart(db.Model):
 	userInput = db.Column(db.Text)
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
-	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(225))
@@ -218,13 +209,12 @@ class Cart(db.Model):
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, locationId, productId, userInput, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber):
 		self.locationId = locationId
 		self.productId = productId
 		self.userInput = userInput
 		self.quantity = quantity
 		self.adder = adder
-		self.callfor = callfor
 		self.options = options
 		self.others = others
 		self.sizes = sizes
@@ -234,38 +224,6 @@ class Cart(db.Model):
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
-
-class Transaction(db.Model):
-	id = db.Column(db.Integer, primary_key=True)
-	groupId = db.Column(db.String(20))
-	locationId = db.Column(db.Integer)
-	productId = db.Column(db.Integer)
-	serviceId = db.Column(db.Integer)
-	userInput = db.Column(db.Text)
-	quantity = db.Column(db.Integer)
-	adder = db.Column(db.Integer)
-	callfor = db.Column(db.Text)
-	options = db.Column(db.Text)
-	others = db.Column(db.Text)
-	sizes = db.Column(db.String(200))
-	time = db.Column(db.String(15))
-
-	def __init__(self, groupId, locationId, productId, serviceId, userInput, quantity, adder, callfor, options, others, sizes, time):
-		self.groupId = groupId
-		self.locationId = locationId
-		self.productId = productId
-		self.serviceId = serviceId
-		self.userInput = userInput
-		self.quantity = quantity
-		self.adder = adder
-		self.callfor = callfor
-		self.options = options
-		self.others = others
-		self.sizes = sizes
-		self.time = time
-
-	def __repr__(self):
-		return '<Transaction %r>' % self.groupId
 
 def query(sql, output):
 	dbconn = pymysql.connect(
@@ -283,41 +241,6 @@ def query(sql, output):
 
 		return results
 
-def trialInfo(): # days before over | cardrequired | trialover (id, time)
-	# user = User.query.filter_by(id=id).first()
-	# info = json.loads(user.info)
-
-	# customerid = info['customerId']
-
-	# stripeCustomer = stripe.Customer.list_sources(
-	# 	customerid,
-	# 	object="card",
-	# 	limit=1
-	# )
-	# cards = len(stripeCustomer.data)
-	# status = ""
-	# days = 0
-
-	# if "trialstart" in info:
-	# 	if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
-	# 		if cards == 0:
-	# 			status = "cardrequired"
-	# 		else:
-	# 			status = "trialover"
-	# 	else:
-	# 		days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
-	# 		status = "notover"
-	# else:
-	# 	if cards == 0:
-	# 		status = "cardrequired"
-	# 	else:
-	# 		status = "trialover"
-
-	days = 30
-	status = "notover"
-
-	return { "days": days, "status": status }
-
 def getRanStr():
 	strid = ""
 
@@ -326,64 +249,8 @@ def getRanStr():
 
 	return strid
 
-def stripeFee(amount):
-	return (amount + 0.30) / (1 - 0.029)
-
-def calcTax(amount):
-	pst = 0.08 * amount
-	hst = 0.05 * amount
-
-	return pst + hst
-
 def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
-
-def customerPay(cost, userid, locationid):
-	chargecost = stripeFee(cost + calcTax(cost))
-	transfercost = cost + calcTax(cost)
-
-	user = User.query.filter_by(id=userid).first()
-	location = Location.query.filter_by(id=locationid).first()
-
-	if user != None and location != None:
-		userInfo = json.loads(user.info)
-		locationInfo = json.loads(location.info)
-
-		customerid = userInfo["customerId"]
-		accountid = locationInfo["accountId"]
-
-		paymentmethods = stripe.Customer.list_sources(customerid, object="card").data
-		bankaccounts = stripe.Account.retrieve(accountid).external_accounts.data
-
-		if len(paymentmethods) > 0 and len(bankaccounts) > 0:
-			try:
-				charge = stripe.Charge.create(
-					amount=int(chargecost * 100),
-					currency="cad",
-					customer=customerid,
-					transfer_data={
-						"destination": accountid
-					}
-				)
-
-				return { "error": "", "msg": "success" }
-			except stripe.error.CardError as e:
-				print(e.http_status)
-				print(e.code)
-
-				return { "error": e.http_status, "code": e.code, "msg": "" }
-			except stripe.error.InvalidRequestError as e:
-				print(e.http_status)
-				print(e.code)
-
-				return { "error": e.http_status, "code": e.code, "msg": "" }
-		else:
-			if len(paymentmethods) == 0:
-				return { "error": "cardrequired", "msg": "" }
-			else:
-				return { "error": "bankaccountrequired", "msg": "" }
-	else:
-		return { "error": "idnonexist", "msg": "" }
 
 def push(messages):
 	if type(messages) == type([]):
@@ -422,7 +289,7 @@ def get_menus(id):
 				children = Menu.query.filter_by(locationId=id, parentMenuId=parentMenuid).count()
 
 				items.append({
-					"key": "menu-" + str(index), "id": data.id, "name": data.name, "info": data.info, 
+					"key": "menu-" + str(index), "id": data.id, "name": data.name, 
 					"image": data.image, "list": [], "listType": "list"
 				})
 				otherList = getOtherMenu(locationId, data.id)
@@ -441,7 +308,7 @@ def get_menus(id):
 							sizes = json.loads(data.sizes)
 
 							innerItems.append({
-								"key": "product-" + str(data.id), "id": data.id, "name": data.name, "info": data.info, 
+								"key": "product-" + str(data.id), "id": data.id, "name": data.name, 
 								"price": float(data.price) if data.price != '' else None, "sizes": sizes,
 								"image": data.image, "listType": "product"
 							})
@@ -465,7 +332,7 @@ def get_menus(id):
 					sizes = json.loads(data.sizes)
 					
 					items.append({
-						"key": "product-" + str(data.id), "id": data.id, "name": data.name, "info": data.info, 
+						"key": "product-" + str(data.id), "id": data.id, "name": data.name, 
 						"price": float(data.price) if data.price != '' else None, "sizes": sizes,
 						"image": data.image, "listType": "product"
 					})
@@ -475,8 +342,7 @@ def get_menus(id):
 				for index, data in enumerate(serviceDatas):
 					items.append({
 						"key": "service-" + str(data.id), "id": data.id, 
-						"name": data.name, "info": data.info, 
-						"price": float(data.price), "duration": data.duration, 
+						"name": data.name, "price": float(data.price), "duration": data.duration, 
 						"image": data.image, "listType": "service"
 					})
 
@@ -559,10 +425,9 @@ def get_menu_info(id):
 
 	if menu != None:
 		name = menu.name
-		info = menu.info
 		image = menu.image
 
-		info = { "name": name, "info": info, "image": image }
+		info = { "name": name, "image": image }
 
 		return { "info": info, "msg": "menu info" }
 	else:
@@ -574,7 +439,6 @@ def get_menu_info(id):
 def save_menu():
 	menuid = request.form['menuid']
 	name = request.form['name']
-	info = request.form['info']
 	imagepath = request.files.get('image', False)
 	imageexist = False if imagepath == False else True
 	permission = request.form['permission']
@@ -585,7 +449,6 @@ def save_menu():
 
 	if menu != None:
 		menu.name = name
-		menu.info = info
 
 		if imageexist == True:
 			image = request.files['image']

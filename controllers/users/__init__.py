@@ -102,14 +102,12 @@ class Menu(db.Model):
 	locationId = db.Column(db.Integer)
 	parentMenuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 
-	def __init__(self, locationId, parentMenuId, name, info, image):
+	def __init__(self, locationId, parentMenuId, name, image):
 		self.locationId = locationId
 		self.parentMenuId = parentMenuId
 		self.name = name
-		self.info = info
 		self.image = image
 
 	def __repr__(self):
@@ -120,16 +118,14 @@ class Service(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	info = db.Column(db.Text)
 	image = db.Column(db.String(20))
 	price = db.Column(db.String(10))
 	duration = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image, price, duration):
+	def __init__(self, locationId, menuId, name, image, price, duration):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
-		self.info = info
 		self.image = image
 		self.price = price
 		self.duration = duration
@@ -150,13 +146,12 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
-	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, nextTime, locationType, note, orders, table, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
@@ -168,7 +163,6 @@ class Schedule(db.Model):
 		self.cancelReason = cancelReason
 		self.nextTime = nextTime
 		self.locationType = locationType
-		self.customers = customers
 		self.note = note
 		self.orders = orders
 		self.table = table
@@ -182,18 +176,16 @@ class Product(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	info = db.Column(db.String(100))
 	image = db.Column(db.String(20))
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(150))
 	price = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, info, image, options, others, sizes, price):
+	def __init__(self, locationId, menuId, name, image, options, others, sizes, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
-		self.info = info
 		self.image = image
 		self.options = options
 		self.others = others
@@ -210,7 +202,6 @@ class Cart(db.Model):
 	userInput = db.Column(db.Text)
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
-	callfor = db.Column(db.Text)
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(225))
@@ -218,13 +209,12 @@ class Cart(db.Model):
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
 
-	def __init__(self, locationId, productId, userInput, quantity, adder, callfor, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber):
 		self.locationId = locationId
 		self.productId = productId
 		self.userInput = userInput
 		self.quantity = quantity
 		self.adder = adder
-		self.callfor = callfor
 		self.options = options
 		self.others = others
 		self.sizes = sizes
@@ -234,38 +224,6 @@ class Cart(db.Model):
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
-
-class Transaction(db.Model):
-	id = db.Column(db.Integer, primary_key=True)
-	groupId = db.Column(db.String(20))
-	locationId = db.Column(db.Integer)
-	productId = db.Column(db.Integer)
-	serviceId = db.Column(db.Integer)
-	userInput = db.Column(db.Text)
-	quantity = db.Column(db.Integer)
-	adder = db.Column(db.Integer)
-	callfor = db.Column(db.Text)
-	options = db.Column(db.Text)
-	others = db.Column(db.Text)
-	sizes = db.Column(db.String(200))
-	time = db.Column(db.String(15))
-
-	def __init__(self, groupId, locationId, productId, serviceId, userInput, quantity, adder, callfor, options, others, sizes, time):
-		self.groupId = groupId
-		self.locationId = locationId
-		self.productId = productId
-		self.serviceId = serviceId
-		self.userInput = userInput
-		self.quantity = quantity
-		self.adder = adder
-		self.callfor = callfor
-		self.options = options
-		self.others = others
-		self.sizes = sizes
-		self.time = time
-
-	def __repr__(self):
-		return '<Transaction %r>' % self.groupId
 
 def query(sql, output):
 	dbconn = pymysql.connect(
@@ -283,41 +241,6 @@ def query(sql, output):
 
 		return results
 
-def trialInfo(): # days before over | cardrequired | trialover (id, time)
-	# user = User.query.filter_by(id=id).first()
-	# info = json.loads(user.info)
-
-	# customerid = info['customerId']
-
-	# stripeCustomer = stripe.Customer.list_sources(
-	# 	customerid,
-	# 	object="card",
-	# 	limit=1
-	# )
-	# cards = len(stripeCustomer.data)
-	# status = ""
-	# days = 0
-
-	# if "trialstart" in info:
-	# 	if (time - info["trialstart"]) >= (86400000 * 30): # trial is over, payment required
-	# 		if cards == 0:
-	# 			status = "cardrequired"
-	# 		else:
-	# 			status = "trialover"
-	# 	else:
-	# 		days = 30 - int((time - info["trialstart"]) / (86400000 * 30))
-	# 		status = "notover"
-	# else:
-	# 	if cards == 0:
-	# 		status = "cardrequired"
-	# 	else:
-	# 		status = "trialover"
-
-	days = 30
-	status = "notover"
-
-	return { "days": days, "status": status }
-
 def getRanStr():
 	strid = ""
 
@@ -326,64 +249,8 @@ def getRanStr():
 
 	return strid
 
-def stripeFee(amount):
-	return (amount + 0.30) / (1 - 0.029)
-
-def calcTax(amount):
-	pst = 0.08 * amount
-	hst = 0.05 * amount
-
-	return pst + hst
-
 def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
-
-def customerPay(cost, userid, locationid):
-	chargecost = stripeFee(cost + calcTax(cost))
-	transfercost = cost + calcTax(cost)
-
-	user = User.query.filter_by(id=userid).first()
-	location = Location.query.filter_by(id=locationid).first()
-
-	if user != None and location != None:
-		userInfo = json.loads(user.info)
-		locationInfo = json.loads(location.info)
-
-		customerid = userInfo["customerId"]
-		accountid = locationInfo["accountId"]
-
-		paymentmethods = stripe.Customer.list_sources(customerid, object="card").data
-		bankaccounts = stripe.Account.retrieve(accountid).external_accounts.data
-
-		if len(paymentmethods) > 0 and len(bankaccounts) > 0:
-			try:
-				charge = stripe.Charge.create(
-					amount=int(chargecost * 100),
-					currency="cad",
-					customer=customerid,
-					transfer_data={
-						"destination": accountid
-					}
-				)
-
-				return { "error": "", "msg": "success" }
-			except stripe.error.CardError as e:
-				print(e.http_status)
-				print(e.code)
-
-				return { "error": e.http_status, "code": e.code, "msg": "" }
-			except stripe.error.InvalidRequestError as e:
-				print(e.http_status)
-				print(e.code)
-
-				return { "error": e.http_status, "code": e.code, "msg": "" }
-		else:
-			if len(paymentmethods) == 0:
-				return { "error": "cardrequired", "msg": "" }
-			else:
-				return { "error": "bankaccountrequired", "msg": "" }
-	else:
-		return { "error": "idnonexist", "msg": "" }
 
 def push(messages):
 	if type(messages) == type([]):
@@ -426,9 +293,7 @@ def user_login():
 			if check_password_hash(user.password, password):
 				userid = user.id
 
-				password = generate_password_hash(password)
-
-				user.password = password
+				user.password = generate_password_hash(password)
 
 				db.session.commit()
 
@@ -489,12 +354,7 @@ def user_register():
 				if user == None:
 					password = generate_password_hash(password)
 
-					customer = stripe.Customer.create(
-						phone=cellnumber
-					)
-					customerid = customer.id
-
-					userInfo = json.dumps({"customerId": customerid, "paymentStatus": "required", "pushToken": ""})
+					userInfo = json.dumps({"pushToken": ""})
 
 					user = User(cellnumber, password, '', '', userInfo)
 					db.session.add(user)
@@ -524,7 +384,6 @@ def setup():
 	profilepath = request.files.get('profile', False)
 	profileexist = False if profilepath == False else True
 	permission = request.form['permission']
-	time = int(request.form['time'])
 
 	user = User.query.filter_by(id=userid).first()
 	errormsg = ""
@@ -532,7 +391,6 @@ def setup():
 
 	if user != None:
 		info = json.loads(user.info)
-		customerid = info["customerId"]
 
 		user.username = username
 
@@ -544,17 +402,11 @@ def setup():
 			user.profile = profilename
 		else:
 			if permission == "true":
-				errormsg = "Please take a photo of yourself for identification purpose"
+				errormsg = "Please take a photo of yourself"
 
-		info["trialstart"] = time
 		user.info = json.dumps(info)
 
-		if errormsg == "":
-			stripe.Customer.modify(
-				customerid,
-				name=username
-			)
-			
+		if errormsg == "":			
 			db.session.commit()
 
 			return { "msg": "User setup" }
@@ -608,15 +460,8 @@ def update_user():
 			user.profile = newprofilename
 
 		info = json.loads(user.info)
-		customerid = info["customerId"]
 
 		if errormsg == "":
-			stripe.Customer.modify(
-				customerid,
-				phone=cellnumber,
-				name=username
-			)
-
 			db.session.commit()
 
 			return { "msg": "update successfully" }
@@ -678,205 +523,11 @@ def get_user_info(id):
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/get_trial_info", methods=["POST"])
-def get_trial_info():
+@app.route("/get_num_notifications", methods=["POST"])
+def get_num_notifications():
 	content = request.get_json()
 
 	userid = str(content['userid'])
-	time = int(content['time'])
-
-	trialinfo = trialInfo()
-	days = trialinfo["days"]
-	status = trialinfo["status"]
-
-	return { "days": days, "status": status }
-
-@app.route("/add_paymentmethod", methods=["POST"])
-def add_paymentmethod():
-	content = request.get_json()
-
-	userid = content['userid']
-	cardtoken = content['cardtoken']
-
-	user = User.query.filter_by(id=userid).first()
-
-	if user != None:
-		info = json.loads(user.info)
-		customerid = info["customerId"]
-
-		stripe.Customer.create_source(
-			customerid,
-			source=cardtoken
-		)
-
-		info["paymentStatus"] = "filled"
-
-		user.info = json.dumps(info)
-
-		db.session.commit()
-
-		return { "msg": "Added a payment method" }
-	else:
-		errormsg = ""
-
-@app.route("/update_paymentmethod", methods=["POST"])
-def update_paymentmethod():
-	content = request.get_json()
-
-	userid = content['userid']
-	oldcardtoken = content['oldcardtoken']
-	cardtoken = content['cardtoken']
-
-	user = User.query.filter_by(id=userid).first()
-	errormsg = ""
-	status = ""
-
-	if user != None:
-		info = json.loads(user.info)
-		customerid = info["customerId"]
-
-		stripe.Customer.delete_source(
-			customerid,
-			oldcardtoken
-		)
-
-		stripe.Customer.create_source(
-			customerid,
-			source=cardtoken
-		)
-
-		return { "msg": "Updated a payment method" }
-	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/get_payment_methods/<id>")
-def get_payment_methods(id):
-	user = User.query.filter_by(id=id).first()
-	errormsg = ""
-	status = ""
-
-	if user != None:
-		info = json.loads(user.info)
-		customerid = info["customerId"]
-		cards = []
-
-		customer = stripe.Customer.retrieve(customerid)
-		default_card = customer.default_source
-
-		methods = stripe.Customer.list_sources(
-			customerid,
-			object="card"
-		)
-		datas = methods.data
-
-		for k, data in enumerate(datas):
-			cards.append({
-				"key": "card-" + str(k),
-				"id": str(k),
-				"cardid": data.id,
-				"cardname": data.brand,
-				"default": data.id == default_card,
-				"number": "****" + str(data.last4)
-			})
-
-		return { "cards": cards }
-	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/set_paymentmethoddefault", methods=["POST"])
-def set_paymentmethoddefault():
-	content = request.get_json()
-
-	userid = content['userid']
-	cardid = content['cardid']
-
-	user = User.query.filter_by(id=userid).first()
-	errormsg = ""
-	status = ""
-
-	if user != None:
-		info = json.loads(user.info)
-		customerid = info["customerId"]
-
-		stripe.Customer.modify(
-			customerid,
-			default_source=cardid
-		)
-
-		return { "msg": "Payment method set as default" }
-	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/get_paymentmethod_info", methods=["POST"])
-def get_paymentmethod_info():
-	content = request.get_json()
-
-	userid = content['userid']
-	cardid = content['cardid']
-
-	user = User.query.filter_by(id=userid).first()
-	errormsg = ""
-	status = ""
-
-	if user != None:
-		info = json.loads(user.info)
-		customerid = info["customerId"]
-
-		card = stripe.Customer.retrieve_source(
-			customerid,
-			cardid
-		)
-
-		info = {
-			"exp_month": card.exp_month,
-			"exp_year": card.exp_year,
-			"last4": card.last4
-		}
-
-		return { "paymentmethodInfo": info }
-	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/delete_paymentmethod", methods=["POST"])
-def delete_paymentmethod():
-	content = request.get_json()
-
-	userid = content['userid']
-	cardid = content['cardid']
-
-	user = User.query.filter_by(id=userid).first()
-	errormsg = ""
-	status = ""
-
-	if user != None:
-		info = json.loads(user.info)
-		customerid = info["customerId"]
-
-		stripe.Customer.delete_source(
-			customerid,
-			cardid
-		)
-
-		return { "msg": "Payment method deleted"}
-	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/get_num_updates", methods=["POST"])
-def get_num_updates():
-	content = request.get_json()
-
-	userid = str(content['userid'])
-	time = content['time']
 
 	user = User.query.filter_by(id=userid).first()
 	errormsg = ""
@@ -886,42 +537,11 @@ def get_num_updates():
 		num = 0
 
 		# cart orders called for self
-		sql = "select count(*) as num from cart where adder = " + userid + " and callfor = '[]' and not status = 'unlisted'"
+		sql = "select count(*) as num from cart where adder = " + userid + " and not status = 'unlisted'"
 		num += query(sql, True)[0]["num"]
 
-		# cart orders called for other user(s)
-		sql = "select count(*) as num from cart where "
-		sql += "("
-		sql += "callfor like '%\"userid\": \"" + userid + "\", \"status\": \"waiting\"%'"
-		sql += " or "
-		sql += "callfor like '%\"status\": \"waiting\", \"userid\": \"" + userid + "\"%'"
-		sql += ") or "
-		sql += "(adder = " + userid + " and not callfor = '[]' and status = 'checkout') or "
-		sql += "(not callfor = '[]' and status = 'ready')"
-		num += query(sql, True)[0]["num"]
-
-		# dining orders called for user
-		sql = "select count(*) as num from schedule where "
-		sql += "("
-		sql += "orders like '%\"userid\": \"" + userid + "\", \"status\": \"confirmawaits\"%'"
-		sql += " or "
-		sql += "orders like '%\"status\": \"confirmawaits\", \"userid\": \"" + userid + "\"%'"
-		sql += ")"
-		num += query(sql, True)[0]["num"]
-
-		# requested payment method for order for
-		sql = "select count(*) as num from cart where "
-		sql += "("
-		sql += "callfor like '%\"userid\": \"" + userid + "\", \"status\": \"paymentrequested\"%'"
-		sql += " or "
-		sql += "callfor like '%\"status\": \"paymentrequested\", \"userid\": \"" + userid + "\"%'"
-		sql += ")"
-		num += query(sql, True)[0]["num"]
-
-		# get reservation requests
-		sql = "select count(*) as num from schedule where "
-		sql += "(userId = " + userid + " and (status = 'requested' or status = 'rebook' or status = 'cancel' or status = 'accepted' or status = 'change' or status = 'confirmed')) or "
-		sql += "(customers like '%\"userid\": \"" + userid + "\"%')"
+		# get schedules
+		sql = "select count(*) as num from schedule where userId = " + userid + " and (status = 'cancel' or status = 'confirmed')"
 		num += query(sql, True)[0]["num"]
 
 		return { "numNotifications": num }
@@ -941,7 +561,7 @@ def get_notifications(id):
 		notifications = []
 
 		# cart orders called for self
-		sql = "select * from cart where adder = " + str(id) + " and callfor = '[]' and not status = 'unlisted'"
+		sql = "select * from cart where adder = " + str(id) + " and not status = 'unlisted'"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -961,25 +581,19 @@ def get_notifications(id):
 			for k, size in enumerate(sizes):
 				size["key"] = "size-" + str(len(notifications)) + "-" + str(k)
 
-			if product != None:
+			if product == None:
+				userInput = json.loads(data['userInput'])
+			else:
 				if product.price == "":
 					for size in sizes:
 						if size["selected"] == True:
 							cost += float(size["price"])
 				else:
 					cost += float(product.price)
-			else:
-				userInput = json.loads(data['userInput'])
 
-			for other in others:
-				if other["selected"] == True:
-					cost += float(other["price"])
-
-			pst = 0.08 * cost
-			hst = 0.05 * cost
-			total = stripeFee(cost + pst + hst)
-			nofee = cost + pst + hst
-			fee = total - nofee
+				for other in others:
+					if other["selected"] == True:
+						cost += float(other["price"])
 
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
@@ -993,240 +607,14 @@ def get_notifications(id):
 				"sizes": sizes,
 				"quantity": int(data['quantity']),
 				"adder": { "username": adder.username, "profile": adder.profile },
-				"cost": cost,
-				"fee": fee,
-				"pst": pst,
-				"hst": hst,
-				"total": total,
 				"orderNumber": data['orderNumber'],
-				"status": data['status']
-			})
-		
-		# cart orders called for other user(s)
-		sql = "select * from cart where "
-		sql += "("
-		sql += "callfor like '%\"userid\": \"" + str(id) + "\", \"status\": \"waiting\"%'"
-		sql += " or "
-		sql += "callfor like '%\"status\": \"waiting\", \"userid\": \"" + str(id) + "\"%'"
-		sql += ") or "
-		sql += "(adder = " + str(id) + " and not callfor = '[]' and status = 'checkout') or "
-		sql += "(not callfor = '[]' and status = 'ready')"
-		datas = query(sql, True)
-
-		for data in datas:
-			adder = User.query.filter_by(id=data['adder']).first()
-			product = Product.query.filter_by(id=data['productId']).first()
-			callfor = json.loads(data['callfor'])
-			options = json.loads(data['options'])
-			others = json.loads(data['others'])
-			sizes = json.loads(data['sizes'])
-			friends = []
-			cost = 0
-
-			for info in callfor:
-				friend = User.query.filter_by(id=info['userid']).first()
-
-				friends.append({
-					"key": str(data['id']) + "-" + str(friend.id),
-					"username": friend.username,
-					"profile": friend.profile
-				})
-
-			for k, option in enumerate(options):
-				option["key"] = "option-" + str(len(notifications)) + "-" + str(k)
-
-			for k, other in enumerate(others):
-				other["key"] = "other-" + str(len(notifications)) + "-" + str(k)
-
-			for k, size in enumerate(sizes):
-				size["key"] = "size-" + str(len(notifications)) + "-" + str(k)
-
-			if product.price == "":
-				for size in sizes:
-					if size["selected"] == True:
-						cost += float(size["price"])
-			else:
-				cost += float(product.price)
-
-			for other in others:
-				if other["selected"] == True:
-					cost += float(other["price"])
-
-			pst = 0.08 * cost
-			hst = 0.05 * cost
-			total = stripeFee(cost + pst + hst)
-			nofee = cost + pst + hst
-			fee = total - nofee
-
-			notifications.append({
-				"key": "order-" + str(len(notifications)),
-				"type": "cart-order-other",
-				"id": str(data['id']),
-				"name": product.name,
-				"image": product.image,
-				"options": options,
-				"others": others,
-				"sizes": sizes,
-				"quantity": int(data['quantity']),
-				"orderers": friends,
-				"adder": { "username": adder.username, "profile": adder.profile },
-				"cost": cost,
-				"fee": fee,
-				"pst": pst,
-				"hst": hst,
-				"total": total,
 				"status": data['status'],
-				"orderNumber": data['orderNumber']
+				"cost": (cost * int(data['quantity'])) if cost > 0 else None
 			})
 
-		# dining orders called for user
+		# get schedules
 		sql = "select * from schedule where "
-		sql += "("
-		sql += "orders like '%\"userid\": \"" + str(id) + "\", \"status\": \"confirmawaits\"%'"
-		sql += " or "
-		sql += "orders like '%\"status\": \"confirmawaits\", \"userid\": \"" + str(id) + "\"%'"
-		sql += ")"
-		datas = query(sql, True)
-
-		for data in datas:
-			orders = json.loads(data['orders'])
-			groups = orders['groups']
-
-			for rounds in groups:
-				for k in rounds:
-					if k != "status" and k != "id":
-						for orderer in rounds[k]:
-							if {"userid": str(id), "status": "confirmawaits"} in orderer['callfor']:
-								callfor = orderer['callfor']
-								product = Product.query.filter_by(id=orderer['productid']).first()
-								adder = User.query.filter_by(id=k).first()
-								options = orderer['options']
-								others = orderer['others']
-								sizes = orderer['sizes']
-								cost = 0
-
-								for k, option in enumerate(options):
-									option["key"] = "option-" + str(len(notifications)) + "-" + str(k)
-
-								for k, other in enumerate(others):
-									other["key"] = "other-" + str(len(notifications)) + "-" + str(k)
-
-								for k, size in enumerate(sizes):
-									size["key"] = "size-" + str(len(notifications)) + "-" + str(k)
-
-								if product.price == "":
-									for size in sizes:
-										if size["selected"] == True:
-											cost += float(size["price"])
-								else:
-									cost += float(product.price)
-
-								for other in others:
-									if other["selected"] == True:
-										cost += float(other["price"])
-
-								pst = 0.08 * cost
-								hst = 0.05 * cost
-								total = stripeFee(cost + pst + hst)
-								nofee = cost + pst + hst
-								fee = total - nofee
-
-								notifications.append({
-									"key": "order-" + str(len(notifications)),
-									"type": "dining-order",
-									"orderid": str(orderer['id']),
-									"name": product.name,
-									"image": product.image,
-									"options": options,
-									"others": others,
-									"sizes": sizes,
-									"quantity": int(orderer['quantity']),
-									"adder": { "username": adder.username, "profile": adder.profile },
-									"cost": cost,
-									"fee": fee,
-									"pst": pst,
-									"hst": hst,
-									"total": total,
-									"status": "unlisted"
-								})
-
-		# get requested payment method to order for
-		sql = "select * from cart where "
-		sql += "("
-		sql += "callfor like '%\"userid\": \"" + str(id) + "\", \"status\": \"paymentrequested\"%'"
-		sql += " or "
-		sql += "callfor like '%\"status\": \"paymentrequested\", \"userid\": \"" + str(id) + "\"%'"
-		sql += ")"
-		datas = query(sql, True)
-
-		for data in datas:
-			adder = User.query.filter_by(id=data['adder']).first()
-			product = Product.query.filter_by(id=data['productId']).first()
-			callfor = json.loads(data['callfor'])
-			options = json.loads(data['options'])
-			others = json.loads(data['others'])
-			sizes = json.loads(data['sizes'])
-			friends = []
-			cost = 0
-
-			for info in callfor:
-				friend = User.query.filter_by(id=info['userid']).first()
-
-				friends.append({
-					"key": str(data['id']) + "-" + str(friend.id),
-					"username": friend.username,
-					"profile": friend.profile
-				})
-
-			for k, option in enumerate(options):
-				option["key"] = "option-" + str(len(notifications)) + "-" + str(k)
-
-			for k, other in enumerate(others):
-				other["key"] = "other-" + str(len(notifications)) + "-" + str(k)
-
-			for k, size in enumerate(sizes):
-				size["key"] = "size-" + str(len(notifications)) + "-" + str(k)
-
-			if product.price == "":
-				for size in sizes:
-					if size["selected"] == True:
-						cost += float(size["price"])
-			else:
-				cost += float(product.price)
-
-			for other in others:
-				if other["selected"] == True:
-					cost += float(other["price"])
-
-			pst = 0.08 * cost
-			hst = 0.05 * cost
-			total = stripeFee(cost + pst + hst)
-			nofee = cost + pst + hst
-			fee = total - nofee
-
-			notifications.append({
-				"key": "order-" + str(len(notifications)),
-				"type": "paymentrequested",
-				"id": str(data['id']),
-				"name": product.name,
-				"image": product.image,
-				"options": options,
-				"others": others,
-				"sizes": sizes,
-				"quantity": int(data['quantity']),
-				"orderers": friends,
-				"adder": { "username": adder.username, "profile": adder.profile },
-				"cost": cost,
-				"fee": fee,
-				"pst": pst,
-				"hst": hst,
-				"total": total,
-			})
-
-		# get requests
-		sql = "select * from schedule where "
-		sql += "(userId = " + str(id) + " and (status = 'requested' or status = 'rebook' or status = 'cancel' or status = 'accepted' or status = 'change' or status = 'confirmed')) or "
-		sql += "(customers like '%\"userid\": \"" + str(id) + "\"%')"
+		sql += "(userId = " + str(id) + " and (status = 'cancel' or status = 'confirmed'))"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -1241,28 +629,12 @@ def get_notifications(id):
 
 			booker = User.query.filter_by(id=data['userId']).first()
 			confirm = False
-			chargedUser = False
 			info = json.loads(data['info'])
 
 			if data["locationType"] == 'restaurant':
-				customers = json.loads(data['customers'])
-				
-				for customer in customers:
-					if customer['userid'] == id:
-						confirm = customer['status'] == 'confirmed'
-
-				customers = len(customers)
-			else:
-				customers = int(data['customers'])
-				chargedUser = info["chargedUser"]
-
-			if data["locationType"] != 'restaurant':
-				allowPayment = info["allowpayment"]
-			else:
 				orders = json.loads(data["orders"])
 				charges = orders["charges"]
-				allowPayment = charges[str(userId)]["allowpayment"] if str(userId) in charges else False
-
+				
 			if data["workerId"] > -1:
 				owner = Owner.query.filter_by(id=data["workerId"]).first()
 
@@ -1306,10 +678,7 @@ def get_notifications(id):
 				"table": data['table'],
 				"booker": userId == data['userId'],
 				"bookerName": booker.username,
-				"diners": customers,
 				"confirm": confirm,
-				"chargedUser": chargedUser,
-				"allowPayment": allowPayment,
 				"numOrders": numOrders,
 				"seated": info["dinersseated"] if "dinersseated" in info else None,
 				"requestPayment": True if "price" in userInput else False,
@@ -1322,154 +691,6 @@ def get_notifications(id):
 			})
 
 		return { "notifications": notifications }
-	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/search_friends", methods=["POST"])
-def search_friends():
-	content = request.get_json()
-
-	userid = content['userid']
-	searchusername = content['username']
-
-	user = User.query.filter_by(id=userid).first()
-	errormsg = ""
-	status = ""
-
-	if user != None:
-		searchedfriends = []
-		numSearchedFriends = 0
-
-		if searchusername != "":
-			datas = query("select id, profile, username from user where username like '%" + searchusername + "%' and not id = " + str(userid), True)
-			row = []
-			rownum = 0
-
-			for k, data in enumerate(datas):
-				row.append({
-					"key": "friend-" + str(data['id']),
-					"id": data['id'],
-					"profile": data['profile'],
-					"username": data['username']
-				})
-				numSearchedFriends += 1
-
-				if len(row) == 4 or (len(datas) - 1 == k and len(row) > 0):
-					if len(datas) - 1 == k and len(row) > 0:
-						key = data['id'] + 1
-
-						leftover = 4 - len(row)
-
-						for k in range(leftover):
-							row.append({ "key": "friend-" + str(key) })
-							key += 1
-					
-					searchedfriends.append({ "key": "friend-row-" + str(len(searchedfriends)), "row": row })
-					row = []
-
-		return { "searchedFriends": searchedfriends, "numSearchedFriends": numSearchedFriends }
-	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/search_diners", methods=["POST"])
-def search_diners():
-	content = request.get_json()
-
-	userid = str(content['userid'])
-	scheduleid = content['scheduleid']
-	searchusername = content['username']
-
-	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	errormsg = ""
-	status = ""
-
-	if schedule != None:
-		datas = json.loads(schedule.customers)
-		customers = [str(schedule.userId)]
-
-		for data in datas:
-			customers.append(data["userid"])
-
-		if userid in customers:
-			customers.remove(userid)
-
-		datas = query("select id, profile, username from user where username like '%" + searchusername + "%' and id in (" + json.dumps(customers)[1:-1] + ")", True)
-		row = []
-		searcheddiners = []
-		rownum = 0
-		numSearchedDiners = 0
-
-		for k, data in enumerate(datas):
-			row.append({
-				"key": "diner-" + str(data['id']),
-				"id": data['id'],
-				"profile": data['profile'],
-				"username": data['username']
-			})
-			numSearchedDiners += 1
-
-			if len(row) == 4 or (len(datas) - 1 == k and len(row) > 0):
-				if len(datas) - 1 == k and len(row) > 0:
-					key = data['id'] + 1
-
-					leftover = 4 - len(row)
-
-					for k in range(leftover):
-						row.append({ "key": "diner-" + str(key) })
-						key += 1
-
-				searcheddiners.append({ "key": "diner-row-" + str(len(searcheddiners)), "row": row })
-				row = []
-
-		return { "searchedDiners": searcheddiners, "numSearchedDiners": numSearchedDiners }
-	else:
-		errormsg = "Schedule doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/select_user/<id>")
-def select_user(id):
-	user = User.query.filter_by(id=id).first()
-	errormsg = ""
-	status = ""
-
-	if user != None:
-		info = json.loads(user.info)
-		customerid = info["customerId"]
-
-		customer = stripe.Customer.list_sources(
-			customerid,
-			object="card",
-			limit=1
-		)
-		cards = len(customer.data)
-
-		return { "username": user.username, "cards": cards }
-	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/request_user_payment_method/<id>")
-def request_user_payment_method(id):
-	user = User.query.filter_by(id=id).first()
-	errormsg = ""
-	status = ""
-
-	if user != None:
-		info = json.loads(user.info)
-
-		info["paymentStatus"] = "requested"
-
-		user.info = json.dumps(info)
-
-		db.session.commit()
-
-		return { "msg": "Card requested" }
 	else:
 		errormsg = "User doesn't exist"
 
