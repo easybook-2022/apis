@@ -24,14 +24,12 @@ class User(db.Model):
 	cellnumber = db.Column(db.String(10), unique=True)
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
-	profile = db.Column(db.String(25))
 	info = db.Column(db.String(155))
 
-	def __init__(self, cellnumber, password, username, profile, info):
+	def __init__(self, cellnumber, password, username, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
-		self.profile = profile
 		self.info = info
 
 	def __repr__(self):
@@ -441,61 +439,11 @@ def checkout():
 
 				push(pushmessages)
 
-		query("update cart set status = 'checkout', orderNumber = '" + orderNumber + "' where adder = " + str(adder), False)
+		query("update cart set status = 'checkout', orderNumber = '" + orderNumber + "' where adder = " + str(adder) + " and orderNumber = ''", False)
 
 		return { "msg": "order sent", "receiver": receiver }
 	else:
 		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/order_ready", methods=["POST"])
-def order_ready():
-	content = request.get_json()
-
-	userid = content['userid']
-	locationid = content['locationid']
-	ordernumber = content['ordernumber']
-
-	location = Location.query.filter_by(id=locationid).first()
-	errormsg = ""
-	status = ""
-
-	if location != None:
-		orders = Cart.query.filter_by(orderNumber=ordernumber).count()
-
-		if orders > 0:
-			datas = Cart.query.filter_by(adder=userid, locationId=locationid, orderNumber=ordernumber, status='checkout').all()
-
-			for data in datas:
-				data.status = "ready"
-
-			adderInfo = User.query.filter_by(id=userid).first()
-			adderInfo = json.loads(adderInfo.info)
-			
-			if adderInfo["pushToken"] != "":
-				if send_msg == True:
-					resp = push(pushInfo(
-						adderInfo["pushToken"],
-						"Order ready",
-						"Your order: " + str(ordernumber) + " is ready for pick up",
-						content
-					))
-				else:
-					resp = { "status": "ok" }
-			else:
-				resp = { "status": "ok" }
-
-			if resp["status"] == "ok":
-				db.session.commit()
-
-				return { "msg": "Order ready" }
-
-			errormsg = "Push notification failed"
-		else:
-			errormsg = "Order doesn't exist"
-	else:
-		errormsg = "Location doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -517,7 +465,7 @@ def order_done():
 		username = user.username
 		adder = user.id
 		
-		datas = query("select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "' and status = 'ready'", True)
+		datas = query("select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "' and status = 'checkout'", True)
 		charges = {}
 		totalPaying = 0.00
 
@@ -641,3 +589,39 @@ def update_cart_item():
 		errormsg = "Cart item doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/see_orders/<id>")
+def see_orders(id):
+	datas = Cart.query.filter_by(orderNumber=id).all()
+	orders = []
+
+	for data in datas:
+		product = Product.query.filter_by(id=data.productId).first()
+		quantity = int(data.quantity)
+		options = json.loads(data.options)
+		others = json.loads(data.others)
+		sizes = json.loads(data.sizes)
+		userInput = json.loads(data.userInput)
+
+		for k, option in enumerate(options):
+			option['key'] = "option-" + str(k)
+
+		for k, other in enumerate(others):
+			other['key'] = "other-" + str(k)
+
+		for k, size in enumerate(sizes):
+			size['key'] = "size-" + str(k)
+
+		orders.append({
+			"key": "cart-item-" + str(data.id),
+			"id": str(data.id),
+			"name": product.name if product != None else userInput['name'],
+			"note": data.note,
+			"image": product.image if product != None else None,
+			"options": options,
+			"others": others,
+			"sizes": sizes,
+			"quantity": quantity
+		})
+
+	return { "orders": orders }

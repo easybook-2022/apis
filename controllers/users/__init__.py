@@ -24,14 +24,12 @@ class User(db.Model):
 	cellnumber = db.Column(db.String(10), unique=True)
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
-	profile = db.Column(db.String(25))
 	info = db.Column(db.String(155))
 
-	def __init__(self, cellnumber, password, username, profile, info):
+	def __init__(self, cellnumber, password, username, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
-		self.profile = profile
 		self.info = info
 
 	def __repr__(self):
@@ -340,13 +338,14 @@ def user_verify(cellnumber):
 def user_register():
 	content = request.get_json()
 
+	username = content['username']
 	cellnumber = content['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 	password = content['password']
 	confirmPassword = content['confirmPassword']
 	errormsg = ""
 	status = ""
 
-	if cellnumber != '' and password != '' and confirmPassword != '':
+	if username != "" and cellnumber != '' and password != '' and confirmPassword != '':
 		if len(password) >= 6:
 			if password == confirmPassword:
 				user = User.query.filter_by(cellnumber=cellnumber).first()
@@ -356,7 +355,7 @@ def user_register():
 
 					userInfo = json.dumps({"pushToken": ""})
 
-					user = User(cellnumber, password, '', '', userInfo)
+					user = User(cellnumber, password, username, userInfo)
 					db.session.add(user)
 					db.session.commit()
 
@@ -368,7 +367,9 @@ def user_register():
 		else:
 			errormsg = "Password needs to be atleast 6 characters long"
 	else:
-		if cellnumber == '':
+		if username == '':
+			errormsg = "Please enter your name"
+		elif cellnumber == '':
 			errormsg = "Cell number is blank"
 		elif password == '':
 			errormsg = "Password is blank"
@@ -377,51 +378,11 @@ def user_register():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/setup", methods=["POST"])
-def setup():
-	userid = request.form['userid']
-	username = request.form['username']
-	profilepath = request.files.get('profile', False)
-	profileexist = False if profilepath == False else True
-	permission = request.form['permission']
-
-	user = User.query.filter_by(id=userid).first()
-	errormsg = ""
-	status = ""
-
-	if user != None:
-		info = json.loads(user.info)
-
-		user.username = username
-
-		if profileexist == True:
-			profile = request.files['profile']
-			profilename = profile.filename
-
-			profile.save(os.path.join('static', profilename))
-			user.profile = profilename
-		else:
-			if permission == "true":
-				errormsg = "Please take a photo of yourself"
-
-		user.info = json.dumps(info)
-
-		if errormsg == "":			
-			db.session.commit()
-
-			return { "msg": "User setup" }
-	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
 @app.route("/update_user", methods=["POST"])
 def update_user():
 	userid = request.form['userid']
 	username = request.form['username']
 	cellnumber = request.form['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
-	profilepath = request.files.get('profile', False)
-	profileexist = False if profilepath == False else True
 
 	user = User.query.filter_by(id=userid).first()
 	errormsg = ""
@@ -447,17 +408,6 @@ def update_user():
 				else:
 					errormsg = "This cell number is already taken"
 					status = "samecellnumber"
-
-		if profileexist == True:
-			profile = request.files['profile']
-			newprofilename = profile.filename
-			oldprofile = user.profile
-
-			if oldprofile != "" and oldprofile != None and os.path.exists("static/" + oldprofile):
-				os.remove("static/" + oldprofile)
-
-			profile.save(os.path.join('static', newprofilename))
-			user.profile = newprofilename
 
 		info = json.loads(user.info)
 
@@ -513,8 +463,7 @@ def get_user_info(id):
 		info = {
 			"id": id,
 			"username": user.username,
-			"cellnumber": cellnumber,
-			"profile": user.profile
+			"cellnumber": cellnumber
 		}
 
 		return { "userInfo": info }
@@ -537,8 +486,9 @@ def get_num_notifications():
 		num = 0
 
 		# cart orders called for self
-		sql = "select count(*) as num from cart where adder = " + userid + " and not status = 'unlisted'"
-		num += query(sql, True)[0]["num"]
+		sql = "select count(*) as num from cart where adder = " + userid + " and (status = 'checkout' or status = 'ready') group by adder, orderNumber"
+		numCartorderers = query(sql, True)
+		num += numCartorderers[0]["num"] if len(numCartorderers) > 0 else 0
 
 		# get schedules
 		sql = "select count(*) as num from schedule where userId = " + userid + " and (status = 'cancel' or status = 'confirmed')"
@@ -561,55 +511,19 @@ def get_notifications(id):
 		notifications = []
 
 		# cart orders called for self
-		sql = "select * from cart where adder = " + str(id) + " and not status = 'unlisted'"
+		sql = "select orderNumber from cart where adder = " + str(id) + " and (status = 'checkout' or status = 'ready') group by orderNumber"
 		datas = query(sql, True)
 
 		for data in datas:
-			adder = User.query.filter_by(id=data['adder']).first()
-			product = Product.query.filter_by(id=data['productId']).first()
-			options = json.loads(data['options'])
-			others = json.loads(data['others'])
-			sizes = json.loads(data['sizes'])
-			cost = 0
-
-			for k, option in enumerate(options):
-				option["key"] = "option-" + str(len(notifications)) + "-" + str(k)
-
-			for k, other in enumerate(others):
-				other["key"] = "other-" + str(len(notifications)) + "-" + str(k)
-
-			for k, size in enumerate(sizes):
-				size["key"] = "size-" + str(len(notifications)) + "-" + str(k)
-
-			if product == None:
-				userInput = json.loads(data['userInput'])
-			else:
-				if product.price == "":
-					for size in sizes:
-						if size["selected"] == True:
-							cost += float(size["price"])
-				else:
-					cost += float(product.price)
-
-				for other in others:
-					if other["selected"] == True:
-						cost += float(other["price"])
+			cartitem = Cart.query.filter_by(orderNumber=data["orderNumber"]).first()
+			numCartitems = Cart.query.filter_by(orderNumber=data["orderNumber"]).count()
 
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
 				"type": "cart-order-self",
-				"id": str(data['id']),
-				"productid": product.id if product != None else "",
-				"name": product.name if product != None else userInput['name'],
-				"image": product.image if product != None else None,
-				"options": options,
-				"others": others,
-				"sizes": sizes,
-				"quantity": int(data['quantity']),
-				"adder": { "username": adder.username, "profile": adder.profile },
 				"orderNumber": data['orderNumber'],
-				"status": data['status'],
-				"cost": (cost * int(data['quantity'])) if cost > 0 else None
+				"numOrders": numCartitems,
+				"status": cartitem.status
 			})
 
 		# get schedules

@@ -25,14 +25,12 @@ class User(db.Model):
 	cellnumber = db.Column(db.String(10), unique=True)
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
-	profile = db.Column(db.String(25))
 	info = db.Column(db.String(155))
 
-	def __init__(self, cellnumber, password, username, profile, info):
+	def __init__(self, cellnumber, password, username, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
-		self.profile = profile
 		self.info = info
 
 	def __repr__(self):
@@ -459,7 +457,6 @@ def save_user_info():
 	if username == "":
 		errormsg = "Please provide a username for identification"
 
-	profilename = ""
 	profilename = profile.filename
 
 	profile.save(os.path.join('static', profilename))

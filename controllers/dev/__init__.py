@@ -24,14 +24,12 @@ class User(db.Model):
 	cellnumber = db.Column(db.String(10), unique=True)
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
-	profile = db.Column(db.String(25))
 	info = db.Column(db.String(155))
 
-	def __init__(self, cellnumber, password, username, profile, info):
+	def __init__(self, cellnumber, password, username, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
-		self.profile = profile
 		self.info = info
 
 	def __repr__(self):
@@ -497,11 +495,7 @@ def delete_user(id):
 	status = ""
 
 	if user != None:
-		profile = user.profile
 		info = json.loads(user.info)
-
-		if os.path.exists("static/" + profile):
-			os.remove("static/" + profile)
 
 		db.session.delete(user)
 		db.session.commit()

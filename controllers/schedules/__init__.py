@@ -24,14 +24,12 @@ class User(db.Model):
 	cellnumber = db.Column(db.String(10), unique=True)
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
-	profile = db.Column(db.String(25))
 	info = db.Column(db.String(155))
 
-	def __init__(self, cellnumber, password, username, profile, info):
+	def __init__(self, cellnumber, password, username, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
-		self.profile = profile
 		self.info = info
 
 	def __repr__(self):
@@ -388,56 +386,6 @@ def get_appointment_info(id):
 			return { "appointmentInfo": info }
 	else:
 		errormsg = "Appointment doesn't exist"
-		status = "nonexist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/get_reservation_info/<id>")
-def get_reservation_info(id):
-	schedule = Schedule.query.filter_by(id=id).first()
-	errormsg = ""
-	status = ""
-
-	if schedule != None:
-		locationId = schedule.locationId
-
-		location = Location.query.filter_by(id=locationId).first()
-
-		if location != None:
-			customers = json.loads(schedule.customers)
-			row = []
-			rownum = 0
-			column = []
-
-			for customer in customers:
-				user = User.query.filter_by(id=customer["userid"]).first()
-
-				rownum += 1
-				row.append({ "key": "selected-friend-" + str(rownum), "id": user.id, "profile": user.profile })
-
-				if len(row) == 3:
-					column.append({ "key": "selected-friend-row-" + str(len(column)), "row": row })
-					row = []
-
-			if len(row) > 0:
-				column.append({ "key": "selected-friend-row-" + str(len(column)), "row": row })
-
-			info = {
-				"locationId": locationId,
-				"name": location.name,
-				"numdiners": len(json.loads(schedule.customers)),
-				"diners": column,
-				"note": schedule.note,
-				"table": schedule.table,
-				"time": int(schedule.nextTime if schedule.nextTime != "" else schedule.time)
-			}
-
-			return { "reservationInfo": info }
-		else:
-			errormsg = "Location doesn't exist"
-			status = "nonexist"
-	else:
-		errormsg = "Schedule doesn't exist"
 		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
@@ -872,45 +820,6 @@ def get_appointments():
 
 	return { "appointments": appointments, "numappointments": len(appointments) }
 
-@app.route("/search_customers", methods=["POST"])
-def search_customers():
-	content = request.get_json()
-
-	locationid = content['locationid']
-	searchingusername = content['username']
-
-	location = Location.query.filter_by(id=locationid).first()
-	errormsg = ""
-	status = ""
-
-	if location != None:
-		datas = Schedule.query.filter_by(locationId=locationid).all()
-		appointments = []
-
-		for data in datas:
-			user = User.query.filter_by(id=data.userId).first()
-			username = user.username
-
-			if searchingusername.lower() in username.lower():
-				service = Service.query.filter_by(id=data.serviceId).first()
-
-				appointments.append({
-					"key": "appointment-" + str(data.id),
-					"id": str(data.id),
-					"username": user.username,
-					"time": int(data.time),
-					"name": service.name,
-					"image": service.image,
-					"gettingPayment": False
-				})
-
-		return { "appointments": appointments, "numappointments": len(appointments) }
-	else:
-		errormsg = "Location doesn't exist"
-		status = "nonexist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
 @app.route("/get_cart_orderers/<id>")
 def get_cart_orderers(id):
 	datas = query("select adder, orderNumber from cart where locationId = " + str(id) + " and (status = 'checkout' or status = 'ready') group by adder, orderNumber", True)
@@ -919,28 +828,19 @@ def get_cart_orderers(id):
 
 	for k, data in enumerate(datas):
 		adder = User.query.filter_by(id=data['adder']).first()
-		orders = query("select * from cart where adder = " + str(data['adder']) + " and locationId = " + str(id) + " and (status = 'checkout' or status = 'ready')", True)
-		numOrders = query("select count(*) as num from cart where adder = " + str(data['adder']) + " and locationId = " + str(id) + " and (status = 'checkout' or status = 'ready')", True)
-
-		if len(numOrders) == 1:
-			num = numOrders[0]["num"]
-		else:
-			num = 0
+		numOrders = query("select count(*) as num from cart where adder = " + str(data['adder']) + " and locationId = " + str(id) + " and (status = 'checkout' or status = 'ready') and orderNumber = '" + data["orderNumber"] + "'", True)
+		num = numOrders[0]["num"] if len(numOrders) > 0 else 0
 
 		cartOrderers.append({
 			"key": "cartorderer-" + str(k),
 			"id": len(cartOrderers),
 			"adder": adder.id,
 			"username": adder.username,
-			"profile": adder.profile,
 			"numOrders": num,
 			"orderNumber": data['orderNumber']
 		})
 
-	if len(numCartorderers) > 0:
-		numCartorderers = len(numCartorderers)
-	else:
-		numCartorderers = 0
+	numCartorderers = numCartorderers[0]["num"] if len(numCartorderers) > 0 else 0
 
 	return { "cartOrderers": cartOrderers, "numCartorderers": numCartorderers }
 
@@ -952,7 +852,7 @@ def see_user_orders():
 	locationid = content['locationid']
 	ordernumber = content['ordernumber']
 
-	datas = query("select * from cart where adder = " + str(userid) + " and locationId = " + str(locationid) + " and orderNumber = '" + ordernumber + "' and (status='checkout' or status='ready')", True)
+	datas = query("select * from cart where adder = " + str(userid) + " and locationId = " + str(locationid) + " and orderNumber = '" + ordernumber + "' and status='checkout'", True)
 	orders = []
 	ready = True
 
