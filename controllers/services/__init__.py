@@ -210,8 +210,9 @@ class Cart(db.Model):
 	note = db.Column(db.String(100))
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
+	waitTime = db.Column(db.String(2))
 
-	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber, waitTime):
 		self.locationId = locationId
 		self.productId = productId
 		self.userInput = userInput
@@ -223,6 +224,7 @@ class Cart(db.Model):
 		self.note = note
 		self.status = status
 		self.orderNumber = orderNumber
+		self.waitTime = waitTime
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId

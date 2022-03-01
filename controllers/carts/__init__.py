@@ -208,8 +208,9 @@ class Cart(db.Model):
 	note = db.Column(db.String(100))
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
+	waitTime = db.Column(db.String(2))
 
-	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber, waitTime):
 		self.locationId = locationId
 		self.productId = productId
 		self.userInput = userInput
@@ -221,6 +222,7 @@ class Cart(db.Model):
 		self.note = note
 		self.status = status
 		self.orderNumber = orderNumber
+		self.waitTime = waitTime
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
@@ -360,7 +362,7 @@ def add_item_to_cart():
 		sizes = json.dumps(sizes)
 
 		userInput = json.dumps({ "name": productinfo, "type": "cartorder" })
-		cartitem = Cart(locationid, productid, userInput, quantity, userid, options, others, sizes, note, "unlisted", "")
+		cartitem = Cart(locationid, productid, userInput, quantity, userid, options, others, sizes, note, "unlisted", "", "")
 
 		db.session.add(cartitem)
 		db.session.commit()
@@ -465,7 +467,7 @@ def order_done():
 		username = user.username
 		adder = user.id
 		
-		datas = query("select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "' and status = 'checkout'", True)
+		datas = query("select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "' and status = 'inprogress'", True)
 		charges = {}
 		totalPaying = 0.00
 
@@ -500,6 +502,29 @@ def order_done():
 		else:
 			errormsg = "Order doesn't exist"
 			status = "nonexist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/set_wait_time", methods=["POST"])
+def set_wait_time():
+	content = request.get_json()
+	errormsg = ""
+	status = ""
+
+	ordernumber = content['ordernumber']
+	waitTime = str(content['waitTime'])
+
+	cartitems = Cart.query.filter_by(orderNumber=ordernumber).count()
+
+	if cartitems > 0:
+		query("update cart set status = 'inprogress', waitTime = '" + waitTime + "' where orderNumber = '" + ordernumber + "'", False)
+
+		data = Cart.query.filter_by(orderNumber=ordernumber).first()
+		receiver = "user" + str(data.adder)
+
+		return { "msg": "success", "receiver": receiver }
+	else:
+		errormsg = "Orders don't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 

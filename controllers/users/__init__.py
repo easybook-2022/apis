@@ -206,8 +206,9 @@ class Cart(db.Model):
 	note = db.Column(db.String(100))
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
+	waitTime = db.Column(db.String(2))
 
-	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber):
+	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber, waitTime):
 		self.locationId = locationId
 		self.productId = productId
 		self.userInput = userInput
@@ -219,6 +220,7 @@ class Cart(db.Model):
 		self.note = note
 		self.status = status
 		self.orderNumber = orderNumber
+		self.waitTime = waitTime
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
@@ -511,7 +513,7 @@ def get_notifications(id):
 		notifications = []
 
 		# cart orders called for self
-		sql = "select orderNumber from cart where adder = " + str(id) + " and (status = 'checkout' or status = 'ready') group by orderNumber"
+		sql = "select orderNumber from cart where adder = " + str(id) + " and (status = 'checkout' or status = 'inprogress') group by orderNumber"
 		datas = query(sql, True)
 
 		for data in datas:
@@ -523,7 +525,8 @@ def get_notifications(id):
 				"type": "cart-order-self",
 				"orderNumber": data['orderNumber'],
 				"numOrders": numCartitems,
-				"status": cartitem.status
+				"status": cartitem.status,
+				"waitTime": cartitem.waitTime
 			})
 
 		# get schedules
