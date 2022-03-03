@@ -382,9 +382,13 @@ def user_register():
 
 @app.route("/update_user", methods=["POST"])
 def update_user():
-	userid = request.form['userid']
-	username = request.form['username']
-	cellnumber = request.form['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
+	content = request.get_json()
+
+	userid = content['userid']
+	username = content['username']
+	cellnumber = content['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
+	password = content['password']
+	confirmPassword = content['confirmPassword']
 
 	user = User.query.filter_by(id=userid).first()
 	errormsg = ""
@@ -410,6 +414,21 @@ def update_user():
 				else:
 					errormsg = "This cell number is already taken"
 					status = "samecellnumber"
+
+		if password != "" or confirmPassword != "":
+			if password != "" and confirmPassword != "":
+				if len(password) > 6:
+					if password == confirmPassword:
+						user.password = generate_password_hash(password)
+					else:
+						errormsg = "Password mismatch"
+				else:
+					errormsg = "Password needs to be atleast 6 characters long"
+			else:
+				if password == "":
+					errormsg = "Password is blank"
+				else:
+					errormsg = "Please confirm your new password"
 
 		info = json.loads(user.info)
 

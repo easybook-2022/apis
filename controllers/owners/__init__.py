@@ -871,7 +871,7 @@ def get_workers_time(id):
 			closehour = int(data[day[k][:3]]["closetime"]["hour"])
 			working = data[day[k][:3]]["working"]
 
-			openperiod = "PM" if openhour > 12 else "AM"
+			openperiod = "PM" if openhour >= 12 else "AM"
 			openhour = int(openhour)
 
 			if openhour == 0:
@@ -881,7 +881,7 @@ def get_workers_time(id):
 
 			openhour = "0" + str(openhour) if openhour < 10 else str(openhour)
 
-			closeperiod = "PM" if closehour > 12 else "AM"
+			closeperiod = "PM" if closehour >= 12 else "AM"
 			closehour = int(closehour)
 
 			if closehour == 0:
@@ -1072,7 +1072,7 @@ def get_accounts(id):
 				openhour = int(data[day[k][:3]]["opentime"]["hour"])
 				closehour = int(data[day[k][:3]]["closetime"]["hour"])
 
-				openperiod = "PM" if openhour > 12 else "AM"
+				openperiod = "PM" if openhour >= 12 else "AM"
 				openhour = int(openhour)
 
 				if openhour == 0:
@@ -1082,7 +1082,7 @@ def get_accounts(id):
 
 				openhour = "0" + str(openhour) if openhour < 10 else str(openhour)
 
-				closeperiod = "PM" if closehour > 12 else "AM"
+				closeperiod = "PM" if closehour >= 12 else "AM"
 				closehour = int(closehour)
 
 				if closehour == 0:
