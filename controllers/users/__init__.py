@@ -1,7 +1,8 @@
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, json, os
+from flask_cors import CORS
+import pymysql.cursors, json, os
 from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -18,6 +19,7 @@ app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+cors = CORS(app)
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -40,7 +42,7 @@ class Owner(db.Model):
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
-	profile = db.Column(db.String(25))
+	profile = db.Column(db.String(60))
 	hours = db.Column(db.Text)
 	info = db.Column(db.String(120))
 
@@ -64,7 +66,7 @@ class Location(db.Model):
 	province = db.Column(db.String(50))
 	postalcode = db.Column(db.String(7))
 	phonenumber = db.Column(db.String(10), unique=True)
-	logo = db.Column(db.String(20))
+	logo = db.Column(db.String(60))
 	longitude = db.Column(db.String(20))
 	latitude = db.Column(db.String(20))
 	owners = db.Column(db.Text)
@@ -100,7 +102,7 @@ class Menu(db.Model):
 	locationId = db.Column(db.Integer)
 	parentMenuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 
 	def __init__(self, locationId, parentMenuId, name, image):
 		self.locationId = locationId
@@ -116,17 +118,15 @@ class Service(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 	price = db.Column(db.String(10))
-	duration = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, image, price, duration):
+	def __init__(self, locationId, menuId, name, image, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
 		self.image = image
 		self.price = price
-		self.duration = duration
 
 	def __repr__(self):
 		return '<Service %r>' % self.name
@@ -144,12 +144,13 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
+	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, nextTime, locationType, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
@@ -161,6 +162,7 @@ class Schedule(db.Model):
 		self.cancelReason = cancelReason
 		self.nextTime = nextTime
 		self.locationType = locationType
+		self.customers = customers
 		self.note = note
 		self.orders = orders
 		self.table = table
@@ -174,7 +176,7 @@ class Product(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(150))
@@ -493,12 +495,8 @@ def get_user_info(id):
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/get_num_notifications", methods=["POST"])
-def get_num_notifications():
-	content = request.get_json()
-
-	userid = str(content['userid'])
-
+@app.route("/get_num_notifications/<userid>")
+def get_num_notifications(userid):
 	user = User.query.filter_by(id=userid).first()
 	errormsg = ""
 	status = ""
@@ -566,10 +564,6 @@ def get_notifications(id):
 			booker = User.query.filter_by(id=data['userId']).first()
 			confirm = False
 			info = json.loads(data['info'])
-
-			if data["locationType"] == 'restaurant':
-				orders = json.loads(data["orders"])
-				charges = orders["charges"]
 				
 			if data["workerId"] > -1:
 				owner = Owner.query.filter_by(id=data["workerId"]).first()
@@ -580,17 +574,6 @@ def get_notifications(id):
 				}
 			else:
 				worker = None
-
-			orders = json.loads(data["orders"])
-			numOrders = None
-
-			if "groups" in orders:
-				groups = orders["groups"]
-				
-				for rounds in groups:
-					for k in rounds:
-						if k != "status" and k != "id" and k == str(id):
-							numOrders = len(rounds[k])
 
 			userInput = json.loads(data['userInput'])
 			notifications.append({
@@ -603,9 +586,9 @@ def get_notifications(id):
 				"menuid": int(data['menuId']) if data['menuId'] != "" else "",
 				"serviceid": int(data['serviceId']) if data['serviceId'] != -1 else "",
 				"service": service.name if service != None else userInput['name'] if 'name' in userInput else "",
-				"locationimage": location.logo,
+				"locationimage": json.loads(location.logo),
 				"locationtype": location.type,
-				"serviceimage": service.image if service != None else "",
+				"serviceimage": json.loads(service.image) if service != None else "",
 				"serviceprice": float(service.price) if service != None else float(userInput['price']) if 'price' in userInput else "",
 				"time": int(data['time']),
 				"action": data['status'],
@@ -615,7 +598,6 @@ def get_notifications(id):
 				"booker": userId == data['userId'],
 				"bookerName": booker.username,
 				"confirm": confirm,
-				"numOrders": numOrders,
 				"seated": info["dinersseated"] if "dinersseated" in info else None,
 				"requestPayment": True if "price" in userInput else False,
 				"workerInfo": {

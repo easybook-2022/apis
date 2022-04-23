@@ -1,7 +1,8 @@
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, json, os
+from flask_cors import CORS
+import pymysql.cursors, json, os
 from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -18,6 +19,7 @@ app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+cors = CORS(app)
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -40,7 +42,7 @@ class Owner(db.Model):
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
-	profile = db.Column(db.String(25))
+	profile = db.Column(db.String(60))
 	hours = db.Column(db.Text)
 	info = db.Column(db.String(120))
 
@@ -64,7 +66,7 @@ class Location(db.Model):
 	province = db.Column(db.String(50))
 	postalcode = db.Column(db.String(7))
 	phonenumber = db.Column(db.String(10), unique=True)
-	logo = db.Column(db.String(20))
+	logo = db.Column(db.String(60))
 	longitude = db.Column(db.String(20))
 	latitude = db.Column(db.String(20))
 	owners = db.Column(db.Text)
@@ -100,7 +102,7 @@ class Menu(db.Model):
 	locationId = db.Column(db.Integer)
 	parentMenuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 
 	def __init__(self, locationId, parentMenuId, name, image):
 		self.locationId = locationId
@@ -116,17 +118,15 @@ class Service(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 	price = db.Column(db.String(10))
-	duration = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, image, price, duration):
+	def __init__(self, locationId, menuId, name, image, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
 		self.image = image
 		self.price = price
-		self.duration = duration
 
 	def __repr__(self):
 		return '<Service %r>' % self.name
@@ -176,7 +176,7 @@ class Product(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(150))
@@ -323,7 +323,7 @@ def get_requests():
 				"username": user.username,
 				"time": int(data['nextTime']) if data['nextTime'] != "" else int(data['time']),
 				"name": service.name if service != None else userInput['name'] if 'name' in userInput else "",
-				"image": service.image if service != None else None,
+				"image": json.loads(service.image) if service != None else None,
 				"note": data['note'],
 				"diners": len(json.loads(data['customers'])) if data['locationType'] == 'restaurant' else False,
 				"tablenum": data['table'],
@@ -449,38 +449,6 @@ def reschedule_appointment():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/reschedule_reservation", methods=["POST"])
-def reschedule_reservation():
-	content = request.get_json()
-
-	scheduleid = content['scheduleid']
-	time = content['time']
-	table = content['table']
-
-	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	errormsg = ""
-	status = ""
-
-	if schedule != None:
-		receiver = []
-		diners = json.loads(schedule.customers)
-
-		for diner in diners:
-			receiver.append("user" + str(diner["userid"]))
-
-		schedule.status = "rebook"
-		schedule.nextTime = time
-		schedule.table = table
-
-		db.session.commit()
-
-		return { "msg": "Reservation rescheduled", "receiver": receiver }
-	else:
-		errormsg = "Reservation doesn't exist"
-		status = "nonexist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
 @app.route("/make_appointment", methods=["POST"])
 def make_appointment():
 	content = request.get_json()
@@ -529,6 +497,7 @@ def make_appointment():
 				info = json.loads(schedule.info)
 				schedule.info = json.dumps(info)
 				schedule.time = time
+				schedule.status = 'confirmed'
 				schedule.nextTime = ''
 				schedule.note = note
 				schedule.workerId = workerid
@@ -630,13 +599,13 @@ def cancel_schedule():
 					message = "The "
 					message += "restaurant" if locationType == "restaurant" else "salon"
 					message += " cancelled your "
-					message == "reservation" if locationType == "restaurant" else "appointment"
+					message == "appointment"
 					message += " with"
 					message += " no reason" if reason == "" else " a reason"
 
 					resp = push(pushInfo(
 						info["pushToken"],
-						("Reservation" if locationType == "restaurant" else "Appointment") + " cancelled",
+						"Appointment cancelled",
 						message,
 						content
 					))
@@ -790,7 +759,7 @@ def send_service_payment():
 @app.route("/get_appointments", methods=["POST"])
 def get_appointments():
 	content = request.get_json()
-
+	
 	ownerid = content['ownerid']
 	locationid = content['locationid']
 
@@ -817,7 +786,7 @@ def get_appointments():
 			"time": int(data['time']),
 			"serviceid": service.id if service != None else "",
 			"name": service.name if service != None else userInput['name'],
-			"image": service.image if service != None else None
+			"image": json.loads(service.image) if service != None else None
 		})
 
 	return { "appointments": appointments, "numappointments": len(appointments) }
@@ -894,7 +863,7 @@ def see_user_orders():
 			"id": str(data['id']),
 			"name": product.name if product != None else userInput['name'],
 			"note": data['note'],
-			"image": product.image if product != None else None,
+			"image": json.loads(product.image) if product != None else None,
 			"options": options,
 			"others": others,
 			"sizes": sizes,

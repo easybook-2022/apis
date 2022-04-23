@@ -1,10 +1,12 @@
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, json, os
+from flask_cors import CORS
+import pymysql.cursors, json, os
 from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
+from binascii import a2b_base64
 from random import randint
 from info import *
 
@@ -18,6 +20,7 @@ app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+cors = CORS(app)
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -40,7 +43,7 @@ class Owner(db.Model):
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
-	profile = db.Column(db.String(25))
+	profile = db.Column(db.String(60))
 	hours = db.Column(db.Text)
 	info = db.Column(db.String(120))
 
@@ -64,7 +67,7 @@ class Location(db.Model):
 	province = db.Column(db.String(50))
 	postalcode = db.Column(db.String(7))
 	phonenumber = db.Column(db.String(10), unique=True)
-	logo = db.Column(db.String(20))
+	logo = db.Column(db.String(60))
 	longitude = db.Column(db.String(20))
 	latitude = db.Column(db.String(20))
 	owners = db.Column(db.Text)
@@ -100,7 +103,7 @@ class Menu(db.Model):
 	locationId = db.Column(db.Integer)
 	parentMenuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 
 	def __init__(self, locationId, parentMenuId, name, image):
 		self.locationId = locationId
@@ -116,17 +119,15 @@ class Service(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 	price = db.Column(db.String(10))
-	duration = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, image, price, duration):
+	def __init__(self, locationId, menuId, name, image, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
 		self.image = image
 		self.price = price
-		self.duration = duration
 
 	def __repr__(self):
 		return '<Service %r>' % self.name
@@ -144,12 +145,13 @@ class Schedule(db.Model):
 	cancelReason = db.Column(db.String(200))
 	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
+	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, nextTime, locationType, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
@@ -161,6 +163,7 @@ class Schedule(db.Model):
 		self.cancelReason = cancelReason
 		self.nextTime = nextTime
 		self.locationType = locationType
+		self.customers = customers
 		self.note = note
 		self.orders = orders
 		self.table = table
@@ -174,7 +177,7 @@ class Product(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(150))
@@ -241,6 +244,13 @@ def query(sql, output):
 
 		return results
 
+def writeToFile(uri, name):
+	binary_data = a2b_base64(uri)
+
+	fd = open(os.path.join("static", name), 'wb')
+	fd.write(binary_data)
+	fd.close()
+
 def getRanStr():
 	strid = ""
 
@@ -290,7 +300,7 @@ def get_menus(id):
 
 				items.append({
 					"key": "menu-" + str(index), "id": data.id, "name": data.name, 
-					"image": data.image, "list": [], "listType": "list"
+					"image": json.loads(data.image), "list": [], "listType": "list"
 				})
 				otherList = getOtherMenu(locationId, data.id)
 
@@ -310,7 +320,7 @@ def get_menus(id):
 							innerItems.append({
 								"key": "product-" + str(data.id), "id": data.id, "name": data.name, 
 								"price": float(data.price) if data.price != '' else None, "sizes": sizes,
-								"image": data.image, "listType": "product"
+								"image": json.loads(data.image), "listType": "product"
 							})
 					else:
 						datas = Service.query.filter_by(locationId=locationId, menuId=data.id).all()
@@ -319,8 +329,8 @@ def get_menus(id):
 							innerItems.append({
 								"key": "service-" + str(data.id), "id": data.id, 
 								"name": data.name, "info": data.info, 
-								"price": float(data.price), "duration": data.duration, 
-								"image": data.image, "listType": "service"
+								"price": float(data.price), "image": json.loads(data.image), 
+								"listType": "service"
 							})
 
 						items[len(items) - 1]["list"] = innerItems
@@ -334,7 +344,7 @@ def get_menus(id):
 					items.append({
 						"key": "product-" + str(data.id), "id": data.id, "name": data.name, 
 						"price": float(data.price) if data.price != '' else None, "sizes": sizes,
-						"image": data.image, "listType": "product"
+						"image": json.loads(data.image), "listType": "product"
 					})
 			else:
 				serviceDatas = Service.query.filter_by(locationId=locationId, menuId=parentMenuid).all() # if start with services
@@ -342,13 +352,11 @@ def get_menus(id):
 				for index, data in enumerate(serviceDatas):
 					items.append({
 						"key": "service-" + str(data.id), "id": data.id, 
-						"name": data.name, "price": float(data.price), "duration": data.duration, 
-						"image": data.image, "listType": "service"
+						"name": data.name, "price": float(data.price), 
+						"image": json.loads(data.image), "listType": "service"
 					})
 
 		return items
-
-	content = request.get_json()
 
 	location = Location.query.filter_by(id=id).first()
 	errormsg = ""
@@ -357,17 +365,15 @@ def get_menus(id):
 	if location != None:
 		menus = getOtherMenu(id, "")
 		info = json.loads(location.info)
-		type = ""
 
 		if len(info["menuPhotos"]) > 0:
 			photos = info["menuPhotos"]
 			row = []
 			rownum = 0
 			menus = []
-			type = "photos"
 
 			for photo in photos:
-				row.append({ "key": "row-" + str(rownum), "photo": photo })
+				row.append({ "key": "row-" + str(rownum), "photo": { "name": photo["image"], "width": photo["width"], "height": photo["height"] } })
 				rownum += 1
 
 				if len(row) == 3:
@@ -382,10 +388,8 @@ def get_menus(id):
 					rownum += 1
 
 				menus.append({ "key": "menu-" + str(len(menus)), "row": row })
-		elif len(menus) > 0:
-			type = "list"
 
-		return { "type": type, "menus": menus }
+		return { "menus": menus }
 	else:
 		errormsg = "Location doesn't exist"
 
@@ -398,17 +402,26 @@ def remove_menu(id):
 	status = ""
 
 	if menu != None:
+		location = Location.query.filter_by(id=menu.locationId).first()
+		info = json.loads(location.info)
+
 		# delete services and products from the menu
 		query("delete from service where menuId = '" + str(id) + "'", False)
 		query("delete from product where menuId = '" + str(id) + "'", False)
 		query("delete from menu where parentMenuId = '" + str(menu.id) + "'", False)
 
-		image = menu.image
+		image = json.loads(menu.image)
 
-		if image != "" and image != None and os.path.exists("static/" + image):
-			os.remove("static/" + image)
+		if image["name"] != "" and os.path.exists("static/" + image["name"]):
+			os.remove("static/" + image["name"])
 
 		db.session.delete(menu)
+
+		numMenus = Menu.query.filter_by(locationId=location.id).count() + Service.query.filter_by(locationId=location.id).count() + Product.query.filter_by(locationId=location.id).count() + len(info["menuPhotos"])
+
+		info["listed"] = True if numMenus > 0 else False
+		location.info = json.dumps(info)
+
 		db.session.commit()
 
 		return { "msg": "deleted" }
@@ -425,9 +438,9 @@ def get_menu_info(id):
 
 	if menu != None:
 		name = menu.name
-		image = menu.image
+		image = json.loads(menu.image)
 
-		info = { "name": name, "image": image }
+		info = { "name": name, "image": image["name"] }
 
 		return { "info": info, "msg": "menu info" }
 	else:
@@ -439,10 +452,6 @@ def get_menu_info(id):
 def save_menu():
 	menuid = request.form['menuid']
 	name = request.form['name']
-	imagepath = request.files.get('image', False)
-	imageexist = False if imagepath == False else True
-	permission = request.form['permission']
-
 	menu = Menu.query.filter_by(id=menuid).first()
 	errormsg = ""
 	status = ""
@@ -450,17 +459,38 @@ def save_menu():
 	if menu != None:
 		menu.name = name
 
-		if imageexist == True:
-			image = request.files['image']
-			newimagename = image.filename
-			oldimage = menu.image
+		isWeb = request.form.get("web")
 
-			if newimagename != oldimage:
-				if oldimage != "" and oldimage != None and os.path.exists("static/" + oldimage):
-					os.remove("static/" + oldimage)
+		if isWeb != None:
+			image = json.loads(request.form['image'])
+			imagename = image['name']
 
-				image.save(os.path.join('static', newimagename))
+			if imagename != "" and "data" in image['uri']:
+				uri = image['uri'].split(",")[1]
+				size = image['size']
+
+				writeToFile(uri, imagename)
+
+				newimagename = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
 				menu.image = newimagename
+		else:
+			imagepath = request.files.get('image', False)
+			imageexist = False if imagepath == False else True
+
+			if imageexist == True:
+				image = request.files['image']
+				size = json.loads(request.form['size'])
+				imagename = image.filename
+				oldimage = json.loads(menu.image)
+
+				if imagename != oldimage["name"]:
+					if oldimage["name"] != "" and os.path.exists("static/" + oldimage["name"]):
+						os.remove("static/" + oldimage["name"])
+
+					image.save(os.path.join('static', imagename))
+
+					newimagename = json.dumps({"name": imagename, "width": size['width'], "height": size['height']})
+					menu.image = newimagename
 
 		db.session.commit()
 
@@ -475,31 +505,50 @@ def add_menu():
 	locationid = request.form['locationid']
 	parentMenuid = request.form['parentmenuid']
 	name = request.form['name']
-	info = request.form['info']
-	imagepath = request.files.get('image', False)
-	imageexist = False if imagepath == False else True
-	permission = request.form['permission']
+
 	errormsg = ""
 	status = ""
 
 	if name != '':
 		location = Location.query.filter_by(id=locationid).first()
+		info = json.loads(location.info)
+		info["listed"] = True
+
+		location.info = json.dumps(info)
 
 		if location != None:
 			data = query("select * from menu where locationId = " + str(locationid) + " and (parentMenuId = '" + str(parentMenuid) + "' and name = '" + name + "')", True)
 
 			if len(data) == 0:
-				imagename = ""
-				if imageexist == True:
-					image = request.files['image']
-					imagename = image.filename
+				isWeb = request.form.get("web")
+				imageData = json.dumps({"name": "", "width": 0, "height": 0})
 
-					image.save(os.path.join("static", imagename))
+				if isWeb != None:
+					image = json.loads(request.form['image'])
+					imagename = image["name"]
+
+					if imagename != "":
+						uri = image['uri'].split(",")[1]
+						size = image['size']
+
+						writeToFile(uri, imagename)
+
+						imageData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
 				else:
-					imagename = ""
+					imagepath = request.files.get('image', False)
+					imageexist = False if imagepath == False else True
+
+					if imageexist == True:
+						image = request.files['image']
+						imagename = image.filename
+
+						size = json.loads(request.form['size'])
+
+						image.save(os.path.join("static", imagename))
+						imageData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
 				
 				if errormsg == "":
-					menu = Menu(locationid, parentMenuid, name, info, imagename)
+					menu = Menu(locationid, parentMenuid, name, imageData)
 
 					db.session.add(menu)
 					db.session.commit()
@@ -517,26 +566,42 @@ def add_menu():
 @app.route("/upload_menu", methods=["POST"])
 def upload_menu():
 	locationid = request.form['locationid']
-	imagepath = request.files.get('image', False)
-	imageexist = False if imagepath == False else True
-	permission = request.form['permission']
+
 	errormsg = ""
 	status = ""
 
 	location = Location.query.filter_by(id=locationid).first()
 
 	if location != None:
-		image = request.files['image']
-		imagename = image.filename
+		isWeb = request.form.get("web")
 
-		image.save(os.path.join("static", imagename))
+		if isWeb != None:
+			image = json.loads(request.form['image'])
+			size = json.loads(request.form['size'])
+
+			uri = image['uri'].split(",")[1]
+			imagename = image['name']
+
+			writeToFile(uri, imagename)
+
+			photo = { "image": imagename, "width": size['width'], "height": size['height'] }
+		else:
+			imagepath = request.files.get('image', False)
+			imageexist = False if imagepath == False else True
+
+			image = request.files['image']
+			size = json.loads(request.form['size'])
+			imagename = image.filename
+
+			image.save(os.path.join("static", imagename))
+			photo = { "image": imagename, "width": size['width'], "height": size['height'] }
 
 		info = json.loads(location.info)
 		menuPhotos = info["menuPhotos"]
-
-		menuPhotos.append(str(imagename))
+		menuPhotos.append(photo)
 
 		info["menuPhotos"] = menuPhotos
+		info["listed"] = True
 		location.info = json.dumps(info)
 
 		db.session.commit()
@@ -546,7 +611,7 @@ def upload_menu():
 		menus = []
 
 		for photo in menuPhotos:
-			row.append({ "key": "row-" + str(rownum), "photo": photo })
+			row.append({ "key": "row-" + str(rownum), "photo": { "name": photo["image"], "width": photo["width"], "height": photo["height"] } })
 			rownum += 1
 
 			if len(row) == 3:
@@ -583,12 +648,17 @@ def delete_menu():
 		info = json.loads(location.info)
 		photos = info["menuPhotos"]
 
-		if photo in photos:
-			photos.remove(photo)
+		for index, photoInfo in enumerate(photos):
+			if photoInfo["image"] == photo:
+				photos.pop(index)
 
 		info["menuPhotos"] = photos
-		location.info = json.dumps(info)
 
+		numMenus = Menu.query.filter_by(locationId=location.id).count() + Product.query.filter_by(locationId=location.id).count() + Service.query.filter_by(locationId=location.id).count() + len(photos)
+
+		info["listed"] = True if numMenus > 0 else False
+
+		location.info = json.dumps(info)
 		db.session.commit()
 
 		row = []
@@ -596,7 +666,7 @@ def delete_menu():
 		menus = []
 
 		for photo in photos:
-			row.append({ "key": "row-" + str(rownum), "photo": photo })
+			row.append({ "key": "row-" + str(rownum), "photo": { "name": photo["image"], "width": photo["width"], "height": photo["height"] } })
 			rownum += 1
 
 			if len(row) == 3:

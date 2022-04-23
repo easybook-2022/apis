@@ -1,10 +1,12 @@
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, json, os, time
+from flask_cors import CORS
+import pymysql.cursors, json, os, time
 from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
+from binascii import a2b_base64
 from random import randint
 from datetime import datetime
 from info import *
@@ -19,6 +21,7 @@ app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+cors = CORS(app)
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -41,7 +44,7 @@ class Owner(db.Model):
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
-	profile = db.Column(db.String(25))
+	profile = db.Column(db.String(60))
 	hours = db.Column(db.Text)
 	info = db.Column(db.String(120))
 
@@ -65,7 +68,7 @@ class Location(db.Model):
 	province = db.Column(db.String(50))
 	postalcode = db.Column(db.String(7))
 	phonenumber = db.Column(db.String(10), unique=True)
-	logo = db.Column(db.String(20))
+	logo = db.Column(db.String(60))
 	longitude = db.Column(db.String(20))
 	latitude = db.Column(db.String(20))
 	owners = db.Column(db.Text)
@@ -101,7 +104,7 @@ class Menu(db.Model):
 	locationId = db.Column(db.Integer)
 	parentMenuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 
 	def __init__(self, locationId, parentMenuId, name, image):
 		self.locationId = locationId
@@ -117,17 +120,15 @@ class Service(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 	price = db.Column(db.String(10))
-	duration = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, image, price, duration):
+	def __init__(self, locationId, menuId, name, image, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
 		self.image = image
 		self.price = price
-		self.duration = duration
 
 	def __repr__(self):
 		return '<Service %r>' % self.name
@@ -177,7 +178,7 @@ class Product(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(150))
@@ -244,6 +245,13 @@ def query(sql, output):
 
 		return results
 
+def writeToFile(uri, name):
+	binary_data = a2b_base64(uri)
+
+	fd = open(os.path.join("static", name), 'wb')
+	fd.write(binary_data)
+	fd.close()
+
 def getRanStr():
 	strid = ""
 
@@ -252,64 +260,8 @@ def getRanStr():
 
 	return strid
 
-def stripeFee(amount):
-	return (amount + 0.30) / (1 - 0.029)
-
-def calcTax(amount):
-	pst = 0.08 * amount
-	hst = 0.05 * amount
-
-	return pst + hst
-
 def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
-
-def customerPay(cost, userid, locationid):
-	chargecost = stripeFee(cost + calcTax(cost))
-	transfercost = cost + calcTax(cost)
-
-	user = User.query.filter_by(id=userid).first()
-	location = Location.query.filter_by(id=locationid).first()
-
-	if user != None and location != None:
-		userInfo = json.loads(user.info)
-		locationInfo = json.loads(location.info)
-
-		customerid = userInfo["customerId"]
-		accountid = locationInfo["accountId"]
-
-		paymentmethods = stripe.Customer.list_sources(customerid, object="card").data
-		bankaccounts = stripe.Account.retrieve(accountid).external_accounts.data
-
-		if len(paymentmethods) > 0 and len(bankaccounts) > 0:
-			try:
-				charge = stripe.Charge.create(
-					amount=int(chargecost * 100),
-					currency="cad",
-					customer=customerid,
-					transfer_data={
-						"destination": accountid
-					}
-				)
-
-				return { "error": "", "msg": "success" }
-			except stripe.error.CardError as e:
-				print(e.http_status)
-				print(e.code)
-
-				return { "error": e.http_status, "code": e.code, "msg": "" }
-			except stripe.error.InvalidRequestError as e:
-				print(e.http_status)
-				print(e.code)
-
-				return { "error": e.http_status, "code": e.code, "msg": "" }
-		else:
-			if len(paymentmethods) == 0:
-				return { "error": "cardrequired", "msg": "" }
-			else:
-				return { "error": "bankaccountrequired", "msg": "" }
-	else:
-		return { "error": "idnonexist", "msg": "" }
 
 def push(messages):
 	if type(messages) == type([]):
@@ -451,22 +403,42 @@ def owner_register():
 def save_user_info():
 	id = request.form['id']
 	username = request.form['username']
-	profile = request.files['profile']
-	permission = request.form['permission']
 	errormsg = ""
 	status = ""
+
+	owner = Owner.query.filter_by(id=id).first()
 
 	if username == "":
 		errormsg = "Please provide a username for identification"
 
-	profilename = profile.filename
+	isWeb = request.form.get("web")
 
-	profile.save(os.path.join('static', profilename))
+	if isWeb != None:
+		profile = json.loads(request.form['profile'])
+		name = profile['name']
+
+		if name != "":
+			uri = profile['uri'].split(",")[1]
+			size = profile['size']
+
+			writeToFile(uri, name)
+
+			owner.profile = json.dumps({"name": name, "width": int(size["width"]), "height": int(size["height"])})
+	else:
+		profilepath = request.files.get('profile', False)
+		profileexist = False if profilepath == False else True
+
+		if profileexist == True:
+			profile = request.files['profile']
+			imagename = profile.filename
+
+			size = json.loads(request.form['size'])
+
+			profile.save(os.path.join('static', imagename))
+			owner.profile = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
 	
 	if errormsg == "":
-		owner = Owner.query.filter_by(id=id).first()
 		owner.username = username
-		owner.profile = profilename
 
 		db.session.commit()
 
@@ -481,10 +453,7 @@ def add_owner():
 	username = request.form['username']
 	password = request.form['password']
 	confirmPassword = request.form['confirmPassword']
-	profilepath = request.files.get('profile', False)
-	profileexist = False if profilepath == False else True
 	hours = request.form['hours']
-	permission = request.form['permission']
 
 	data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
 	errormsg = ""
@@ -512,24 +481,41 @@ def add_owner():
 				else:
 					errormsg = "Please confirm your password"
 
-			profilename = ""
-			if profileexist == True:
-				profile = request.files['profile']
-				profilename = profile.filename
-				
-				profile.save(os.path.join('static', profilename))
+			isWeb = request.form.get("web")
+			profileData = json.dumps({"name": "", "width": 0, "height": 0})
+
+			if isWeb != None:
+				profile = json.loads(request.form['profile'])
+				imagename = profile['name']
+
+				if imagename != "":
+					uri = profile['uri'].split(",")[1]
+					size = profile['size']
+
+					writeToFile(uri, imagename)
+
+					profileData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
 			else:
-				if permission == "true":
+				profilepath = request.files.get('profile', False)
+				profileexist = False if profilepath == False else True
+
+				if profileexist == True:
+					profile = request.files['profile']
+					imagename = profile.filename
+
+					size = json.loads(request.form['size'])
+					
+					profile.save(os.path.join('static', imagename))
+					profileData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
+				else:
 					errormsg = "Please provide a profile for identification"
 
 			if errormsg == "":
 				ownerInfo = json.loads(owner.info)
-				locationId = ownerInfo["locationId"]
-
-				info = {"locationId": locationId, "pushToken": ""}
+				locationId = ownerInfo["locationId"] 
 
 				password = generate_password_hash(password)
-				owner = Owner(cellnumber, password, username, profilename, hours, json.dumps(info))
+				owner = Owner(cellnumber, password, username, profileData, hours, json.dumps({"locationId": locationId, "pushToken": ""}))
 				db.session.add(owner)
 				db.session.commit()
 
@@ -582,20 +568,41 @@ def update_owner():
 					errormsg = "The username is already taken"
 					status = "sameusername"
 		elif type == "profile":
-			profilepath = request.files.get('profile', False)
-			profileexist = False if profilepath == False else True
-			permission = request.form['permission']
+			isWeb = request.form.get("web")
+			oldprofile = json.loads(owner.profile)
 
-			if profileexist == True:
-				profile = request.files['profile']
-				newprofilename = profile.filename
-				oldprofile = owner.profile
+			if isWeb != None:
+				profile = json.loads(request.form['profile'])
+				imagename = profile['name']
 
-				if oldprofile != "" and oldprofile != None and os.path.exists("static/" + oldprofile):
-					os.remove("static/" + oldprofile)
+				if imagename != '' and "data" in profile['uri']:
+					uri = profile['uri'].split(",")[1]
+					size = profile['size']
 
-				profile.save(os.path.join('static', newprofilename))
-				owner.profile = newprofilename
+					if oldprofile["name"] != "" and os.path.exists("static/" + oldprofile["name"]):
+						os.remove("static/" + oldprofile["name"])
+
+					writeToFile(uri, imagename)
+
+					newprofilename = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
+					owner.profile = newprofilename
+			else:
+				profilepath = request.files.get('profile', False)
+				profileexist = False if profilepath == False else True
+
+				if profileexist == True:
+					profile = request.files['profile']
+					imagename = profile.filename
+
+					size = json.loads(request.form['size'])
+
+					if oldprofile["name"] != "" and os.path.exists("static/" + oldprofile["name"]):
+						os.remove("static/" + oldprofile["name"])
+
+					profile.save(os.path.join('static', imagename))
+
+					newprofilename = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
+					owner.profile = newprofilename
 		elif type == "password":
 			currentPassword = request.form['currentPassword']
 			newPassword = request.form['newPassword']
@@ -696,8 +703,7 @@ def get_workers(id):
 			"key": "worker-" + str(key),
 			"id": data.id,
 			"username": data.username,
-			"profile": data.profile,
-			"selected": False
+			"profile": json.loads(data.profile)
 		})
 		key += 1
 		numWorkers += 1
@@ -747,7 +753,7 @@ def get_worker_info(id):
 
 		info = {
 			"username": owner.username,
-			"profile": owner.profile,
+			"profile": json.loads(owner.profile),
 			"days": days
 		}
 
@@ -854,13 +860,13 @@ def get_workers_time(id):
 
 	for owner in owners:
 		hours = [
-			{ "key": "0", "header": "Sunday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
-			{ "key": "1", "header": "Monday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
-			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
-			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
-			{ "key": "4", "header": "Thursday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
-			{ "key": "5", "header": "Friday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
-			{ "key": "6", "header": "Saturday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" }
+			{ "key": "0", "header": "Sunday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "1", "header": "Monday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "4", "header": "Thursday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "5", "header": "Friday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "6", "header": "Saturday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" }
 		]
 
 		data = json.loads(owner.hours)
@@ -891,23 +897,22 @@ def get_workers_time(id):
 
 			closehour = "0" + str(closehour) if closehour < 10 else str(closehour)
 
-			if working == True:
-				info["opentime"]["hour"] = openhour
-				info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
-				info["opentime"]["period"] = openperiod
+			info["opentime"]["hour"] = int(openhour)
+			info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
+			info["opentime"]["period"] = openperiod
 
-				info["closetime"]["hour"] = closehour
-				info["closetime"]["minute"] = data[day[k][:3]]["closetime"]["minute"]
-				info["closetime"]["period"] = closeperiod
-				info["working"] = working
+			info["closetime"]["hour"] = int(closehour)
+			info["closetime"]["minute"] = data[day[k][:3]]["closetime"]["minute"]
+			info["closetime"]["period"] = closeperiod
+			info["working"] = working
 
-				hours[k] = info
+			hours[k] = info
 
 		workerHours.append({ 
 			"key": str(owner.id),
 			"day": info["header"],
 			"name": owner.username,
-			"profile": owner.profile,
+			"profile": json.loads(owner.profile),
 			"hours": hours
 		})
 
@@ -937,7 +942,7 @@ def get_other_workers():
 			for time in hours:
 				if time == day:
 					if hours[time]["working"] == False and hours[time]["takeShift"] == "":
-						row.append({ "key": str(rownum), "id": owner.id, "username": owner.username, "profile": owner.profile })
+						row.append({ "key": str(rownum), "id": owner.id, "username": owner.username, "profile": json.loads(owner.profile) })
 						rownum += 1
 
 						if len(row) == 3:
@@ -1045,23 +1050,22 @@ def update_bankaccount():
 
 @app.route("/get_accounts/<id>")
 def get_accounts(id):
-	content = request.get_json()
-
 	location = Location.query.filter_by(id=id).first()
 	owners = json.loads(location.owners)
+	locationHours = json.loads(location.hours)
 	accounts = []
 
 	for owner in owners:
 		ownerInfo = Owner.query.filter_by(id=owner).first()
 
 		hours = [
-			{ "key": "0", "header": "Sunday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
-			{ "key": "1", "header": "Monday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
-			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
-			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
-			{ "key": "4", "header": "Thursday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
-			{ "key": "5", "header": "Friday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" },
-			{ "key": "6", "header": "Saturday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "working": True, "takeShift": "" }
+			{ "key": "0", "header": "Sunday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "1", "header": "Monday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "4", "header": "Thursday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "5", "header": "Friday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" },
+			{ "key": "6", "header": "Saturday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" }
 		]
 
 		if "Sun" in ownerInfo.hours:
@@ -1069,8 +1073,20 @@ def get_accounts(id):
 			day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
 			for k, info in enumerate(hours):
-				openhour = int(data[day[k][:3]]["opentime"]["hour"])
-				closehour = int(data[day[k][:3]]["closetime"]["hour"])
+				if data[day[k][:3]]["takeShift"] != "":
+					worker = Owner.query.filter_by(id=data[day[k][:3]]["takeShift"]).first()
+
+					info["takeShift"] = { "id": worker.id, "name": worker.username }
+
+					workerHours = json.loads(worker.hours)
+					hoursInfo = workerHours[day[k][:3]]
+				else:
+					info["takeShift"] = ""
+
+					hoursInfo = data[day[k][:3]]
+
+				openhour = int(hoursInfo["opentime"]["hour"])
+				closehour = int(hoursInfo["closetime"]["hour"])
 
 				openperiod = "PM" if openhour >= 12 else "AM"
 				openhour = int(openhour)
@@ -1093,14 +1109,14 @@ def get_accounts(id):
 				closehour = "0" + str(closehour) if closehour < 10 else str(closehour)
 
 				info["opentime"]["hour"] = openhour
-				info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
+				info["opentime"]["minute"] = hoursInfo["opentime"]["minute"]
 				info["opentime"]["period"] = openperiod
 
 				info["closetime"]["hour"] = closehour
-				info["closetime"]["minute"] = data[day[k][:3]]["closetime"]["minute"]
+				info["closetime"]["minute"] = hoursInfo["closetime"]["minute"]
 				info["closetime"]["period"] = closeperiod
-				info["working"] = data[day[k][:3]]["working"]
-				info["takeShift"] = data[day[k][:3]]["takeShift"]
+				info["working"] = hoursInfo["working"]
+				info["close"] = locationHours[day[k][:3]]["close"]
 
 				hours[k] = info
 		else:
@@ -1119,7 +1135,7 @@ def get_accounts(id):
 			"id": owner, 
 			"cellnumber": cellnumber,
 			"username": ownerInfo.username,
-			"profile": ownerInfo.profile,
+			"profile": json.loads(ownerInfo.profile) if "name" in ownerInfo.profile else "",
 			"hours": hours
 		})
 

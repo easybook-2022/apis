@@ -1,7 +1,7 @@
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, json, os
+import pymysql.cursors, json, os
 from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -40,7 +40,7 @@ class Owner(db.Model):
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
-	profile = db.Column(db.String(25))
+	profile = db.Column(db.String(60))
 	hours = db.Column(db.Text)
 	info = db.Column(db.String(120))
 
@@ -64,7 +64,7 @@ class Location(db.Model):
 	province = db.Column(db.String(50))
 	postalcode = db.Column(db.String(7))
 	phonenumber = db.Column(db.String(10), unique=True)
-	logo = db.Column(db.String(20))
+	logo = db.Column(db.String(60))
 	longitude = db.Column(db.String(20))
 	latitude = db.Column(db.String(20))
 	owners = db.Column(db.Text)
@@ -100,7 +100,7 @@ class Menu(db.Model):
 	locationId = db.Column(db.Integer)
 	parentMenuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 
 	def __init__(self, locationId, parentMenuId, name, image):
 		self.locationId = locationId
@@ -116,17 +116,15 @@ class Service(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 	price = db.Column(db.String(10))
-	duration = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, image, price, duration):
+	def __init__(self, locationId, menuId, name, image, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
 		self.image = image
 		self.price = price
-		self.duration = duration
 
 	def __repr__(self):
 		return '<Service %r>' % self.name
@@ -176,7 +174,7 @@ class Product(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(150))
@@ -378,7 +376,7 @@ def reset():
 	files = os.listdir("static")
 
 	for file in files:
-		if ".jpg" in file:
+		if "." in file:
 			if file != "" and file != None and os.path.exists("static/" + file):
 				os.remove("static/" + file)
 
@@ -507,6 +505,17 @@ def delete_user(id):
 		errormsg = "User doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/delete_all_users")
+def delete_all_users():
+	users = User.query.all()
+
+	for user in users:
+		db.session.delete(user)
+
+	db.session.commit()
+
+	return { "msg": "Users deleted" }
 
 @app.route("/twilio_test")
 def twilio_test():

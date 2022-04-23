@@ -1,10 +1,12 @@
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, json, os
+from flask_cors import CORS
+import pymysql.cursors, json, os
 from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
+from binascii import a2b_base64
 from random import randint
 from info import *
 
@@ -18,20 +20,19 @@ app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+cors = CORS(app)
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(10), unique=True)
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
-	profile = db.Column(db.String(25))
 	info = db.Column(db.String(155))
 
-	def __init__(self, cellnumber, password, username, profile, info):
+	def __init__(self, cellnumber, password, username, info):
 		self.cellnumber = cellnumber
 		self.password = password
 		self.username = username
-		self.profile = profile
 		self.info = info
 
 	def __repr__(self):
@@ -42,7 +43,7 @@ class Owner(db.Model):
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
-	profile = db.Column(db.String(25))
+	profile = db.Column(db.String(60))
 	hours = db.Column(db.Text)
 	info = db.Column(db.String(120))
 
@@ -66,7 +67,7 @@ class Location(db.Model):
 	province = db.Column(db.String(50))
 	postalcode = db.Column(db.String(7))
 	phonenumber = db.Column(db.String(10), unique=True)
-	logo = db.Column(db.String(20))
+	logo = db.Column(db.String(60))
 	longitude = db.Column(db.String(20))
 	latitude = db.Column(db.String(20))
 	owners = db.Column(db.Text)
@@ -102,7 +103,7 @@ class Menu(db.Model):
 	locationId = db.Column(db.Integer)
 	parentMenuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 
 	def __init__(self, locationId, parentMenuId, name, image):
 		self.locationId = locationId
@@ -118,17 +119,15 @@ class Service(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 	price = db.Column(db.String(10))
-	duration = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, image, price, duration):
+	def __init__(self, locationId, menuId, name, image, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
 		self.image = image
 		self.price = price
-		self.duration = duration
 
 	def __repr__(self):
 		return '<Service %r>' % self.name
@@ -178,7 +177,7 @@ class Product(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(150))
@@ -245,6 +244,13 @@ def query(sql, output):
 
 		return results
 
+def writeToFile(uri, name):
+	binary_data = a2b_base64(uri)
+
+	fd = open(os.path.join("static", name), 'wb')
+	fd.write(binary_data)
+	fd.close()
+
 def getRanStr():
 	strid = ""
 
@@ -306,9 +312,8 @@ def get_services():
 					"key": "service-" + str(data.id),
 					"id": data.id,
 					"name": data.name,
-					"image": data.image,
+					"image": json.loads(data.image),
 					"price": data.price,
-					"duration": data.duration,
 					"scheduleid": schedule.id if schedule != None else None
 				})
 				numservices += 1
@@ -328,9 +333,8 @@ def get_service_info(id):
 	if service != None:
 		info = {
 			"name": service.name,
-			"image": service.image,
-			"price": float(service.price),
-			"duration": service.duration
+			"image": json.loads(service.image),
+			"price": float(service.price)
 		}
 
 		return { "serviceInfo": info }
@@ -344,13 +348,13 @@ def add_service():
 	locationid = request.form['locationid']
 	menuid = request.form['menuid']
 	name = request.form['name']
-	imagepath = request.files.get('image', False)
-	imageexist = False if imagepath == False else True
 	price = request.form['price']
-	duration = request.form['duration']
-	permission = request.form['permission']
 
 	location = Location.query.filter_by(id=locationid).first()
+	info = json.loads(location.info)
+	info["listed"] = True
+	location.info = json.dumps(info)
+
 	errormsg = ""
 	status = ""
 
@@ -358,17 +362,35 @@ def add_service():
 		data = query("select * from service where locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "' and name = '" + name + "'", True)
 
 		if len(data) == 0:
-			imagename = ""
-			if imageexist == True:
-				image = request.files['image']
-				imagename = image.filename
+			isWeb = request.form.get("web")
+			imageData = json.dumps({"name": "", "width": 0, "height": 0})
 
-				image.save(os.path.join("static", imagename))
+			if isWeb != None:
+				image = json.loads(request.form['image'])
+				imagename = image["name"]
+
+				if imagename != "":
+					uri = image['uri'].split(",")[1]
+					size = image['size']
+
+					writeToFile(uri, imagename)
+
+					imageData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
 			else:
-				imagename = ""
+				imagepath = request.files.get('image', False)
+				imageexist = False if imagepath == False else True
+
+				if imageexist == True:
+					image = request.files['image']
+					imagename = image.filename
+
+					size = json.loads(request.form['size'])
+
+					image.save(os.path.join("static", imagename))
+					imageData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
 
 			if errormsg == "":
-				service = Service(locationid, menuid, name, imagename, price, duration)
+				service = Service(locationid, menuid, name, imageData, price)
 
 				db.session.add(service)
 				db.session.commit()
@@ -387,11 +409,7 @@ def update_service():
 	menuid = request.form['menuid']
 	serviceid = request.form['serviceid']
 	name = request.form['name']
-	imagepath = request.files.get('image', False)
-	imageexist = False if imagepath == False else True
 	price = request.form['price']
-	duration = request.form['duration']
-	permission = request.form['permission']
 
 	location = Location.query.filter_by(id=locationid).first()
 	errormsg = ""
@@ -403,22 +421,42 @@ def update_service():
 		if service != None:
 			service.name = name
 			service.price = price
-			service.duration = duration
 
-			if imageexist == True:
-				image = request.files['image']
-				newimagename = image.filename
-				oldimage = service.image
+			isWeb = request.form.get("web")
+			oldimage = json.loads(service.image)
 
-				if oldimage != newimagename:
-					if oldimage != "" and oldimage != None and os.path.exists("static/" + oldimage):
-						os.remove("static/" + oldimage)
+			if isWeb != None:
+				image = json.loads(request.form['image'])
+				imagename = image['name']
 
-					image.save(os.path.join('static', newimagename))
+				if imagename != '' and "data" in image['uri']:
+					uri = image['uri'].split(",")[1]
+					size = image['size']
+
+					if oldimage["name"] != "" and os.path.exists(os.path.join("static", oldimage["name"])) == True:
+						os.remove("static/" + oldimage["name"])
+
+					writeToFile(uri, imagename)
+
+					newimagename = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
 					service.image = newimagename
 			else:
-				if permission == "true":
-					errormsg = "Please take a good photo"
+				imagepath = request.files.get('image', False)
+				imageexist = False if imagepath == False else True
+
+				if imageexist == True:
+					image = request.files['image']
+					size = json.loads(request.form['size'])
+					imagename = image.filename
+
+					if oldimage["name"] != imagename:
+						if oldimage["name"] != "" and os.path.exists("static/" + oldimage["name"]):
+							os.remove("static/" + oldimage["name"])
+
+						image.save(os.path.join('static', imagename))
+
+						newimagename = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
+						service.image = newimagename
 
 			if errormsg == "":
 				db.session.commit()
@@ -436,12 +474,21 @@ def remove_service(id):
 	service = Service.query.filter_by(id=id).first()
 
 	if service != None:
-		image = service.image
+		image = json.loads(service.image)
 
-		if image != "" and image != None and os.path.exists("static/" + image):
-			os.remove("static/" + image)
+		if image["name"] != "" and os.path.exists("static/" + image["name"]):
+			os.remove("static/" + image["name"])
 
 		db.session.delete(service)
+
+		location = Location.query.filter_by(id=service.locationId).first()
+		info = json.loads(location.info)
+
+		numMenus = Menu.query.filter_by(locationId=location.id).count() + Service.query.filter_by(locationId=location.id).count() + Product.query.filter_by(locationId=location.id).count() + len(info["menuPhotos"])
+
+		info["listed"] = True if numMenus > 0 else False
+		location.info = json.dumps(info)
+
 		db.session.commit()
 
 		return { "msg": "" }

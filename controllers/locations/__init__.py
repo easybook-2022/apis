@@ -1,10 +1,12 @@
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import mysql.connector, pymysql.cursors, json, os
+from flask_cors import CORS
+import pymysql.cursors, json, os
 from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
+from binascii import a2b_base64
 from random import randint
 from haversine import haversine
 from info import *
@@ -19,6 +21,7 @@ app.config['MYSQL_DB'] = database
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+cors = CORS(app)
 
 class User(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -41,7 +44,7 @@ class Owner(db.Model):
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
-	profile = db.Column(db.String(25))
+	profile = db.Column(db.String(60))
 	hours = db.Column(db.Text)
 	info = db.Column(db.String(120))
 
@@ -65,7 +68,7 @@ class Location(db.Model):
 	province = db.Column(db.String(50))
 	postalcode = db.Column(db.String(7))
 	phonenumber = db.Column(db.String(10), unique=True)
-	logo = db.Column(db.String(20))
+	logo = db.Column(db.String(60))
 	longitude = db.Column(db.String(20))
 	latitude = db.Column(db.String(20))
 	owners = db.Column(db.Text)
@@ -101,7 +104,7 @@ class Menu(db.Model):
 	locationId = db.Column(db.Integer)
 	parentMenuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 
 	def __init__(self, locationId, parentMenuId, name, image):
 		self.locationId = locationId
@@ -117,17 +120,15 @@ class Service(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 	price = db.Column(db.String(10))
-	duration = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, image, price, duration):
+	def __init__(self, locationId, menuId, name, image, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
 		self.image = image
 		self.price = price
-		self.duration = duration
 
 	def __repr__(self):
 		return '<Service %r>' % self.name
@@ -177,7 +178,7 @@ class Product(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
-	image = db.Column(db.String(20))
+	image = db.Column(db.String(60))
 	options = db.Column(db.Text)
 	others = db.Column(db.Text)
 	sizes = db.Column(db.String(150))
@@ -244,6 +245,13 @@ def query(sql, output):
 
 		return results
 
+def writeToFile(uri, name):
+	binary_data = a2b_base64(uri)
+
+	fd = open(os.path.join("static", name), 'wb')
+	fd.write(binary_data)
+	fd.close()
+
 def getRanStr():
 	strid = ""
 
@@ -282,7 +290,7 @@ def welcome_locations():
 
 @app.route("/setup_location", methods=["POST"])
 def setup_location():
-	name = request.form['storeName']
+	storeName = request.form['storeName']
 	phonenumber = request.form['phonenumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 	addressOne = request.form['addressOne']
 	addressTwo = request.form['addressTwo']
@@ -291,12 +299,9 @@ def setup_location():
 	postalcode = request.form['postalcode']
 	hours = request.form['hours']
 	type = request.form['type']
-	logopath = request.files.get('logo', False)
-	logoexist = False if logopath == False else True
 	longitude = request.form['longitude']
 	latitude = request.form['latitude']
 	ownerid = request.form['ownerid']
-	permission = request.form['permission']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
 	errormsg = ""
@@ -306,19 +311,36 @@ def setup_location():
 		location = Location.query.filter_by(phonenumber=phonenumber).first()
 
 		if location == None:
-			logoname = ""
-			if logoexist == True:
-				logo = request.files['logo']
-				logoname = logo.filename
+			isWeb = request.form.get("web")
 
-				logo.save(os.path.join('static', logoname))
+			if isWeb != None:
+				logo = json.loads(request.form['logo'])
+
+				uri = logo['uri'].split(",")[1]
+				name = logo['name']
+				size = logo['size']
+
+				writeToFile(uri, name)
+
+				logoname = json.dumps({"name": name, "width": size["width"], "height": size["height"] })
 			else:
-				logoname = ""
+				logopath = request.files.get('logo', False)
+				logoexist = False if logopath == False else True
+
+				if logoexist == True:
+					logo = request.files['logo']
+					imagename = logo.filename
+
+					logoname = json.dumps({"name": imagename, "width": 200, "height": 200})
+
+					logo.save(os.path.join('static', imagename))
+				else:
+					logoname = json.dumps({"name": "", "width": 0, "height": 0})
 
 			if errormsg == "":
-				locationInfo = json.dumps({"listed": False, "menuPhotos": []})
+				locationInfo = json.dumps({"listed":False, "menuPhotos": []})
 				location = Location(
-					name, addressOne, addressTwo, 
+					storeName, addressOne, addressTwo, 
 					city, province, postalcode, phonenumber, logoname,
 					longitude, latitude, '["' + str(ownerid) + '"]',
 					type, hours, locationInfo
@@ -344,19 +366,17 @@ def setup_location():
 
 @app.route("/update_location", methods=["POST"])
 def update_location():
-	name = request.form['storeName']
+	storeName = request.form['storeName']
 	phonenumber = request.form['phonenumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 	addressOne = request.form['addressOne']
 	addressTwo = request.form['addressTwo']
 	city = request.form['city']
 	province = request.form['province']
 	postalcode = request.form['postalcode']
-	logopath = request.files.get('logo', False)
-	logoexist = False if logopath == False else True
+			
 	longitude = request.form['longitude']
 	latitude = request.form['latitude']
 	ownerid = request.form['ownerid']
-	permission = request.form['permission']
 
 	owner = Owner.query.filter_by(id=ownerid).first()
 	errormsg = ""
@@ -369,9 +389,45 @@ def update_location():
 		location = Location.query.filter_by(id=locationid).first()
 
 		if location != None:
+			oldlogo = json.loads(location.logo)
+
+			isWeb = request.form.get("web")
+
+			if isWeb != None:
+				logo = json.loads(request.form['logo'])
+				imagename = logo['name']
+
+				if imagename != '':
+					uri = logo['uri'].split(",")[1]
+					size = logo['size']
+
+					if oldlogo["name"] != "" and os.path.exists(os.path.join("static", oldlogo["name"])) == True:
+						os.remove("static/" + oldlogo["name"])
+
+					writeToFile(uri, imagename)
+
+					location.logo = json.dumps({"name": imagename, "width": size['width'], "height": size['height']})
+			else:
+				logopath = request.files.get('logo', False)
+				logoexist = False if logopath == False else True
+
+				if logoexist == True:
+					logo = request.files['logo']
+					imagename = logo.filename
+
+					size = json.loads(request.form['size'])
+					
+					if logo.filename != oldlogo["name"]:
+						if oldlogo["name"] != "" and oldlogo["name"] != None and os.path.exists("static/" + oldlogo["name"]):
+							os.remove("static/" + oldlogo["name"])
+
+						logo.save(os.path.join('static', imagename))
+
+					location.logo = json.dumps({"name": imagename, "width": size["width"], "height": size["height"]})
+
 			locationInfo = json.loads(location.info)
 
-			location.name = name
+			location.name = storeName
 			location.addressOne = addressOne
 			location.addressTwo = addressTwo
 			location.city = city
@@ -380,18 +436,6 @@ def update_location():
 			location.phonenumber = phonenumber
 			location.longitude = longitude
 			location.latitude = latitude
-
-			if logoexist == True:
-				logo = request.files['logo']
-				newlogoname = logo.filename
-				oldlogo = location.logo
-
-				if newlogoname != oldlogo:
-					if oldlogo != "" and oldlogo != None and os.path.exists("static/" + oldlogo):
-						os.remove("static/" + oldlogo)
-
-					logo.save(os.path.join('static', newlogoname))
-					location.logo = newlogoname
 
 			db.session.commit()
 
@@ -523,12 +567,13 @@ def get_locations():
 			locations[0]["locations"].append({
 				"key": "l-" + str(data['id']),
 				"id": data['id'],
-				"logo": data['logo'],
+				"logo": json.loads(data['logo']),
 				"nav": "restaurantprofile",
 				"name": data['name'],
 				"distance": distance,
 				"opentime": hours[day]["opentime"],
-				"closetime": hours[day]["closetime"]
+				"closetime": hours[day]["closetime"],
+				"service": "restaurant"
 			})
 
 		locations[0]["index"] += len(datas)
@@ -556,12 +601,13 @@ def get_locations():
 			locations[1]["locations"].append({
 				"key": "l-" + str(data['id']),
 				"id": data['id'],
-				"logo": data['logo'],
+				"logo": json.loads(data['logo']),
 				"nav": "salonprofile",
 				"name": data['name'],
 				"distance": distance,
 				"opentime": hours[day]["opentime"],
-				"closetime": hours[day]["closetime"]
+				"closetime": hours[day]["closetime"],
+				"service": "hair"
 			})
 
 		locations[1]["index"] += len(datas)
@@ -589,12 +635,13 @@ def get_locations():
 			locations[2]["locations"].append({
 				"key": "l-" + str(data['id']),
 				"id": data['id'],
-				"logo": data['logo'],
+				"logo": json.loads(data['logo']),
 				"nav": "salonprofile",
 				"name": data['name'],
 				"distance": distance,
 				"opentime": hours[day]["opentime"],
-				"closetime": hours[day]["closetime"]
+				"closetime": hours[day]["closetime"],
+				"service": "nail"
 			})
 
 		locations[2]["index"] += len(datas)
@@ -647,7 +694,7 @@ def get_more_locations():
 		locations.append({
 			"key": "l-" + str(data['id']),
 			"id": data['id'],
-			"logo": data['logo'],
+			"logo": json.loads(data['logo']),
 			"nav": ("restaurant" if type == "restaurant" else "salon") + "profile",
 			"name": data['name'],
 			"distance": distance,
@@ -695,13 +742,13 @@ def get_location_profile():
 			distance = None
 
 		hours = [
-			{ "key": "0", "header": "Sunday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "close": False },
-			{ "key": "1", "header": "Monday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "close": False },
-			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "close": False },
-			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "close": False },
-			{ "key": "4", "header": "Thursday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "close": False },
-			{ "key": "5", "header": "Friday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "close": False },
-			{ "key": "6", "header": "Saturday", "opentime": { "hour": "12", "minute": "00", "period": "AM" }, "closetime": { "hour": "11", "minute": "59", "period": "PM" }, "close": False }
+			{ "key": "0", "header": "Sunday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False },
+			{ "key": "1", "header": "Monday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False },
+			{ "key": "2", "header": "Tuesday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False },
+			{ "key": "3", "header": "Wednesday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False },
+			{ "key": "4", "header": "Thursday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False },
+			{ "key": "5", "header": "Friday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False },
+			{ "key": "6", "header": "Saturday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False }
 		]
 
 		if location.hours != '':
@@ -735,14 +782,15 @@ def get_location_profile():
 					closehour -= 12
 					closehour = "0" + str(closehour) if closehour < 10 else str(closehour)
 
-				info["opentime"]["hour"] = openhour
+				info["opentime"]["hour"] = str(openhour)
 				info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
 				info["opentime"]["period"] = openperiod
 
-				info["closetime"]["hour"] = closehour
+				info["closetime"]["hour"] = str(closehour)
 				info["closetime"]["minute"] = data[day[k][:3]]["closetime"]["minute"]
 				info["closetime"]["period"] = closeperiod
 				info["close"] = close
+				info["working"] = close == False
 
 				hours[k] = info
 
@@ -764,77 +812,17 @@ def get_location_profile():
 			"postalcode": location.postalcode,
 			"phonenumber": phonenumber,
 			"distance": distance,
-			"logo": location.logo,
+			"logo": json.loads(location.logo),
 			"longitude": float(location.longitude),
 			"latitude": float(location.latitude),
 			"hours": hours,
 			"type": "restaurant" if location.type == "restaurant" else "salon",
-			"listed": locationInfo["listed"],
 			"fullAddress": location.addressOne + ", " + (location.addressOne if location.addressTwo != "" else "") + location.city + ", " + location.province + ", " + location.postalcode
 		}
 
 		return { "info": info }
 	else:
 		errormsg = "Location doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/change_location_state/<id>")
-def change_location_state(id):
-	location = Location.query.filter_by(id=id).first()
-	errormsg = ""
-	status = ""
-
-	if location != None:
-		locationInfo = json.loads(location.info)
-		locationListed = locationInfo["listed"]
-		menuPhotos = len(locationInfo["menuPhotos"])
-		numproducts = Product.query.filter_by(locationId=id).count()
-		numservices = Service.query.filter_by(locationId=id).count()
-
-		if (locationListed == False and ((numproducts > 0 or numservices > 0 or menuPhotos > 0))) or (locationListed == True):
-			locationInfo["listed"] = False if locationInfo["listed"] == True else True
-			location.info = json.dumps(locationInfo)
-
-			db.session.commit()
-
-			return { "msg": "Change location state", "listed": locationInfo["listed"] }
-		else:
-			if locationListed == False:
-				if numproducts == 0 and numservices == 0 and menuPhotos == 0:
-					errormsg = "Menu setup required"
-					status = "menusetuprequired"
-	else:
-		errormsg = "Location doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/set_location_public/<id>")
-def set_location_public(id):
-	owner = Owner.query.filter_by(id=id).first()
-	errormsg = ""
-	status = ""
-
-	if owner != None:
-		info = json.loads(owner.info)
-
-		locationId = info["locationId"]
-		location = Location.query.filter_by(id=locationId).first()
-
-		if location != None:
-			info = json.loads(location.info)
-
-			info["listed"] = True
-
-			location.info = json.dumps(info)
-
-			db.session.commit()
-
-			return { "msg": "Location listed publicly" }
-		else:
-			errormsg = "Location doesn't exist"
-	else:
-		errormsg = "Owner doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 

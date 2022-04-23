@@ -2,13 +2,13 @@ from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from twilio.rest import Client
-import mysql.connector, pymysql.cursors
+import pymysql.cursors
 
 test = True
 
 local = test
 test_sms = test
-send_msg = False
+send_msg = test == False
 
 host = 'localhost'
 user = 'geottuse'
