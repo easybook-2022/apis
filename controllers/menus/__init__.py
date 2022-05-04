@@ -440,7 +440,7 @@ def get_menu_info(id):
 		name = menu.name
 		image = json.loads(menu.image)
 
-		info = { "name": name, "image": image["name"] }
+		info = { "name": name, "image": image }
 
 		return { "info": info, "msg": "menu info" }
 	else:

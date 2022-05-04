@@ -537,13 +537,16 @@ def get_notifications(id):
 			cartitem = Cart.query.filter_by(orderNumber=data["orderNumber"]).first()
 			numCartitems = Cart.query.filter_by(orderNumber=data["orderNumber"]).count()
 
+			userInput = json.loads(cartitem.userInput)
+
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
 				"type": "cart-order-self",
 				"orderNumber": data['orderNumber'],
 				"numOrders": numCartitems,
 				"status": cartitem.status,
-				"waitTime": cartitem.waitTime
+				"waitTime": cartitem.waitTime,
+				"locationType": userInput["type"]
 			})
 
 		# get schedules

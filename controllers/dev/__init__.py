@@ -407,7 +407,7 @@ def push():
 
 		response = PushClient().publish(
 			PushMessage(
-				to="ExponentPushToken[aO_8AtDRjS7gpfSzMyh9DS]",
+				to=pushtoken,
 				title="this is the title",
 				body=message,
 				data=data

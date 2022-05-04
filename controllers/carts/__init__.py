@@ -349,6 +349,7 @@ def add_item_to_cart():
 	others = content['others']
 	sizes = content['sizes']
 	note = content['note']
+	type = content['type']
 
 	user = User.query.filter_by(id=userid).first()
 	product = Product.query.filter_by(id=productid).first()
@@ -361,7 +362,7 @@ def add_item_to_cart():
 		others = json.dumps(others)
 		sizes = json.dumps(sizes)
 
-		userInput = json.dumps({ "name": productinfo, "type": "cartorder" })
+		userInput = json.dumps({ "name": productinfo, "type": type })
 		cartitem = Cart(locationid, productid, userInput, quantity, userid, options, others, sizes, note, "unlisted", "", "")
 
 		db.session.add(cartitem)
@@ -466,8 +467,12 @@ def order_done():
 		locationInfo = json.loads(location.info)
 		username = user.username
 		adder = user.id
+
+		sql = "select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "' and "
+		sql += "((status = 'inprogress' and not waitTime = '' and userInput like '%\"type\": \"restaurant\"%') or "
+		sql += "(status = 'checkout' and waitTime = '' and userInput like '%\"type\": \"store\"%'))"
 		
-		datas = query("select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "' and status = 'inprogress'", True)
+		datas = query(sql, True)
 		charges = {}
 		totalPaying = 0.00
 

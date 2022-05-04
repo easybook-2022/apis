@@ -322,7 +322,7 @@ def setup_location():
 
 				writeToFile(uri, name)
 
-				logoname = json.dumps({"name": name, "width": size["width"], "height": size["height"] })
+				logoname = json.dumps({"name": name, "width": int(size["width"]), "height": int(size["height"]) })
 			else:
 				logopath = request.files.get('logo', False)
 				logoexist = False if logopath == False else True
@@ -338,7 +338,7 @@ def setup_location():
 					logoname = json.dumps({"name": "", "width": 0, "height": 0})
 
 			if errormsg == "":
-				locationInfo = json.dumps({"listed":False, "menuPhotos": []})
+				locationInfo = json.dumps({"listed":False, "menuPhotos": [], "type": "stylist"})
 				location = Location(
 					storeName, addressOne, addressTwo, 
 					city, province, postalcode, phonenumber, logoname,
@@ -406,7 +406,7 @@ def update_location():
 
 					writeToFile(uri, imagename)
 
-					location.logo = json.dumps({"name": imagename, "width": size['width'], "height": size['height']})
+					location.logo = json.dumps({"name": imagename, "width": int(size['width']), "height": int(size['height'])})
 			else:
 				logopath = request.files.get('logo', False)
 				logoexist = False if logopath == False else True
@@ -424,8 +424,6 @@ def update_location():
 						logo.save(os.path.join('static', imagename))
 
 					location.logo = json.dumps({"name": imagename, "width": size["width"], "height": size["height"]})
-
-			locationInfo = json.loads(location.info)
 
 			location.name = storeName
 			location.addressOne = addressOne
@@ -519,6 +517,29 @@ def set_hours():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
+@app.route("/set_receive_type", methods=["POST"])
+def set_receive_type():
+	content = request.get_json()
+
+	locationid = content['locationid']
+	type = content['type']
+
+	location = Location.query.filter_by(id=locationid).first()
+
+	if location != None:
+		info = json.loads(location.info)
+		info["type"] = type
+
+		location.info = json.dumps(info)
+
+		db.session.commit()
+
+		return { "msg": "success" }
+	else:
+		errormsg = "Location doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
 @app.route("/get_locations", methods=["POST"])
 def get_locations():
 	content = request.get_json()
@@ -537,7 +558,8 @@ def get_locations():
 		locations = [
 			{ "key": "0", "service": "restaurant", "header": "Restaurant(s)", "locations": [], "loading": True, "index": 0, "max": 0 },
 			{ "key": "1", "service": "hair", "header": "Hair Salon(s)", "locations": [], "loading": True, "index": 0, "max": 0 },
-			{ "key": "2", "service": "nail", "header": "Nail Salon(s)", "locations": [], "loading": True, "index": 0, "max": 0 }
+			{ "key": "2", "service": "nail", "header": "Nail Salon(s)", "locations": [], "loading": True, "index": 0, "max": 0 },
+			{ "key": "3", "service": "store", "header": "Store(s)", "locations": [], "loading": True, "index": 0, "max": 0 }
 		]
 		orderQuery = "and name like '%" + name + "%' " if name != "" else ""
 		orderQuery += "order by ST_Distance_Sphere(point(" + str(longitude) + ", " + str(latitude) + "), point(longitude, latitude))"
@@ -645,6 +667,39 @@ def get_locations():
 			})
 
 		locations[2]["index"] += len(datas)
+
+		sql = "select * from location where type = 'store' and info like '%\"listed\": true%' " + orderQuery + " limit 0, 10"
+		maxsql = "select count(*) as num from location where type = 'store' and info like '%\"listed\": true%' " + orderQuery
+		datas = query(sql, True)
+		maxdatas = query(maxsql, True)[0]["num"]
+		for data in datas:
+			lon2 = float(data['longitude'])
+			lat2 = float(data['latitude'])
+
+			point2 = (lon2, lat2)
+			distance = haversine(point1, point2)
+
+			if distance < 1:
+				distance *= 1000
+				distance = str(round(distance, 1)) + " m"
+			else:
+				distance = str(round(distance, 1)) + " km"
+
+			hours = json.loads(data['hours'])
+
+			locations[3]["locations"].append({
+				"key": "l-" + str(data['id']),
+				"id": data['id'],
+				"logo": json.loads(data['logo']),
+				"nav": "storeprofile",
+				"name": data['name'],
+				"distance": distance,
+				"opentime": hours[day]["opentime"],
+				"closetime": hours[day]["closetime"],
+				"service": "store"
+			})
+
+		locations[3]["index"] += len(datas)
 		
 		return { "locations": locations }
 	else:
@@ -816,7 +871,8 @@ def get_location_profile():
 			"longitude": float(location.longitude),
 			"latitude": float(location.latitude),
 			"hours": hours,
-			"type": "restaurant" if location.type == "restaurant" else "salon",
+			"type": location.type,
+			"receiveType": locationInfo["type"],
 			"fullAddress": location.addressOne + ", " + (location.addressOne if location.addressTwo != "" else "") + location.city + ", " + location.province + ", " + location.postalcode
 		}
 

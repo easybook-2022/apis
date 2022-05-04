@@ -318,10 +318,13 @@ def owner_login():
 					if locationhours != '{}' and ownerhours != '{}':
 						return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "main" }
 					else:
-						if locationhours == '{}':
+						if locationhours == '{}': # location setup not done
 							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": "", "msg": "locationsetup" }
 						else:
-							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "register" }
+							if locationtype == 'hair' or locationtype == 'nail':
+								return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "register" }
+							else:
+								return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "main" }
 				else:
 					return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": None, "locationtype": "", "msg": "locationsetup" }
 			else:

@@ -413,7 +413,7 @@ def reschedule_appointment():
 		schedule.workerId = ownerid
 
 		db.session.commit()
-
+		
 		location = Location.query.filter_by(id=schedule.locationId).first()
 		service = Service.query.filter_by(id=schedule.serviceId).first()
 		user = User.query.filter_by(id=schedule.userId).first()
@@ -763,7 +763,18 @@ def get_appointments():
 	ownerid = content['ownerid']
 	locationid = content['locationid']
 
-	datas = query("select * from schedule where locationId = " + str(locationid) + " and status = 'confirmed' and (workerId = -1 or workerId = " + str(ownerid) + ") order by time", True)
+	location = Location.query.filter_by(id=locationid).first()
+	locationInfo = json.loads(location.info)
+	receiveType = locationInfo["type"]
+
+	sql = "select * from schedule where locationId = " + str(locationid) + " and status = 'confirmed'"
+
+	if receiveType == "stylist":
+		sql += " and workerId = " + str(ownerid)
+		
+	sql += " order by time"
+
+	datas = query(sql, True)
 	appointments = []
 
 	for data in datas:
@@ -802,13 +813,17 @@ def get_cart_orderers(id):
 		numOrders = query("select count(*) as num from cart where adder = " + str(data['adder']) + " and locationId = " + str(id) + " and (status = 'checkout' or status = 'inprogress') and orderNumber = '" + data["orderNumber"] + "'", True)
 		num = numOrders[0]["num"] if len(numOrders) > 0 else 0
 
+		cartitem = Cart.query.filter_by(orderNumber=data['orderNumber']).first()
+		userInput = json.loads(cartitem.userInput)
+
 		cartOrderers.append({
 			"key": "cartorderer-" + str(k),
 			"id": len(cartOrderers),
 			"adder": adder.id,
 			"username": adder.username,
 			"numOrders": num,
-			"orderNumber": data['orderNumber']
+			"orderNumber": data['orderNumber'],
+			"type": userInput["type"]
 		})
 
 	numCartorderers = numCartorderers[0]["num"] if len(numCartorderers) > 0 else 0
