@@ -137,10 +137,9 @@ class Schedule(db.Model):
 	menuId = db.Column(db.Text)
 	serviceId = db.Column(db.Integer)
 	userInput = db.Column(db.Text)
-	time = db.Column(db.String(15))
+	time = db.Column(db.String(100))
 	status = db.Column(db.String(10))
 	cancelReason = db.Column(db.String(200))
-	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
 	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
@@ -148,7 +147,7 @@ class Schedule(db.Model):
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
@@ -158,7 +157,6 @@ class Schedule(db.Model):
 		self.time = time
 		self.status = status
 		self.cancelReason = cancelReason
-		self.nextTime = nextTime
 		self.locationType = locationType
 		self.customers = customers
 		self.note = note
@@ -237,9 +235,7 @@ def query(sql, output):
 	cursorobj.execute(sql)
 
 	if output == True:
-		results = cursorobj.fetchall()
-
-		return results
+		return cursorobj.fetchall()
 
 def getRanStr():
 	strid = ""
@@ -591,9 +587,8 @@ def get_notifications(id):
 				"locationtype": location.type,
 				"serviceimage": json.loads(service.image) if service != None else "",
 				"serviceprice": float(service.price) if service != None else float(userInput['price']) if 'price' in userInput else "",
-				"time": int(data['time']),
+				"time": json.loads(data['time']),
 				"action": data['status'],
-				"nextTime": int(data['nextTime']) if data['nextTime'] != "" else "",
 				"reason": data['cancelReason'],
 				"table": data['table'],
 				"booker": userId == data['userId'],

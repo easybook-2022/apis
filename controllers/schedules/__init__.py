@@ -137,10 +137,9 @@ class Schedule(db.Model):
 	menuId = db.Column(db.Text)
 	serviceId = db.Column(db.Integer)
 	userInput = db.Column(db.Text)
-	time = db.Column(db.String(15))
+	time = db.Column(db.String(100))
 	status = db.Column(db.String(10))
 	cancelReason = db.Column(db.String(200))
-	nextTime = db.Column(db.String(15))
 	locationType = db.Column(db.String(15))
 	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
@@ -148,7 +147,7 @@ class Schedule(db.Model):
 	table = db.Column(db.String(20))
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, nextTime, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, locationType, customers, note, orders, table, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
@@ -158,7 +157,6 @@ class Schedule(db.Model):
 		self.time = time
 		self.status = status
 		self.cancelReason = cancelReason
-		self.nextTime = nextTime
 		self.locationType = locationType
 		self.customers = customers
 		self.note = note
@@ -319,7 +317,7 @@ def get_requests():
 				"worker": worker,
 				"userId": user.id,
 				"username": user.username,
-				"time": int(data['nextTime']) if data['nextTime'] != "" else int(data['time']),
+				"time": json.loads(data['time']),
 				"name": service.name if service != None else userInput['name'] if 'name' in userInput else "",
 				"image": json.loads(service.image) if service != None else None,
 				"note": data['note'],
@@ -344,6 +342,9 @@ def get_appointment_info(id):
 	if schedule != None:
 		locationId = schedule.locationId
 		serviceId = schedule.serviceId
+		userId = schedule.userId
+
+		client = User.query.filter_by(id=userId).first()
 
 		worker = None
 		if schedule.workerId > 0:
@@ -363,9 +364,13 @@ def get_appointment_info(id):
 			worker = { "id": schedule.workerId, "username": workerInfo.username, "profile": workerInfo.profile, "days": info }
 
 		info = { 
+			"client": {
+				"id": userId,
+				"name": client.username
+			},
 			"locationId": int(locationId), 
 			"serviceId": int(serviceId), 
-			"time": int(schedule.nextTime if schedule.nextTime != "" else schedule.time), 
+			"time": json.loads(schedule.time), 
 			"worker": worker
 		}
 
@@ -390,74 +395,21 @@ def get_appointment_info(id):
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/reschedule_appointment", methods=["POST"])
-def reschedule_appointment():
-	content = request.get_json()
-
-	ownerid = content['ownerid']
-	appointmentid = content['appointmentid']
-	time = content['time']
-
-	schedule = Schedule.query.filter_by(id=appointmentid).first()
-	errormsg = ""
-	status = ""
-
-	if schedule != None:
-		info = json.loads(schedule.info)
-
-		schedule.status = "rebook"
-		schedule.nextTime = time
-		schedule.info = json.dumps(info)
-		schedule.workerId = ownerid
-
-		db.session.commit()
-		
-		location = Location.query.filter_by(id=schedule.locationId).first()
-		service = Service.query.filter_by(id=schedule.serviceId).first()
-		user = User.query.filter_by(id=schedule.userId).first()
-		userInfo = json.loads(user.info)
-		userInput = json.loads(schedule.userInput)
-
-		workerInfo = Owner.query.filter_by(id=ownerid).first()
-		worker = {
-			"id": ownerid,
-			"username": workerInfo.username
-		}
-
-		if userInfo["pushToken"] != "":
-			if send_msg == True:
-				resp = push(pushInfo(
-					userInfo["pushToken"],
-					"Appointment for service rescheduled",
-					location.name + " chose another time for you for service: " + (service.name if service != None else userInput["name"]),
-					content
-				))
-
-			return { "msg": "appointment rescheduled", "receiver": "user" + str(schedule.userId), "worker": worker }
-		else:
-			errormsg = "Push notification failed"
-	else:
-		errormsg = "Appointment doesn't exist"
-		status = "nonexist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
 @app.route("/make_appointment", methods=["POST"])
 def make_appointment():
 	content = request.get_json()
+	errormsg = ""
+	status = ""
 
 	userid = content['userid']
 	workerid = content['workerid']
 	locationid = content['locationid']
 	serviceid = content['serviceid']
 	serviceinfo = content['serviceinfo']
-	oldtime = content['oldtime']
 	time = content['time']
 	note = content['note']
 
 	user = User.query.filter_by(id=userid).first()
-	errormsg = ""
-	status = ""
 
 	if user != None:
 		location = Location.query.filter_by(id=locationid).first()
@@ -487,11 +439,8 @@ def make_appointment():
 					pushids.append(info["pushToken"])
 
 			if schedule != None: # existing schedule
-				info = json.loads(schedule.info)
-				schedule.info = json.dumps(info)
 				schedule.time = time
 				schedule.status = 'confirmed'
-				schedule.nextTime = ''
 				schedule.note = note
 				schedule.workerId = workerid
 
@@ -510,11 +459,14 @@ def make_appointment():
 					if send_msg == True:
 						resp = push(pushmessages)
 
-				return { "msg": "appointment remade", "receiver": receiver, "time": time }
+				worker = Owner.query.filter_by(id=workerid).first()
+				speak = { "name": servicename, "time": json.loads(time), "worker": worker.username }
+
+				return { "msg": "appointment remade", "receiver": receiver, "time": time, "speak": speak }
 			else: # new schedule
 				info = json.dumps({})
 				userInput = json.dumps({ "name": serviceinfo, "type": "service" })
-				appointment = Schedule(userid, workerid, locationid, menuid, serviceid, userInput, time, 'confirmed', '', '', location.type, 1, note, '[]', '', info)
+				appointment = Schedule(userid, workerid, locationid, menuid, serviceid, userInput, time, 'confirmed', '', location.type, 1, note, '[]', '', info)
 
 				db.session.add(appointment)
 				db.session.commit()
@@ -532,7 +484,74 @@ def make_appointment():
 
 						resp = push(pushmessages)
 
-				return { "msg": "appointment added", "receiver": receiver }
+				worker = Owner.query.filter_by(id=workerid).first()
+				speak = { "name": servicename, "time": json.loads(time), "worker": worker.username }
+
+				return { "msg": "appointment added", "receiver": receiver, "speak": speak }
+		else:
+			errormsg = "Location doesn't exist"
+			status = "nonexist"
+	else:
+		errormsg = "User doesn't exist"
+		status = "nonexist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/salon_change_appointment", methods=["POST"])
+def salon_change_appointment():
+	content = request.get_json()
+	errormsg = ""
+	status = ""
+
+	clientid = content['clientid']
+	workerid = content['workerid']
+	locationid = content['locationid']
+	serviceid = content['serviceid']
+	serviceinfo = content['serviceinfo']
+	time = content['time']
+	note = content['note']
+
+	client = User.query.filter_by(id=clientid).first()
+
+	if client != None:
+		location = Location.query.filter_by(id=locationid).first()
+
+		if serviceid != -1:
+			service = Service.query.filter_by(id=serviceid).first()
+			schedule = Schedule.query.filter_by(userId=clientid, serviceId=serviceid).first()
+			servicename = service.name
+			menuid = service.menuId
+		else:
+			schedule = Schedule.query.filter(Schedule.userId==clientid, Schedule.userInput.like("%\"name\": \"" + str(serviceinfo) + "\"%")).first()
+			servicename = serviceinfo
+			menuid = -1
+
+		if location != None:
+			pushids = []
+
+			info = json.loads(client.info)
+			pushToken = info["pushToken"]
+			receiver = "user" + str(clientid)
+
+			schedule.time = time
+			schedule.status = 'confirmed'
+			schedule.note = note
+			schedule.workerId = workerid
+
+			db.session.commit()
+
+			if pushToken != "":
+				pushmessage = pushInfo(
+					pushToken, 
+					"Appointment remade",
+					"A salon requested a different appointment for service: " + servicename,
+					content
+				)
+			
+				if send_msg == True:
+					resp = push(pushmessage)
+
+			return { "msg": "appointment remade", "receiver": receiver, "time": time }
 		else:
 			errormsg = "Location doesn't exist"
 			status = "nonexist"
@@ -679,7 +698,18 @@ def cancel_request():
 		db.session.delete(schedule)
 		db.session.commit()
 
-		return { "msg": "schedule cancelled", "receivers": receivers, "type": schedule.locationType }
+		serviceName = ""
+		if schedule.serviceId == -1:
+			userInput = json.loads(schedule.userInput)
+			serviceName = userInput["name"]
+		else:
+			service = Service.query.filter_by(id=schedule.serviceId).first()
+			serviceName = service.name
+
+		worker = Owner.query.filter_by(id=schedule.workerId).first()
+		speak = { "name": serviceName, "time": json.loads(schedule.time), "worker": worker.username }
+
+		return { "msg": "schedule cancelled", "receivers": receivers, "type": schedule.locationType, "speak": speak }
 	else:
 		errormsg = "Schedule doens't exist"
 
@@ -754,6 +784,7 @@ def get_appointments():
 	for data in datas:
 		user = User.query.filter_by(id=data['userId']).first()
 		service = Service.query.filter_by(id=data['serviceId']).first()
+		worker = Owner.query.filter_by(id=data['workerId']).first()
 			
 		info = json.loads(data["info"])
 
@@ -762,13 +793,19 @@ def get_appointments():
 			"username": user.username
 		}
 
+		worker = {
+			"id": worker.id,
+			"username": worker.username
+		}
+
 		userInput = json.loads(data['userInput'])
 		appointments.append({
 			"key": "appointment-" + str(data['id']),
 			"id": str(data['id']),
 			"username": user.username,
 			"client": client,
-			"time": int(data['time']),
+			"worker": worker,
+			"time": json.loads(data['time']),
 			"serviceid": service.id if service != None else "",
 			"name": service.name if service != None else userInput['name'],
 			"image": json.loads(service.image) if service != None else None
@@ -804,8 +841,8 @@ def get_cart_orderers(id):
 
 	return { "cartOrderers": cartOrderers, "numCartorderers": numCartorderers }
 
-@app.route("/see_user_orders", methods=["POST"])
-def see_user_orders():
+@app.route("/get_orders", methods=["POST"])
+def get_orders():
 	content = request.get_json()
 
 	userid = content['userid']
@@ -864,29 +901,3 @@ def see_user_orders():
 			ready = False
 
 	return { "orders": orders, "ready": ready, "waitTime": waitTime }
-
-@app.route("/get_schedule_info/<id>")
-def get_schedule_info(id):
-	schedule = Schedule.query.filter_by(id=id, status="confirmed").first()
-	errormsg = ""
-	status = ""
-
-	if schedule != None:
-		info = json.loads(schedule.info)
-		location = Location.query.filter_by(id=schedule.locationId).first()
-
-		info = {
-			"name": location.name,
-			"locationId": schedule.locationId,
-			"time": schedule.time,
-			"table": schedule.table,
-			"numdiners": len(json.loads(schedule.customers)),
-			"seated": info["dinersseated"] if "dinersseated" in info else None
-		}
-
-		return { "scheduleInfo": info }
-	else:
-		errormsg = "Schedule doesn't exist"
-		status = "nonexist"
-
-	return { "errormsg": errormsg, "status": status }, 400
