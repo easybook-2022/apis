@@ -42,7 +42,7 @@ class Owner(db.Model):
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(70))
 	hours = db.Column(db.Text)
-	info = db.Column(db.String(120))
+	info = db.Column(db.String(100))
 
 	def __init__(self, cellnumber, password, username, profile, hours, info):
 		self.cellnumber = cellnumber
@@ -204,7 +204,7 @@ class Cart(db.Model):
 	note = db.Column(db.String(100))
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
-	waitTime = db.Column(db.String(2))
+	waitTime = db.Column(db.String(50))
 
 	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber, waitTime):
 		self.locationId = locationId
@@ -425,7 +425,17 @@ def make_appointment():
 			menuid = -1
 
 		if location != None:
-			owners = query("select id, info from owner where info like '%\"locationId\": \"" + str(location.id) + "\"%'", True)
+			info = json.loads(location.info)
+			type = info["type"]
+
+			sql = "select id, info from owner where "
+
+			if type == "computer":
+				sql += "info like '%\"locationId\": \"" + str(location.id) + "\"%' and info like '%\"owner\": true\"%'"
+			else:
+				sql += "id = " + str(workerid)
+
+			owners = query(sql, True)
 			locationInfo = json.loads(location.info)
 			receiver = []
 			pushids = []
@@ -457,7 +467,10 @@ def make_appointment():
 						))
 					
 					if send_msg == True:
-						resp = push(pushmessages)
+						try:
+							push(pushmessages)
+						except:
+							print("")
 
 				worker = Owner.query.filter_by(id=workerid).first()
 				speak = { "name": servicename, "time": json.loads(time), "worker": worker.username }
@@ -482,7 +495,10 @@ def make_appointment():
 								content
 							))
 
-						resp = push(pushmessages)
+						try:
+							push(pushmessages)
+						except:
+							print("")
 
 				worker = Owner.query.filter_by(id=workerid).first()
 				speak = { "name": servicename, "time": json.loads(time), "worker": worker.username }
@@ -549,7 +565,10 @@ def salon_change_appointment():
 				)
 			
 				if send_msg == True:
-					resp = push(pushmessage)
+					try:
+						push(pushmessage)
+					except:
+						print("")
 
 			return { "msg": "appointment remade", "receiver": receiver, "time": time }
 		else:
@@ -603,13 +622,16 @@ def cancel_schedule():
 					message += " with"
 					message += " no reason" if reason == "" else " a reason"
 
-					resp = push(pushInfo(
-						info["pushToken"],
-						"Appointment cancelled",
-						message,
-						content
-					))
-
+					try:
+						push(pushInfo(
+							info["pushToken"],
+							"Appointment cancelled",
+							message,
+							content
+						))
+					except:
+						print("")
+						
 			return { "msg": "request cancelled", "receiver": receiver }
 		else:
 			errormsg = "Action is denied"

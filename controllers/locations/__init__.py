@@ -44,7 +44,7 @@ class Owner(db.Model):
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(70))
 	hours = db.Column(db.Text)
-	info = db.Column(db.String(120))
+	info = db.Column(db.String(100))
 
 	def __init__(self, cellnumber, password, username, profile, hours, info):
 		self.cellnumber = cellnumber
@@ -206,7 +206,7 @@ class Cart(db.Model):
 	note = db.Column(db.String(100))
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
-	waitTime = db.Column(db.String(2))
+	waitTime = db.Column(db.String(50))
 
 	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber, waitTime):
 		self.locationId = locationId
@@ -494,7 +494,7 @@ def set_type():
 @app.route("/set_hours", methods=["POST"])
 def set_hours():
 	content = request.get_json()
-
+	
 	locationid = content['locationid']
 	hours = content['hours']
 
@@ -755,6 +755,22 @@ def get_more_locations():
 
 	return { "newlocations": locations, "index": len(datas), "max": maxdatas }
 	
+@app.route("/get_all_locations/<id>")
+def get_all_locations(id):
+	datas = Location.query.filter(Location.owners.like("%\"" + str(id) + "\"%")).all()
+	locations = []
+
+	for data in datas:
+		locations.append({
+			"id": data.id,
+			"name": data.name,
+			"address": data.addressOne + ("" if data.addressTwo == "" else " " + data.addressTwo) + ", " + data.city + " " + data.province + ", " + data.postalcode,
+			"type": data.type,
+			"logo": json.loads(data.logo)
+		})
+
+	return { "locations": locations }
+
 @app.route("/get_location_profile", methods=["POST"])
 def get_location_profile():
 	content = request.get_json()

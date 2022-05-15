@@ -43,7 +43,7 @@ class Owner(db.Model):
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(70))
 	hours = db.Column(db.Text)
-	info = db.Column(db.String(120))
+	info = db.Column(db.String(100))
 
 	def __init__(self, cellnumber, password, username, profile, hours, info):
 		self.cellnumber = cellnumber
@@ -205,7 +205,7 @@ class Cart(db.Model):
 	note = db.Column(db.String(100))
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
-	waitTime = db.Column(db.String(2))
+	waitTime = db.Column(db.String(50))
 
 	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber, waitTime):
 		self.locationId = locationId
@@ -304,14 +304,19 @@ def owner_login():
 
 				data = query("select * from location where owners like '%\"" + str(ownerid) + "\"%'", True)
 
-				if len(data) == 1:
+				if len(data) > 0:
 					location = data[0]
 					locationid = location['id']
 					locationtype = location['type']
 					locationhours = location['hours']
 
+					numBusiness = query("select count(*) as num from location where owners like '%\"" + str(ownerid) + "\"%'", True)[0]["num"]
+					
 					if locationhours != '{}' and ownerhours != '{}':
-						return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "main" }
+						if numBusiness > 1:
+							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list" }
+						else:
+							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "main" }
 					else:
 						if locationhours == '{}': # location setup not done
 							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": "", "msg": "locationsetup" }
@@ -319,7 +324,10 @@ def owner_login():
 							if locationtype == 'hair' or locationtype == 'nail':
 								return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "register" }
 							else:
-								return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "main" }
+								if numBusiness > 1:
+									return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list" }
+								else:
+									return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "main" }
 				else:
 					return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": None, "locationtype": "", "msg": "locationsetup" }
 			else:
@@ -388,7 +396,7 @@ def owner_register():
 			errormsg = "Please confirm your password"
 
 	if errormsg == "":
-		info = json.dumps({ "locationId": "", "pushToken": "" })
+		info = json.dumps({ "locationId": "", "pushToken": "", "owner": True })
 		owner = Owner(cellnumber, generate_password_hash(password), "", "", '{}', info)
 		db.session.add(owner)
 		db.session.commit()
@@ -401,6 +409,7 @@ def owner_register():
 def save_user_info():
 	id = request.form['id']
 	username = request.form['username']
+	hours = request.form['hours']
 	errormsg = ""
 	status = ""
 
@@ -437,6 +446,7 @@ def save_user_info():
 	
 	if errormsg == "":
 		owner.username = username
+		owner.hours = hours
 
 		db.session.commit()
 
@@ -518,7 +528,7 @@ def add_owner():
 				locationId = ownerInfo["locationId"] 
 
 				password = generate_password_hash(password)
-				owner = Owner(cellnumber, password, username, profileData, hours, json.dumps({"locationId": locationId, "pushToken": ""}))
+				owner = Owner(cellnumber, password, username, profileData, hours, json.dumps({"locationId": locationId, "pushToken": "", "owner": False}))
 				db.session.add(owner)
 				db.session.commit()
 
@@ -988,6 +998,26 @@ def delete_owner(id):
 		db.session.commit()
 
 		return { "msg": "Owner deleted" }
+	else:
+		errormsg = "Owner doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }
+
+@app.route("/get_owner_info/<id>")
+def get_owner_info(id):
+	owner = Owner.query.filter_by(id=id).first()
+	errormsg = ""
+	status = ""
+
+	if owner != None:
+		ownerInfo = json.loads(owner.info)
+
+		info = {
+			"id": id,
+			"isOwner": ownerInfo["owner"]
+		}
+
+		return info
 	else:
 		errormsg = "Owner doesn't exist"
 

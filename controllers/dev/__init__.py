@@ -42,7 +42,7 @@ class Owner(db.Model):
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(60))
 	hours = db.Column(db.Text)
-	info = db.Column(db.String(120))
+	info = db.Column(db.String(100))
 
 	def __init__(self, cellnumber, password, username, profile, hours, info):
 		self.cellnumber = cellnumber
@@ -204,7 +204,7 @@ class Cart(db.Model):
 	note = db.Column(db.String(100))
 	status = db.Column(db.String(10))
 	orderNumber = db.Column(db.String(10))
-	waitTime = db.Column(db.String(2))
+	waitTime = db.Column(db.String(50))
 
 	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber, waitTime):
 		self.locationId = locationId
