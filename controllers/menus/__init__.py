@@ -636,28 +636,7 @@ def delete_menu():
 		location.info = json.dumps(info)
 		db.session.commit()
 
-		row = []
-		rownum = 0
-		menus = []
-
-		for photo in photos:
-			row.append({ "key": "row-" + str(rownum), "photo": { "name": photo["image"], "width": photo["width"], "height": photo["height"] } })
-			rownum += 1
-
-			if len(row) == 3:
-				menus.append({ "key": "menu-" + str(len(menus)), "row": row })
-				row = []
-
-		if len(row) > 0:
-			leftover = 3 - len(row)
-
-			for k in range(leftover):
-				row.append({ "key": "row-" + str(rownum) })
-				rownum += 1
-
-			menus.append({ "key": "menu-" + str(len(menus)), "row": row })
-
-		return { "msg": "success", "menus": menus }
+		return { "msg": "success" }
 	else:
 		errormsg = "Location doesn't exist"
 

@@ -650,7 +650,7 @@ def close_schedule(id):
 	if appointment != None:
 		locationType = appointment.locationType
 
-		if appointment.status == "cancel" or appointment.status == "rebook":
+		if appointment.status == "cancel":
 			if locationType == "restaurant":
 				customers = json.loads(appointment.customers)
 				receiver = []
@@ -703,14 +703,26 @@ def cancel_request():
 
 	if schedule != None:
 		locationId = str(schedule.locationId)
+		workerId = str(schedule.workerId)
 
-		owners = query("select id from owner where info like '%\"locationId\": \"" + locationId + "\"%'", True)
+		location = Location.query.filter_by(id=locationId).first()
+		info = json.loads(location.info)
+		type = info["type"]
+
+		sql = "select id from owner where "
+
+		if type == "computer":
+			sql += "info like '%\"locationId\": \"" + str(locationId) + "\"%' and info like '%\"owner\": true\"%'"
+		else:
+			sql += "id = " + workerId
+
+		owners = query(sql, True)
 		receivers = { "owners": [], "users": [] }
 
 		for owner in owners:
 			receivers["owners"].append("owner" + str(owner["id"]))
 
-		if schedule.locationType == "restaurant":
+		if schedule.locationType == "restaurant" or schedule.locationType == "store":
 			customers = json.loads(schedule.customers)
 
 			for customer in customers:

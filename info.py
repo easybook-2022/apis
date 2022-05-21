@@ -8,7 +8,7 @@ test = True
 
 local = test
 test_sms = test
-send_msg = True
+send_msg = False
 
 host = 'localhost'
 user = 'geottuse'

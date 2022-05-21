@@ -345,13 +345,6 @@ def setup_location():
 				db.session.add(location)
 				db.session.commit()
 
-				ownerInfo = json.loads(owner.info)
-				ownerInfo["locationId"] = str(location.id)
-				owner.info = json.dumps(ownerInfo)
-				owner.hours = '' if type == "restaurant" else "{}"
-
-				db.session.commit()
-
 				return { "msg": "location setup", "id": location.id }
 		else:
 			errormsg = "Location phone number already taken"
@@ -362,6 +355,7 @@ def setup_location():
 
 @app.route("/update_location", methods=["POST"])
 def update_location():
+	id = request.form['id']
 	storeName = request.form['storeName']
 	phonenumber = request.form['phonenumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 	addressOne = request.form['addressOne']
@@ -379,10 +373,7 @@ def update_location():
 	status = ""
 
 	if owner != None:
-		ownerInfo = json.loads(owner.info)
-		locationid = ownerInfo["locationId"]
-
-		location = Location.query.filter_by(id=locationid).first()
+		location = Location.query.filter_by(id=id).first()
 
 		if location != None:
 			oldlogo = json.loads(location.logo)
@@ -762,7 +753,7 @@ def get_all_locations(id):
 
 	for data in datas:
 		locations.append({
-			"id": data.id,
+			"id": data.id, "key": data.id,
 			"name": data.name,
 			"address": data.addressOne + ("" if data.addressTwo == "" else " " + data.addressTwo) + ", " + data.city + " " + data.province + ", " + data.postalcode,
 			"type": data.type,

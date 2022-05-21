@@ -487,8 +487,6 @@ def order_done():
 		sql += "(status = 'checkout' and waitTime = '' and userInput like '%\"type\": \"store\"%'))"
 		
 		datas = query(sql, True)
-		charges = {}
-		totalPaying = 0.00
 
 		if len(datas) > 0:
 			for data in datas:

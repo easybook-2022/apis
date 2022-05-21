@@ -396,7 +396,7 @@ def owner_register():
 			errormsg = "Please confirm your password"
 
 	if errormsg == "":
-		info = json.dumps({ "locationId": "", "pushToken": "", "owner": True })
+		info = json.dumps({ "pushToken": "", "owner": True })
 		owner = Owner(cellnumber, generate_password_hash(password), "", "", '{}', info)
 		db.session.add(owner)
 		db.session.commit()
@@ -456,7 +456,7 @@ def save_user_info():
 
 @app.route("/add_owner", methods=["POST"])
 def add_owner():
-	ownerid = request.form['ownerid']
+	id = request.form['id']
 	cellnumber = request.form['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 	username = request.form['username']
 	password = request.form['password']
@@ -468,9 +468,9 @@ def add_owner():
 	status = ""
 
 	if len(data) == 0:
-		owner = Owner.query.filter_by(id=ownerid).first()
+		location = Location.query.filter_by(id=id).first()
 
-		if owner != None:
+		if location != None:
 			if username == "":
 				errormsg = "Please provide a username for identification"
 
@@ -524,15 +524,11 @@ def add_owner():
 					errormsg = "Please provide a profile for identification"
 
 			if errormsg == "":
-				ownerInfo = json.loads(owner.info)
-				locationId = ownerInfo["locationId"] 
-
 				password = generate_password_hash(password)
-				owner = Owner(cellnumber, password, username, profileData, hours, json.dumps({"locationId": locationId, "pushToken": "", "owner": False}))
+				owner = Owner(cellnumber, password, username, profileData, hours, json.dumps({"pushToken": "", "owner": False}))
 				db.session.add(owner)
-				db.session.commit()
 
-				location = Location.query.filter_by(id=locationId).first()
+				location = Location.query.filter_by(id=id).first()
 				owners = json.loads(location.owners)
 				owners.append(str(owner.id))
 
@@ -648,7 +644,7 @@ def update_owner():
 		elif type == "hours":
 			hours = request.form['hours']
 
-			if hours != "[]":
+			if hours != "{}":
 				owner.hours = hours
 
 		if errormsg == "":
@@ -705,7 +701,11 @@ def owner_update_notification_token():
 
 @app.route("/get_workers/<id>")
 def get_workers(id):
-	datas = Owner.query.filter(Owner.info.like("%\"locationId\": \"" + str(id) + "\"%")).all()
+	location = Location.query.filter_by(id=id).first()
+
+	workers = json.loads("[" + location.owners[1:-1] + "]")
+	datas = Owner.query.filter(Owner.id.in_(workers)).all()
+
 	owners = []
 	row = []
 	key = 0
@@ -778,7 +778,10 @@ def get_worker_info(id):
 
 @app.route("/get_all_workers_time/<id>")
 def get_all_workers_time(id):
-	owners = Owner.query.filter(Owner.info.like("%\"locationId\": \"" + str(id) + "\"%")).all()
+	location = Location.query.filter_by(id=id).first()
+
+	workers = json.loads("[" + location.owners[1:-1] + "]")
+	owners = Owner.query.filter(Owner.id.in_(workers)).all()
 	workers = {}
 
 	for owner in owners:
@@ -832,7 +835,10 @@ def search_workers():
 
 	if schedule != None:
 		locationId = str(schedule.locationId)
-		datas = query("select * from owner where username like '%" + username + "%' and info like '%\"locationId\": \"" + str(locationId) + "\"%'", True)
+
+		location = Location.query.filter_by(id=locationId).first()
+		workers = "[" + location.owners[1:-1] + "]"
+		datas = query("select * from owner where username like '%" + username + "%' and id in " + workers, True)
 		owners = []
 		row = []
 		key = 0
@@ -868,7 +874,10 @@ def search_workers():
 
 @app.route("/get_workers_time/<id>") # salon profile
 def get_workers_time(id):
-	owners = Owner.query.filter(Owner.info.like("%\"locationId\": \"" + str(id) + "\"%")).all()
+	location = Location.query.filter_by(id=id).first()
+
+	workers = json.loads("[" + location.owners[1:-1] + "]")
+	owners = Owner.query.filter(Owner.id.in_(workers)).all()
 	workerHours = []
 
 	for owner in owners:
@@ -944,7 +953,8 @@ def get_other_workers():
 	location = Location.query.filter_by(id=locationid).first()
 	
 	if location != None:
-		owners = Owner.query.filter(Owner.info.like("%\"locationId\": \"" + str(locationid) + "\"%"), Owner.id!=ownerid).all()
+		workers = json.loads("[" + location.owners[1:-1] + "]")
+		owners = Owner.query.filter(Owner.id.in_(workers), Owner.id!=ownerid).all()
 		workers = []
 		row = []
 		rownum = 0
