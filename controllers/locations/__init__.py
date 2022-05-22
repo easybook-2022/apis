@@ -260,17 +260,18 @@ def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
 
 def push(messages):
-	if type(messages) == type([]):
-		resp = PushClient().publish_multiple(messages)
+	if push_notif == True:
+		if type(messages) == type([]):
+			resp = PushClient().publish_multiple(messages)
 
-		for info in resp:
-			if info.status != "ok":
+			for info in resp:
+				if info.status != "ok":
+					return { "status": "failed" }
+		else:
+			resp = PushClient().publish(messages)
+
+			if resp.status != "ok":
 				return { "status": "failed" }
-	else:
-		resp = PushClient().publish(messages)
-
-		if resp.status != "ok":
-			return { "status": "failed" }
 
 	return { "status": "ok" }
 

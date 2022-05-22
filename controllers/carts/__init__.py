@@ -254,17 +254,18 @@ def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
 
 def push(messages):
-	if type(messages) == type([]):
-		resp = PushClient().publish_multiple(messages)
+	if push_notif == True:
+		if type(messages) == type([]):
+			resp = PushClient().publish_multiple(messages)
 
-		for info in resp:
-			if info.status != "ok":
+			for info in resp:
+				if info.status != "ok":
+					return { "status": "failed" }
+		else:
+			resp = PushClient().publish(messages)
+
+			if resp.status != "ok":
 				return { "status": "failed" }
-	else:
-		resp = PushClient().publish(messages)
-
-		if resp.status != "ok":
-			return { "status": "failed" }
 
 	return { "status": "ok" }
 
@@ -441,20 +442,16 @@ def checkout():
 		speak = { "name": productName, "quantity": quantity, "customer": customer.username, "orderNumber": orderNumber }
 
 		if len(pushids) > 0:
-			if send_msg == True:
-				pushmessages = []
-				for pushid in pushids:
-					pushmessages.append(pushInfo(
-						pushid, 
-						"An order requested",
-						"A customer requested an order",
-						content
-					))
+			pushmessages = []
+			for pushid in pushids:
+				pushmessages.append(pushInfo(
+					pushid, 
+					"An order requested",
+					"A customer requested an order",
+					content
+				))
 
-				try:
-					push(pushmessages)
-				except:
-					print("")
+			push(pushmessages)
 
 		query("update cart set status = 'checkout', orderNumber = '" + orderNumber + "' where adder = " + str(adder) + " and orderNumber = ''", False)
 

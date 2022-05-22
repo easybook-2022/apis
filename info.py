@@ -8,7 +8,8 @@ test = True
 
 local = test
 test_sms = test
-send_msg = False
+send_msg = True
+push_notif = True
 
 host = 'localhost'
 user = 'geottuse'

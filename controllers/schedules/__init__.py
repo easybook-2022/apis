@@ -251,17 +251,18 @@ def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
 
 def push(messages):
-	if type(messages) == type([]):
-		resp = PushClient().publish_multiple(messages)
+	if push_notif == True:
+		if type(messages) == type([]):
+			resp = PushClient().publish_multiple(messages)
 
-		for info in resp:
-			if info.status != "ok":
+			for info in resp:
+				if info.status != "ok":
+					return { "status": "failed" }
+		else:
+			resp = PushClient().publish(messages)
+
+			if resp.status != "ok":
 				return { "status": "failed" }
-	else:
-		resp = PushClient().publish(messages)
-
-		if resp.status != "ok":
-			return { "status": "failed" }
 
 	return { "status": "ok" }
 
@@ -408,6 +409,7 @@ def make_appointment():
 	serviceinfo = content['serviceinfo']
 	time = content['time']
 	note = content['note']
+	timeDisplay = content['timeDisplay']
 
 	user = User.query.filter_by(id=userid).first()
 
@@ -462,16 +464,12 @@ def make_appointment():
 						pushmessages.append(pushInfo(
 							pushid, 
 							"Appointment remade",
-							"A client remade an appointment for service: " + servicename,
+							"A client remade an appointment for service: " + servicename + " " + str(timeDisplay),
 							content
 						))
 					
-					if send_msg == True:
-						try:
-							push(pushmessages)
-						except:
-							print("")
-
+					push(pushmessages)
+					
 				worker = Owner.query.filter_by(id=workerid).first()
 				speak = { "name": servicename, "time": json.loads(time), "worker": worker.username }
 
@@ -485,20 +483,16 @@ def make_appointment():
 				db.session.commit()
 
 				if len(pushids) > 0:
-					if send_msg == True:
-						pushmessages = []
-						for pushid in pushids:
-							pushmessages.append(pushInfo(
-								pushid, 
-								"Appointment made",
-								"A client made an appointment for service: " + servicename,
-								content
-							))
+					pushmessages = []
+					for pushid in pushids:
+						pushmessages.append(pushInfo(
+							pushid, 
+							"Appointment made",
+							"A client made an appointment for service: " + servicename + " " + str(timeDisplay),
+							content
+						))
 
-						try:
-							push(pushmessages)
-						except:
-							print("")
+					push(pushmessages)
 
 				worker = Owner.query.filter_by(id=workerid).first()
 				speak = { "name": servicename, "time": json.loads(time), "worker": worker.username }
@@ -564,11 +558,7 @@ def salon_change_appointment():
 					content
 				)
 			
-				if send_msg == True:
-					try:
-						push(pushmessage)
-					except:
-						print("")
+				push(pushmessage)
 
 			return { "msg": "appointment remade", "receiver": receiver, "time": time }
 		else:
@@ -613,24 +603,20 @@ def cancel_schedule():
 			user = User.query.filter_by(id=appointment.userId).first()
 			info = json.loads(user.info)
 
-			if send_msg == True:
-				if info["pushToken"] != "":
-					message = "The "
-					message += "restaurant" if locationType == "restaurant" else "salon"
-					message += " cancelled your "
-					message == "appointment"
-					message += " with"
-					message += " no reason" if reason == "" else " a reason"
+			if info["pushToken"] != "":
+				message = "The "
+				message += "restaurant" if locationType == "restaurant" else "salon"
+				message += " cancelled your "
+				message == "appointment"
+				message += " with"
+				message += " no reason" if reason == "" else " a reason"
 
-					try:
-						push(pushInfo(
-							info["pushToken"],
-							"Appointment cancelled",
-							message,
-							content
-						))
-					except:
-						print("")
+				push(pushInfo(
+					info["pushToken"],
+					"Appointment cancelled",
+					message,
+					content
+				))
 						
 			return { "msg": "request cancelled", "receiver": receiver }
 		else:
@@ -696,6 +682,7 @@ def cancel_request():
 
 	userid = content['userid']
 	scheduleid = content['scheduleid']
+	timeDisplay = content['timeDisplay']
 
 	schedule = Schedule.query.filter_by(id=scheduleid).first()
 	errormsg = ""
@@ -741,7 +728,17 @@ def cancel_request():
 			serviceName = service.name
 
 		worker = Owner.query.filter_by(id=schedule.workerId).first()
+		workerInfo = json.loads(worker.info)
+
 		speak = { "name": serviceName, "time": json.loads(schedule.time), "worker": worker.username }
+
+		if workerInfo["pushToken"] != "":
+			push(pushInfo(
+				workerInfo["pushToken"],
+				"Appointment cancelled",
+				str(timeDisplay),
+				content
+			))
 
 		return { "msg": "schedule cancelled", "receivers": receivers, "type": schedule.locationType, "speak": speak }
 	else:
