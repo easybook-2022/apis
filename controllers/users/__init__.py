@@ -585,7 +585,7 @@ def get_notifications(id):
 				"service": service.name if service != None else userInput['name'] if 'name' in userInput else "",
 				"locationimage": json.loads(location.logo),
 				"locationtype": location.type,
-				"serviceimage": json.loads(service.image) if service != None else "",
+				"serviceimage": json.loads(service.image) if service != None else None,
 				"serviceprice": float(service.price) if service != None else float(userInput['price']) if 'price' in userInput else "",
 				"time": json.loads(data['time']),
 				"action": data['status'],

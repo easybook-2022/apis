@@ -520,6 +520,7 @@ def salon_change_appointment():
 	serviceinfo = content['serviceinfo']
 	time = content['time']
 	note = content['note']
+	timeDisplay = content['timeDisplay']
 
 	client = User.query.filter_by(id=clientid).first()
 
@@ -554,7 +555,7 @@ def salon_change_appointment():
 				pushmessage = pushInfo(
 					pushToken, 
 					"Appointment remade",
-					"A salon requested a different appointment for service: " + servicename,
+					"A salon requested a different appointment for you for service: " + servicename + " " + str(timeDisplay),
 					content
 				)
 			
