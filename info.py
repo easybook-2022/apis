@@ -4,7 +4,7 @@ from flask_migrate import Migrate
 from twilio.rest import Client
 import pymysql.cursors
 
-test = True
+test = False
 
 local = test
 test_sms = test
