@@ -1,4 +1,6 @@
-import os, pymysql.cursors
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from werkzeug.serving import run_simple
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from werkzeug.middleware.shared_data import SharedDataMiddleware
@@ -12,12 +14,6 @@ from controllers.products import app as products_controller
 from controllers.carts import app as carts_controller
 from controllers.services import app as services_controller
 from controllers.schedules import app as schedules_controller
-
-from flask import Flask, request, json
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
-from twilio.rest import Client
-from exponent_server_sdk import PushClient, PushMessage
 from info import *
 from models import *
 

@@ -1,55 +1,9 @@
-from flask import Flask, request
-from flask_sqlalchemy import SQLAlchemy
+from flask import request
 from flask_cors import CORS
-import pymysql.cursors, json, os
-from twilio.rest import Client
-from exponent_server_sdk import PushClient, PushMessage
-from werkzeug.security import generate_password_hash, check_password_hash
-from random import randint
 from info import *
 from models import *
 
 cors = CORS(app)
-
-def query(sql, output):
-	dbconn = pymysql.connect(
-		host=host, user=user,
-		password=password, db=database,
-		charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor, 
-		autocommit=True
-	)
-
-	cursorobj = dbconn.cursor()
-	cursorobj.execute(sql)
-
-	if output == True:
-		return cursorobj.fetchall()
-
-def getRanStr():
-	strid = ""
-
-	for k in range(6):
-		strid += str(randint(0, 9))
-
-	return strid
-
-def pushInfo(to, title, body, data):
-	return PushMessage(to=to, title=title, body=body, data=data)
-
-def push(messages):
-	if type(messages) == type([]):
-		resp = PushClient().publish_multiple(messages)
-
-		for info in resp:
-			if info.status != "ok":
-				return { "status": "failed" }
-	else:
-		resp = PushClient().publish(messages)
-
-		if resp.status != "ok":
-			return { "status": "failed" }
-
-	return { "status": "ok" }
 
 @app.route("/welcome_users", methods=["GET"])
 def welcome_users():

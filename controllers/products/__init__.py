@@ -1,47 +1,9 @@
-from flask import Flask, request
-from flask_sqlalchemy import SQLAlchemy
+from flask import request
 from flask_cors import CORS
-import pymysql.cursors, json, os
-from twilio.rest import Client
-from exponent_server_sdk import PushClient, PushMessage
-from werkzeug.security import generate_password_hash, check_password_hash
-from binascii import a2b_base64
-from random import randint
 from info import *
 from models import *
 
 cors = CORS(app)
-
-def query(sql, output):
-	dbconn = pymysql.connect(
-		host=host, user=user,
-		password=password, db=database,
-		charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor, 
-		autocommit=True
-	)
-
-	cursorobj = dbconn.cursor()
-	cursorobj.execute(sql)
-
-	if output == True:
-		results = cursorobj.fetchall()
-
-		return results
-
-def writeToFile(uri, name):
-	binary_data = a2b_base64(uri)
-
-	fd = open(os.path.join("static", name), 'wb')
-	fd.write(binary_data)
-	fd.close()
-
-def getRanStr():
-	strid = ""
-
-	for k in range(6):
-		strid += str(randint(0, 9))
-
-	return strid
 
 @app.route("/welcome_products", methods=["GET"])
 def welcome_products():

@@ -1,58 +1,9 @@
-from flask import Flask, request
-from flask_sqlalchemy import SQLAlchemy
+from flask import request
 from flask_cors import CORS
-import pymysql.cursors, json, os
-from twilio.rest import Client
-from exponent_server_sdk import PushClient, PushMessage
-from werkzeug.security import generate_password_hash, check_password_hash
-from random import randint
 from info import *
 from models import *
 
 cors = CORS(app)
-
-def query(sql, output):
-	dbconn = pymysql.connect(
-		host=host, user=user,
-		password=password, db=database,
-		charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor, 
-		autocommit=True
-	)
-
-	cursorobj = dbconn.cursor()
-	cursorobj.execute(sql)
-
-	if output == True:
-		results = cursorobj.fetchall()
-
-		return results
-
-def getRanStr():
-	strid = ""
-
-	for k in range(6):
-		strid += str(randint(0, 9))
-
-	return strid
-
-def pushInfo(to, title, body, data):
-	return PushMessage(to=to, title=title, body=body, data=data)
-
-def push(messages):
-	if push_notif == True:
-		if type(messages) == type([]):
-			resp = PushClient().publish_multiple(messages)
-
-			for info in resp:
-				if info.status != "ok":
-					return { "status": "failed" }
-		else:
-			resp = PushClient().publish(messages)
-
-			if resp.status != "ok":
-				return { "status": "failed" }
-
-	return { "status": "ok" }
 
 @app.route("/welcome_schedules", methods=["GET"])
 def welcome_schedules():
@@ -456,8 +407,15 @@ def done_service(id):
 
 	if schedule != None:
 		booker = schedule.userId
+		locationId = schedule.locationId
+		workerId = schedule.workerId
+		serviceId = schedule.serviceId
+		userInput = schedule.userInput
 
-		db.session.delete(schedule)
+		schedule.status = "done"
+
+		clientVisited = Clientvisited(locationId, serviceId, userInput, booker, workerId)
+		db.session.add(clientVisited)
 		db.session.commit()
 
 		return { "msg": "Schedule deleted", "receiver": "user" + str(booker) }
@@ -533,51 +491,6 @@ def cancel_request():
 		return { "msg": "schedule cancelled", "receivers": receivers, "type": schedule.locationType, "speak": speak }
 	else:
 		errormsg = "Schedule doens't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/send_service_payment", methods=["POST"])
-def send_service_payment():
-	content = request.get_json()
-
-	scheduleid = content['scheduleid']
-	userid = content['userid']
-	service = content['service']
-	workerinfo = content['workerInfo']
-
-	user = User.query.filter_by(id=userid).first()
-	schedule = Schedule.query.filter_by(id=scheduleid).first()
-	errormsg = ""
-	status = ""
-
-	if user != None and schedule != None:
-		price = float(workerinfo["requestprice"])
-		tip = float(workerinfo["tip"])
-
-		charge = price + tip
-		paymentInfo = customerPay(charge, userid, schedule.locationId)
-
-		status = paymentInfo["error"]
-
-		if status == "":
-			groupId = ""
-
-			for k in range(20):
-				groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
-
-			userInput = json.dumps({ "name": service, "price": price, "tip": tip, "type": "service" })
-			transaction = Transaction(groupId, schedule.locationId, 0, schedule.serviceId, userInput, 0, schedule.userId, '[]', '[]', '[]', '[]', schedule.time)
-
-			db.session.add(transaction)
-			db.session.delete(schedule)
-			db.session.commit()
-
-			return { "msg": "success" }
-		else:
-			errormsg = paymentInfo["error"]
-	else:
-		errormsg = "Schedule doesn't exist"
-		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 

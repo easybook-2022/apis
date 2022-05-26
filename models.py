@@ -1,9 +1,10 @@
+from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from info import *
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://' + user + ':' + password + '@' + host + '/' + database
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = True
 app.config['MYSQL_HOST'] = host
 app.config['MYSQL_USER'] = user
 app.config['MYSQL_PASSWORD'] = password
@@ -61,8 +62,8 @@ class Location(db.Model):
 	latitude = db.Column(db.String(20))
 	owners = db.Column(db.Text)
 	type = db.Column(db.String(20))
-	hours = db.Column(db.Text)
-	info = db.Column(db.Text)
+	hours = db.Column(db.String(710))
+	info = db.Column(db.String(720))
 
 	def __init__(
 		self, 
@@ -128,7 +129,7 @@ class Schedule(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	serviceId = db.Column(db.Integer)
-	userInput = db.Column(db.Text)
+	userInput = db.Column(db.String(70))
 	time = db.Column(db.String(100))
 	status = db.Column(db.String(10))
 	cancelReason = db.Column(db.String(200))
@@ -159,6 +160,28 @@ class Schedule(db.Model):
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
 
+class Clientvisited(db.Model):
+	id = db.Column(db.Integer, primary_key=True)
+	locationId = db.Column(db.Integer)
+	serviceId = db.Column(db.Integer)
+	userInput = db.Column(db.String(70))
+	clientId = db.Column(db.Integer)
+	workerId = db.Column(db.Integer)
+
+	def __init__(
+		self, 
+		locationId, serviceId, userInput, clientId,
+		workerId
+	):
+		self.locationId = locationId
+		self.serviceId = serviceId
+		self.userInput = userInput
+		self.clientId = clientId
+		self.workerId = workerId
+
+	def __repr__(self):
+		return '<Clientvisited %r>' % self.locationId
+
 class Product(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
@@ -187,7 +210,7 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
-	userInput = db.Column(db.Text)
+	userInput = db.Column(db.String(70))
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	options = db.Column(db.Text)
@@ -214,3 +237,4 @@ class Cart(db.Model):
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
+
