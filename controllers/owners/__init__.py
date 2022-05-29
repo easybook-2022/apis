@@ -7,13 +7,7 @@ cors = CORS(app)
 
 @app.route("/welcome_owners", methods=["GET"])
 def welcome_owners():
-	datas = Owner.query.all()
-	owners = []
-
-	for data in datas:
-		owners.append(data.id)
-
-	return { "msg": "welcome to owners of easygo", "owners": owners }
+	return { "msg": "welcome to owners of easygo" }
 
 @app.route("/owner_login", methods=["POST"])
 def owner_login():
@@ -25,24 +19,24 @@ def owner_login():
 	status = ""
 
 	if cellnumber != "" and password != "":
-		data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
+		owner = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True).fetchone()
 
-		if len(data) > 0:
-			owner = data[0]
-
+		if owner != None:
 			if check_password_hash(owner['password'], password):
 				ownerid = owner['id']
 				ownerhours = owner['hours']
+				ownerInfo = json.loads(owner['info'])
+				ownerInfo["signin"] = True
 
-				data = query("select * from location where owners like '%\"" + str(ownerid) + "\"%'", True)
+				numBusiness = query("select count(*) as num from location where owners like '%\"" + str(ownerid) + "\"%'", True).fetchone()["num"]
 
-				if len(data) > 0:
-					location = data[0]
+				if data > 0:
+					location = query("select * from location where owners like '%\"" + str(ownerid) + "\"%'", True).fetchone()
 					locationid = location['id']
 					locationtype = location['type']
 					locationhours = location['hours']
 
-					numBusiness = query("select count(*) as num from location where owners like '%\"" + str(ownerid) + "\"%'", True)[0]["num"]
+					query("update owner set info = '" + str(json.dumps(ownerInfo)) + "' where id = " + str(owner['id']))
 					
 					if locationhours != '{}' and ownerhours != '{}':
 						if numBusiness > 1:
@@ -74,12 +68,32 @@ def owner_login():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
+@app.route("/owner_logout/<id>")
+def owner_logout(id):
+	owner = query("select * from owner where id = " + str(id), True).fetchone()
+	update_data = []
+
+	errormsg = ""
+	status = ""
+
+	if owner != None:
+		info = json.loads(owner["info"])
+		info["signin"] = False
+
+		query("update owner set info = '" + json.dumps(info) + "' where id = " + str(id))
+
+		return { "msg": "success" }
+	else:
+		errormsg = ""
+
+	return { "errormsg": errormsg, "status": status }, 400
+
 @app.route("/owner_verify/<cellnumber>")
 def owner_verify(cellnumber):
 	verifycode = getRanStr()
 
 	cellnumber = cellnumber.replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
-	owner = Owner.query.filter_by(cellnumber=cellnumber).first()
+	owner = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True).fetchone()
 	errormsg = ""
 	status = ""
 
@@ -110,9 +124,9 @@ def owner_register():
 	if cellnumber == "":
 		errormsg = "Cell number is blank"
 	else:
-		data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
+		num_existing_cellnumber = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True).fetchone()
 
-		if len(data) > 0:
+		if num_existing_cellnumber > 0:
 			errormsg = "Account already exist"
 
 	if password != "" and confirmPassword != "":
@@ -128,12 +142,24 @@ def owner_register():
 			errormsg = "Please confirm your password"
 
 	if errormsg == "":
-		info = json.dumps({ "pushToken": "", "owner": True })
-		owner = Owner(cellnumber, generate_password_hash(password), "", "", '{}', info)
-		db.session.add(owner)
-		db.session.commit()
+		data = {
+			"cellnumber": cellnumber,
+			"password": generate_password_hash(password),
+			"username": "",
+			"profile": "{}",
+			"hours": "{}",
+			"info": json.dumps({ "pushToken": "", "owner": True, "signin": False })
+		}
 
-		return { "id": owner.id }
+		insert_data = []
+		columns = []
+		for key in data:
+			columns.append(key)
+			insert_data.append("'" + data[key] + "'")
+
+		id = query("insert into owner (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
+
+		return { "id": id }
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -145,12 +171,15 @@ def save_user_info():
 	errormsg = ""
 	status = ""
 
-	owner = Owner.query.filter_by(id=id).first()
+	owner = query("select * from owner where id = " + str(id), True).fetchone()
+	update_data = []
 
 	if username == "":
 		errormsg = "Please provide a username for identification"
 
 	isWeb = request.form.get("web")
+
+	new_profile = json.dumps({"name": "", "width": 0, "height": 0})
 
 	if isWeb != None:
 		profile = json.loads(request.form['profile'])
@@ -162,7 +191,7 @@ def save_user_info():
 
 			writeToFile(uri, name)
 
-			owner.profile = json.dumps({"name": name, "width": int(size["width"]), "height": int(size["height"])})
+			new_profile = json.dumps({"name": name, "width": int(size["width"]), "height": int(size["height"])})			
 	else:
 		profilepath = request.files.get('profile', False)
 		profileexist = False if profilepath == False else True
@@ -174,13 +203,14 @@ def save_user_info():
 			size = json.loads(request.form['size'])
 
 			profile.save(os.path.join('static', imagename))
-			owner.profile = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
+			new_profile = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
 	
 	if errormsg == "":
-		owner.username = username
-		owner.hours = hours
+		update_data.append("username = '" + username + "'")
+		update_data.append("hours = '" + hours + "'")
+		update_data.append("profile = '" + new_profile + "'")
 
-		db.session.commit()
+		query("update owner set " + ", ".join(update_data) + " where id = " + str(owner["id"]))
 
 		return { "msg": "success" }
 
@@ -195,82 +225,86 @@ def add_owner():
 	confirmPassword = request.form['confirmPassword']
 	hours = request.form['hours']
 
-	data = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True)
+	owner = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if len(data) == 0:
-		location = Location.query.filter_by(id=id).first()
+	location = query("select * from location where id = " + str(id), True).fetchone()
+	cellnumber_exist = query("select count(*) as num from owner where cellnumber = '" + str(cellnumber) + "'", True).fetchone()["num"]
 
-		if location != None:
-			if username == "":
-				errormsg = "Please provide a username for identification"
+	if owner == None:
+		if username == "":
+			errormsg = "Please provide a username for identification"
 
-			if cellnumber == "":
-				errormsg = "Cell number is blank"
-			else:
-				cellnumber_exist = Owner.query.filter_by(cellnumber=cellnumber).count()
-
-				if cellnumber_exist > 0:
-					errormsg = "Cell number already used"
-
-			if password != "" and confirmPassword != "":
-				if len(password) >= 6:
-					if password != confirmPassword:
-						errormsg = "Password is mismatch"
-				else:
-					errormsg = "Password needs to be atleast 6 characters long"
-			else:
-				if password == "":
-					errormsg = "Please enter a password"
-				else:
-					errormsg = "Please confirm your password"
-
-			isWeb = request.form.get("web")
-			profileData = json.dumps({"name": "", "width": 0, "height": 0})
-
-			if isWeb != None:
-				profile = json.loads(request.form['profile'])
-				imagename = profile['name']
-
-				if imagename != "":
-					uri = profile['uri'].split(",")[1]
-					size = profile['size']
-
-					writeToFile(uri, imagename)
-
-					profileData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
-			else:
-				profilepath = request.files.get('profile', False)
-				profileexist = False if profilepath == False else True
-
-				if profileexist == True:
-					profile = request.files['profile']
-					imagename = profile.filename
-
-					size = json.loads(request.form['size'])
-					
-					profile.save(os.path.join('static', imagename))
-					profileData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
-				else:
-					errormsg = "Please provide a profile for identification"
-
-			if errormsg == "":
-				password = generate_password_hash(password)
-				owner = Owner(cellnumber, password, username, profileData, hours, json.dumps({"pushToken": "", "owner": False}))
-				db.session.add(owner)
-
-				location = Location.query.filter_by(id=id).first()
-				owners = json.loads(location.owners)
-				owners.append(str(owner.id))
-
-				location.owners = json.dumps(owners)
-
-				db.session.commit()
-
-				return { "id": owner.id, "msg": "New owner added by an owner" }
+		if cellnumber == "":
+			errormsg = "Cell number is blank"
 		else:
-			errormsg = "Owner doesn't exist"
+			if cellnumber_exist > 0:
+				errormsg = "Cell number already used"
+
+		if password != "" and confirmPassword != "":
+			if len(password) >= 6:
+				if password != confirmPassword:
+					errormsg = "Password is mismatch"
+			else:
+				errormsg = "Password needs to be atleast 6 characters long"
+		else:
+			if password == "":
+				errormsg = "Please enter a password"
+			else:
+				errormsg = "Please confirm your password"
+
+		isWeb = request.form.get("web")
+		profileData = json.dumps({"name": "", "width": 0, "height": 0})
+
+		if isWeb != None:
+			profile = json.loads(request.form['profile'])
+			imagename = profile['name']
+
+			if imagename != "":
+				uri = profile['uri'].split(",")[1]
+				size = profile['size']
+
+				writeToFile(uri, imagename)
+
+				profileData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
+		else:
+			profilepath = request.files.get('profile', False)
+			profileexist = False if profilepath == False else True
+
+			if profileexist == True:
+				profile = request.files['profile']
+				imagename = profile.filename
+
+				size = json.loads(request.form['size'])
+				
+				profile.save(os.path.join('static', imagename))
+				profileData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
+
+		if errormsg == "":
+			data = {
+				"cellnumber": cellnumber,
+				"password": generate_password_hash(password),
+				"username": username,
+				"profile": profileData,
+				"hours": hours,
+				"info": json.dumps({"pushToken": "", "owner": False, "signin": False})
+			}
+
+			insert_data = []
+			columns = []
+			for key in data:
+				columns.append(key)
+				insert_data.append("'" + str(data[key]) + "'")
+
+			ownerid = query("insert into owner (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
+
+			owners = json.loads(location["owners"])
+			owners.append(str(ownerid))
+
+			query("update location set owners = '" + json.dumps(owners) + "' where id = " + str(location["id"]))
+
+			return { "id": ownerid, "msg": "New owner added by an owner" }
 	else:
 		errormsg = "Owner already exist"
 
@@ -281,36 +315,38 @@ def update_owner():
 	ownerid = request.form['ownerid']
 	type = request.form['type']
 
-	owner = Owner.query.filter_by(id=ownerid).first()
+	owner = query("select * from owner where id = " + str(ownerid), True).fetchone()
+
 	errormsg = ""
 	status = ""
+	new_data = {}
 
 	if owner != None:
 		if type == "cellnumber":
 			cellnumber = request.form['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 
-			if cellnumber != "" and owner.cellnumber != cellnumber:
-				exist_cellnumber = Owner.query.filter_by(cellnumber=cellnumber).count()
+			if cellnumber != "" and owner["cellnumber"] != cellnumber:
+				existing_cellnumber = query("select count(*) as num from owner where cellnumber = '" + str(cellnumber) + "'", True).fetchone()["num"]
 
-				if exist_cellnumber == 0:
-					owner.cellnumber = cellnumber
+				if existing_cellnumber == 0:
+					new_data["cellnumber"] = cellnumber
 				else:
 					errormsg = "This cell number is already taken"
 					status = "samecellnumber"
 		elif type == "username":
 			username = request.form['username']
 
-			if username != "" and owner.username != username:
-				exist_username = Owner.query.filter_by(username=username).count()
+			if username != "" and owner["username"] != username:
+				existing_username = query("select count(*) as num from owner where username = '" + username + "'", True).fetchone()["num"]
 
-				if exist_username == 0:
-					owner.username = username
+				if existing_username == 0:
+					new_data["username"] = username
 				else:
 					errormsg = "The username is already taken"
 					status = "sameusername"
 		elif type == "profile":
 			isWeb = request.form.get("web")
-			oldprofile = json.loads(owner.profile)
+			oldprofile = json.loads(owner["profile"])
 
 			if isWeb != None:
 				profile = json.loads(request.form['profile'])
@@ -325,8 +361,7 @@ def update_owner():
 
 					writeToFile(uri, imagename)
 
-					newprofilename = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
-					owner.profile = newprofilename
+					new_data["profile"] = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
 			else:
 				profilepath = request.files.get('profile', False)
 				profileexist = False if profilepath == False else True
@@ -342,21 +377,20 @@ def update_owner():
 
 					profile.save(os.path.join('static', imagename))
 
-					newprofilename = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
-					owner.profile = newprofilename
+					new_data["profile"] = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
 		elif type == "password":
 			currentPassword = request.form['currentPassword']
 			newPassword = request.form['newPassword']
 			confirmPassword = request.form['confirmPassword']
 
-			if check_password_hash(owner.password, currentPassword):
+			if check_password_hash(owner["password"], currentPassword):
 				if newPassword != "" and confirmPassword != "":
 					if newPassword != "" and confirmPassword != "":
 						if len(newPassword) >= 6:
 							if newPassword == confirmPassword:
 								password = generate_password_hash(newPassword)
 
-								owner.password = password
+								new_data["password"] = password
 							else:
 								errormsg = "Password is mismatch"
 						else:
@@ -377,12 +411,17 @@ def update_owner():
 			hours = request.form['hours']
 
 			if hours != "{}":
-				owner.hours = hours
+				new_data["hours"] = hours
 
 		if errormsg == "":
-			db.session.commit()
+			update_data = []
+			for key in new_data:
+				if key != "table":
+					update_data.append(key + " = '" + new_data[key] + "'")
 
-			return { "id": owner.id, "msg": "Owner's info updated" }
+			query("update owner set " + ", ".join(update_data) + " where id = " + str(ownerid))
+
+			return { "id": owner["id"], "msg": "Owner's info updated" }
 	else:
 		errormsg = "Owner doesn't exist"
 
@@ -395,12 +434,10 @@ def set_owner_hours():
 	ownerid = content['ownerid']
 	hours = content['hours']
 
-	owner = Owner.query.filter_by(id=ownerid).first()
+	owner = query("select * from owner where id = " + str(ownerid), True).fetchone()
 
 	if owner != None:
-		owner.hours = json.dumps(hours)
-
-		db.session.commit()
+		query("update owner set hours = '" + json.dumps(hours) + "' where id = " + str(ownerid))
 
 		return { "msg": "hours updated" }
 	else:
@@ -413,17 +450,15 @@ def update_owner_notification_token():
 	ownerid = content['ownerid']
 	token = content['token']
 
-	owner = Owner.query.filter_by(id=ownerid).first()
+	owner = query("select * from owner where id = " + str(ownerid), True).fetchone()
 	errormsg = ""
 	status = ""
 
 	if owner != None:
-		ownerInfo = json.loads(owner.info)
+		ownerInfo = json.loads(owner["info"])
 		ownerInfo["pushToken"] = token
 
-		owner.info = json.dumps(ownerInfo)
-
-		db.session.commit()
+		query("update owner set info = '" + str(json.dumps(ownerInfo)) + "' where id = " + str(ownerid))
 
 		return { "msg": "Push token updated" }
 	else:
@@ -433,10 +468,10 @@ def update_owner_notification_token():
 
 @app.route("/get_workers/<id>")
 def get_workers(id):
-	location = Location.query.filter_by(id=id).first()
+	location = query("select * from location where id = " + str(id), True).fetchone()
 
-	workers = json.loads("[" + location.owners[1:-1] + "]")
-	datas = Owner.query.filter(Owner.id.in_(workers)).all()
+	workers = "(" + location["owners"][1:-1] + ")"
+	datas = query("select * from owner where id in " + workers, True).fetchall()
 
 	owners = []
 	row = []
@@ -444,11 +479,12 @@ def get_workers(id):
 	numWorkers = 0
 
 	for data in datas:
+		profile = json.loads(data["profile"])
 		row.append({
 			"key": "worker-" + str(key),
-			"id": data.id,
-			"username": data.username,
-			"profile": json.loads(data.profile)
+			"id": data["id"],
+			"username": data["username"],
+			"profile": profile if profile["name"] != "" else {"width": 360, "height": 360}
 		})
 		key += 1
 		numWorkers += 1
@@ -470,13 +506,13 @@ def get_workers(id):
 
 @app.route("/get_worker_info/<id>")
 def get_worker_info(id):
-	owner = Owner.query.filter_by(id=id).first()
+	owner = query("select * from owner where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 	daysArr = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 	if owner != None:
-		hours = json.loads(owner.hours)
+		hours = json.loads(owner["hours"])
 		days = {}
 
 		for time in hours:
@@ -488,17 +524,18 @@ def get_worker_info(id):
 					}
 				else:
 					if hours[time]["takeShift"] != "":
-						coworker = Owner.query.filter_by(id=hours[time]["takeShift"]).first()
-						coworkerHours = json.loads(coworker.hours)
+						coworker = query("select * from owner where id = " + str(hours[time]["takeShift"]), True).fetchone()
+						coworkerHours = json.loads(coworker["hours"])
 
 						days[time] = {
 							"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
 							"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
 						}
 
+		profile = json.loads(owner["profile"])
 		info = {
-			"username": owner.username,
-			"profile": json.loads(owner.profile),
+			"username": owner["username"],
+			"profile": profile if profile["name"] != "" else {"width": 360, "height": 360},
 			"days": days
 		}
 
@@ -510,44 +547,44 @@ def get_worker_info(id):
 
 @app.route("/get_all_workers_time/<id>")
 def get_all_workers_time(id):
-	location = Location.query.filter_by(id=id).first()
+	location = query("select * from location where id = " + str(id), True).fetchone()
 
-	workers = json.loads("[" + location.owners[1:-1] + "]")
-	owners = Owner.query.filter(Owner.id.in_(workers)).all()
+	workers = "(" + location["owners"][1:-1] + ")"
+	owners = query("select * from owner where id in " + workers, True).fetchall()
 	workers = {}
 
 	for owner in owners:
-		hours = json.loads(owner.hours)
+		hours = json.loads(owner["hours"])
 
 		for time in hours:
 			if hours[time]["working"] == True or hours[time]["takeShift"] != "":
 				if hours[time]["working"] == True:
 					if time not in workers:
 						workers[time] = [{
-							"workerId": owner.id,
+							"workerId": owner["id"],
 							"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
 							"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
 						}]
 					else:
 						workers[time].append({
-							"workerId": owner.id,
+							"workerId": owner["id"],
 							"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
 							"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
 						})
 				else:
 					if hours[time]["takeShift"] != "":
-						coworker = Owner.query.filter_by(id=hours[time]["takeShift"]).first()
-						coworkerHours = json.loads(coworker.hours)
+						coworker = query("select * from id = " + str(hours[time]["takeShift"]), True).fetchone()
+						coworkerHours = json.loads(coworker["hours"])
 
 						if time not in workers:
 							workers[time] = [{
-								"workerId": owner.id,
+								"workerId": owner["id"],
 								"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
 								"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
 							}]
 						else:
 							workers[time].append({
-								"workerId": owner.id,
+								"workerId": owner["id"],
 								"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
 								"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
 							})
@@ -561,26 +598,26 @@ def search_workers():
 	scheduleid = content['scheduleid']
 	username = content['username']
 
-	schedule = Schedule.query.filter_by(id=scheduleid).first()
+	schedule = query("select * from schedule where id = " + str(scheduleid), True).fetchone()
+	location = query("select * from location where id = " + str(schedule.locationId), True).fetchone()
+
 	errormsg = ""
 	status = ""
 
 	if schedule != None:
-		locationId = str(schedule.locationId)
-
-		location = Location.query.filter_by(id=locationId).first()
-		workers = "[" + location.owners[1:-1] + "]"
-		datas = query("select * from owner where username like '%" + username + "%' and id in " + workers, True)
+		workers = "(" + location["owners"][1:-1] + ")"
+		datas = query("select * from owner where username like '%" + username + "%' and id in " + workers, True).fetchall()
 		owners = []
 		row = []
 		key = 0
 
 		for data in datas:
+			profile = json.loads(data["profile"])
 			row.append({
 				"key": "worker-" + str(key),
 				"id": data['id'],
 				"username": data['username'],
-				"profile": data["profile"],
+				"profile": profile if profile["name"] != "" else {"width": 360, "height": 360},
 				"selected": False
 			})
 			key += 1
@@ -606,10 +643,10 @@ def search_workers():
 
 @app.route("/get_workers_time/<id>") # salon profile
 def get_workers_time(id):
-	location = Location.query.filter_by(id=id).first()
+	location = query("select * from location where id = " + str(id), True).fetchone()
 
-	workers = json.loads("[" + location.owners[1:-1] + "]")
-	owners = Owner.query.filter(Owner.id.in_(workers)).all()
+	workers = "(" + location["owners"][1:-1] + ")"
+	owners = query("select * from owner where id in " + workers, True).fetchall()
 	workerHours = []
 
 	for owner in owners:
@@ -623,7 +660,7 @@ def get_workers_time(id):
 			{ "key": "6", "header": "Saturday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" }
 		]
 
-		data = json.loads(owner.hours)
+		data = json.loads(owner["hours"])
 		day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
 		for k, info in enumerate(hours):
@@ -662,11 +699,12 @@ def get_workers_time(id):
 
 			hours[k] = info
 
+		profile = json.loads(owner["profile"])
 		workerHours.append({ 
-			"key": str(owner.id),
+			"key": str(owner["id"]),
 			"day": info["header"],
-			"name": owner.username,
-			"profile": json.loads(owner.profile),
+			"name": owner["username"],
+			"profile": profile if profile["name"] != "" else {"width": 360, "height": 360},
 			"hours": hours
 		})
 
@@ -682,22 +720,23 @@ def get_other_workers():
 	locationid = content['locationid']
 	day = content['day']
 
-	location = Location.query.filter_by(id=locationid).first()
+	location = query("select * from location where id = " + str(locationid), True).fetchone()
 	
 	if location != None:
-		workers = json.loads("[" + location.owners[1:-1] + "]")
-		owners = Owner.query.filter(Owner.id.in_(workers), Owner.id!=ownerid).all()
+		workers = "(" + location["owners"][1:-1] + ")"
+		owners = query("select * from owner where id in " + workers + " and not id = " + str(ownerid), True).fetchall()
 		workers = []
 		row = []
 		rownum = 0
 
 		for owner in owners:
-			hours = json.loads(owner.hours)
+			hours = json.loads(owner["hours"])
 
 			for time in hours:
 				if time == day:
 					if hours[time]["working"] == False and hours[time]["takeShift"] == "":
-						row.append({ "key": str(rownum), "id": owner.id, "username": owner.username, "profile": json.loads(owner.profile) })
+						profile = json.loads(owner["profile"])
+						row.append({ "key": str(rownum), "id": owner["id"], "username": owner["username"], "profile": profile if profile["name"] != "" else {"width": 360, "height": 360 } })
 						rownum += 1
 
 						if len(row) == 3:
@@ -721,23 +760,22 @@ def get_other_workers():
 
 @app.route("/delete_owner/<id>")
 def delete_owner(id):
-	owner = Owner.query.filter_by(id=id).first()
+	owner = query("select * from owner where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 
 	if owner != None:
-		info = json.loads(owner.info)
+		info = json.loads(owner["info"])
 
-		location = Location.query.filter_by(id=info["locationId"]).first()
-		owners = json.loads(location.owners)
+		location = query("select * from location where id = " + str(info["locationId"]), True).fetchone()
+		owners = json.loads(location["owners"])
 
 		if str(id) in owners:
 			owners.remove(str(id))
 
 			location.owners = json.dumps(owners)
 
-		db.session.delete(owner)
-		db.session.commit()
+		query("delete from owner where id = " + str(id))
 
 		return { "msg": "Owner deleted" }
 	else:
@@ -747,17 +785,16 @@ def delete_owner(id):
 
 @app.route("/get_owner_info/<id>")
 def get_owner_info(id):
-	owner = Owner.query.filter_by(id=id).first()
+	owner = query("select * from owner where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if owner != None:
-		ownerInfo = json.loads(owner.info)
+	if len(owner) > 0:
+		owner = owner[0]
 
-		info = {
-			"id": id,
-			"isOwner": ownerInfo["owner"]
-		}
+		ownerInfo = json.loads(owner["info"])
+
+		info = { "id": id, "isOwner": ownerInfo["owner"] }
 
 		return info
 	else:
@@ -765,73 +802,15 @@ def get_owner_info(id):
 
 	return { "errormsg": errormsg, "status": status }
 
-@app.route("/add_bankaccount", methods=["POST"])
-def add_bankaccount():
-	content = request.get_json()
-
-	locationid = content['locationid']
-	banktoken = content['banktoken']
-
-	location = Location.query.filter_by(id=locationid).first()
-	errormsg = ""
-	status = ""
-
-	if location != None:
-		locationInfo = json.loads(location.info)
-		accountid = locationInfo["accountId"]
-
-		stripe.Account.create_external_account(
-			accountid,
-			external_account=banktoken
-		)
-
-		return { "msg": "Added a bank account" }
-	else:
-		errormsg = "Owner doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/update_bankaccount", methods=["POST"])
-def update_bankaccount():
-	content = request.get_json()
-
-	locationid = content['locationid']
-	oldbanktoken = content['oldbanktoken']
-	banktoken = content['banktoken']
-
-	location = Location.query.filter_by(id=locationid).first()
-	errormsg = ""
-	status = ""
-
-	if location != None:
-		locationInfo = json.loads(location.info)
-		accountid = locationInfo["accountId"]
-
-		stripe.Account.delete_external_account(
-			accountid,
-			oldbanktoken
-		)
-
-		stripe.Account.create_external_account(
-			accountid,
-			external_account=banktoken
-		)
-
-		return { "msg": "Updated a bank account" }
-	else:
-		errormsg = "Owner doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
 @app.route("/get_accounts/<id>")
 def get_accounts(id):
-	location = Location.query.filter_by(id=id).first()
-	owners = json.loads(location.owners)
-	locationHours = json.loads(location.hours)
+	location = query("select * from location where id = " + str(id), True).fetchone()
+	owners = json.loads(location["owners"])
+	locationHours = json.loads(location["hours"])
 	accounts = []
 
 	for owner in owners:
-		ownerInfo = Owner.query.filter_by(id=owner).first()
+		ownerInfo = query("select * from owner where id = " + str(owner), True).fetchone()
 
 		hours = [
 			{ "key": "0", "header": "Sunday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" },
@@ -843,17 +822,17 @@ def get_accounts(id):
 			{ "key": "6", "header": "Saturday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "working": True, "takeShift": "" }
 		]
 
-		if "Sun" in ownerInfo.hours:
-			data = json.loads(ownerInfo.hours)
+		if "Sun" in ownerInfo["hours"]:
+			data = json.loads(ownerInfo["hours"])
 			day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
 			for k, info in enumerate(hours):
 				if data[day[k][:3]]["takeShift"] != "":
-					worker = Owner.query.filter_by(id=data[day[k][:3]]["takeShift"]).first()
+					worker = query("select * from owner where id = " + str(data[day[k][:3]]["takeShift"]), True).fetchone()
 
-					info["takeShift"] = { "id": worker.id, "name": worker.username }
+					info["takeShift"] = { "id": worker["id"], "name": worker["username"] }
 
-					workerHours = json.loads(worker.hours)
+					workerHours = json.loads(worker["hours"])
 					hoursInfo = workerHours[day[k][:3]]
 				else:
 					info["takeShift"] = ""
@@ -897,7 +876,7 @@ def get_accounts(id):
 		else:
 			hours = []
 
-		cellnumber = ownerInfo.cellnumber
+		cellnumber = ownerInfo["cellnumber"]
 
 		f3 = str(cellnumber[0:3])
 		s3 = str(cellnumber[3:6])
@@ -905,153 +884,35 @@ def get_accounts(id):
 
 		cellnumber = "(" + f3 + ") " + s3 + "-" + l4
 
+		profile = json.loads(ownerInfo["profile"])
 		accounts.append({
 			"key": "account-" + str(owner), 
 			"id": owner, 
 			"cellnumber": cellnumber,
-			"username": ownerInfo.username,
-			"profile": json.loads(ownerInfo.profile) if "name" in ownerInfo.profile else "",
+			"username": ownerInfo["username"],
+			"profile": profile if profile["name"] != "" else {"width": 360, "height": 360},
 			"hours": hours
 		})
 
 	return { "accounts": accounts }
 
-@app.route("/get_bankaccounts/<id>")
-def get_bankaccounts(id):
-	content = request.get_json()
-
-	location = Location.query.filter_by(id=id).first()
-	locationInfo = json.loads(location.info)
-	accountid = locationInfo["accountId"]
-	bankaccounts = []
-
-	accounts = stripe.Account.list_external_accounts(
-		accountid,
-		object="bank_account"
-	)
-	datas = accounts.data
-
-	for k, data in enumerate(datas):
-		bankaccounts.append({
-			"key": "bankaccount-" + str(k),
-			"id": str(k),
-			"bankid": data.id,
-			"bankname": data.bank_name,
-			"number": "****" + str(data.last4),
-			"default": data.default_for_currency
-		})
-
-	return { "bankaccounts": bankaccounts, "msg": "get bank accounts" }
-
-@app.route("/set_bankaccountdefault", methods=["POST"])
-def set_bankaccountdefault():
-	content = request.get_json()
-
-	locationid = content['locationid']
-	bankid = content['bankid']
-
-	location = Location.query.filter_by(id=locationid).first()
-	errormsg = ""
-	status = ""
-
-	if location != None:
-		locationInfo = json.loads(location.info)
-		accountid = locationInfo["accountId"]
-
-		stripe.Account.modify_external_account(
-			accountid,
-			bankid,
-			default_for_currency=True
-		)
-
-		return { "msg": "Bank account set as default" }
-	else:
-		errormsg = "Location doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/get_bankaccount_info", methods=["POST"])
-def get_bankaccount_info():
-	content = request.get_json()
-
-	locationid = content['locationid']
-	bankid = content['bankid']
-
-	location = Location.query.filter_by(id=locationid).first()
-	errormsg = ""
-	status = ""
-
-	if location != None:
-		locationInfo = json.loads(location.info)
-		accountid = locationInfo["accountId"]
-
-		accounts = stripe.Account.retrieve(accountid)
-		datas = accounts.external_accounts.data
-
-		for data in datas:
-			if data.id == bankid:
-				routing_number = data.routing_number
-
-				transit = routing_number[4:]
-				institution = routing_number[1:4]
-
-				info = {
-					"account_holder_name": data.account_holder_name,
-					"last4": data.last4,
-					"transit_number": transit,
-					"institution_number": institution
-				}
-
-				return { "bankaccountInfo": info }
-
-		errormsg = "Bank doesn't exist"
-	else:
-		errormsg = "Location doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/delete_bankaccount", methods=["POST"])
-def delete_bankaccount():
-	content = request.get_json()
-
-	locationid = content['locationid']
-	bankid = content['bankid']
-
-	location = Location.query.filter_by(id=locationid).first()
-	errormsg = ""
-	status = ""
-
-	if location != None:
-		locationInfo = json.loads(location.info)
-		accountid = locationInfo["accountId"]
-
-		stripe.Account.delete_external_account(
-			accountid,
-			bankid
-		)
-
-		return { "msg": "Bank account deleted" }
-	else:
-		errormsg = "Location doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
 @app.route("/get_reset_code/<cellnumber>")
 def get_owner_reset_code(cellnumber):
-
 	cellnumber = cellnumber.replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
-	owner = Owner.query.filter_by(cellnumber=cellnumber).first()
+	owner = query("select * from owner where cellnumber = " + str(cellnumber), True)
 	errormsg = ""
 	status = ""
 
-	if owner != None:
+	if len(owner) > 0:
+		owner = owner[0]
+
 		code = getRanStr()
 
 		if test_sms == False:
 			message = client.messages.create(
 				body="Your EasyGO reset code is " + code,
 				messaging_service_sid=mss,
-				to='+1' + str(owner.cellnumber)
+				to='+1' + str(owner["cellnumber"])
 			)
 
 		return { "msg": "Reset code sent", "code": code }
@@ -1068,21 +929,21 @@ def owner_reset_password():
 	password = content['newPassword']
 	confirmPassword = content['confirmPassword']
 
-	owner = Owner.query.filter_by(cellnumber=cellnumber).first()
+	owner = query("select * from owner where cellnumber = " + str(cellnumber), True)
 	errormsg = ""
 	status = ""
 
-	if owner != None:
+	if len(owner) > 0:
+		owner = owner[0]
+
 		if password != '' and confirmPassword != '':
 			if len(password) >= 6:
 				if password == confirmPassword:
 					password = generate_password_hash(password)
 
-					owner.password = password
+					query("update owner set password = " + str(password) + " where id = " + str(cellnumber))
 
-					db.session.commit()
-
-					ownerid = owner.id
+					ownerid = owner["id"]
 
 					data = query("select * from location where owners like '%\"" + str(ownerid) + "\"%'", True)
 

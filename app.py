@@ -25,7 +25,7 @@ app.config['MYSQL_USER'] = user
 app.config['MYSQL_PASSWORD'] = password
 app.config['MYSQL_DB'] = database
 
-db = SQLAlchemy(app)
+db.init_app(app)
 migrate = Migrate(app, db, compare_type=True)
 
 app.wsgi_app = DispatcherMiddleware(None, {

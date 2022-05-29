@@ -17,23 +17,18 @@ def welcome_services():
 
 @app.route("/get_service_info/<id>")
 def get_service_info(id):
-	service = Service.query.filter_by(id=id).first()
+	service = query("select * from service where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if service != None:
-		image = json.loads(service.image)
-		info = {
-			"name": service.name,
-			"image": image if image["name"] != "" else {"width": 300, "height": 300},
-			"price": float(service.price)
-		}
+	image = json.loads(service["image"])
+	info = {
+		"name": service["name"],
+		"serviceImage": image if image["name"] != "" else {"width": 300, "height": 300},
+		"price": float(service["price"])
+	}
 
-		return { "serviceInfo": info }
-	else:
-		errormsg = "Service doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
+	return { "serviceInfo": info }
 
 @app.route("/add_service", methods=["POST"])
 def add_service():
@@ -42,56 +37,61 @@ def add_service():
 	name = request.form['name']
 	price = request.form['price']
 
-	location = Location.query.filter_by(id=locationid).first()
-	info = json.loads(location.info)
+	location = query("select * from location where id = " + str(locationid), True).fetchone()
+	info = json.loads(location["info"])
 	info["listed"] = True
-	location.info = json.dumps(info)
 
 	errormsg = ""
 	status = ""
 
-	if location != None:
-		data = query("select * from service where locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "' and name = '" + name + "'", True)
+	numServices = query("select count(*) as num from service where locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "' and name = '" + name + "'", True).fetchone()["num"]
 
-		if len(data) == 0:
-			isWeb = request.form.get("web")
-			imageData = json.dumps({"name": "", "width": 0, "height": 0})
+	if numServices == 0:
+		isWeb = request.form.get("web")
+		imageData = json.dumps({"name": "", "width": 0, "height": 0})
 
-			if isWeb != None:
-				image = json.loads(request.form['image'])
-				imagename = image["name"]
+		if isWeb != None:
+			image = json.loads(request.form['image'])
+			imagename = image["name"]
 
-				if imagename != "":
-					uri = image['uri'].split(",")[1]
-					size = image['size']
+			if imagename != "":
+				uri = image['uri'].split(",")[1]
+				size = image['size']
 
-					writeToFile(uri, imagename)
+				writeToFile(uri, imagename)
 
-					imageData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
-			else:
-				imagepath = request.files.get('image', False)
-				imageexist = False if imagepath == False else True
-
-				if imageexist == True:
-					image = request.files['image']
-					imagename = image.filename
-
-					size = json.loads(request.form['size'])
-
-					image.save(os.path.join("static", imagename))
-					imageData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
-
-			if errormsg == "":
-				service = Service(locationid, menuid, name, imageData, price)
-
-				db.session.add(service)
-				db.session.commit()
-
-				return { "id": service.id }
+				imageData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
 		else:
-			errormsg = "Service already exist"
+			imagepath = request.files.get('image', False)
+			imageexist = False if imagepath == False else True
+
+			if imageexist == True:
+				image = request.files['image']
+				imagename = image.filename
+
+				size = json.loads(request.form['size'])
+
+				image.save(os.path.join("static", imagename))
+				imageData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
+
+		if errormsg == "":
+			data = {
+				"locationId": locationid, "menuId": menuid, "name": name, "image": imageData,
+				"price": price
+			}
+			columns = []
+			insert_data = []
+
+			for key in data:
+				columns.append(key)
+				insert_data.append("'" + str(data[key]) + "'")
+
+			id = query("insert into service (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
+			query("update location set info = '" + json.dumps(info) + "' where id = " + str(locationid))
+
+			return { "id": id }
 	else:
-		errormsg = "Location doesn't exist"
+		errormsg = "Service already exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -103,86 +103,79 @@ def update_service():
 	name = request.form['name']
 	price = request.form['price']
 
-	location = Location.query.filter_by(id=locationid).first()
+	location = query("select * from location where id = " + str(locationid), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if location != None:
-		service = Service.query.filter_by(id=serviceid, locationId=locationid, menuId=menuid).first()
+	service = query("select * from service where id = " + str(serviceid) + " and locationId = " + str(locationid) + " and menuId = " + str(menuid), True).fetchone()
 
-		if service != None:
-			service.name = name
-			service.price = price
+	service.name = name
+	service.price = price
 
-			isWeb = request.form.get("web")
-			oldimage = json.loads(service.image)
+	isWeb = request.form.get("web")
+	oldimage = json.loads(service.image)
 
-			if isWeb != None:
-				image = json.loads(request.form['image'])
-				imagename = image['name']
+	if isWeb != None:
+		image = json.loads(request.form['image'])
+		imagename = image['name']
 
-				if imagename != '' and "data" in image['uri']:
-					uri = image['uri'].split(",")[1]
-					size = image['size']
+		if imagename != '' and "data" in image['uri']:
+			uri = image['uri'].split(",")[1]
+			size = image['size']
 
-					if oldimage["name"] != "" and os.path.exists(os.path.join("static", oldimage["name"])) == True:
-						os.remove("static/" + oldimage["name"])
+			if oldimage["name"] != "" and os.path.exists(os.path.join("static", oldimage["name"])) == True:
+				os.remove("static/" + oldimage["name"])
 
-					writeToFile(uri, imagename)
+			writeToFile(uri, imagename)
 
-					newimagename = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
-					service.image = newimagename
-			else:
-				imagepath = request.files.get('image', False)
-				imageexist = False if imagepath == False else True
-
-				if imageexist == True:
-					image = request.files['image']
-					size = json.loads(request.form['size'])
-					imagename = image.filename
-
-					if oldimage["name"] != imagename:
-						if oldimage["name"] != "" and os.path.exists("static/" + oldimage["name"]):
-							os.remove("static/" + oldimage["name"])
-
-						image.save(os.path.join('static', imagename))
-
-						newimagename = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
-						service.image = newimagename
-
-			if errormsg == "":
-				db.session.commit()
-
-				return { "msg": "service updated", "id": service.id }
-		else:
-			errormsg = "Service already exist"
+			service["image"] = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
 	else:
-		errormsg = "Location doesn't exist"
+		imagepath = request.files.get('image', False)
+		imageexist = False if imagepath == False else True
 
-	return { "errormsg": errormsg, "status": status }, 400
+		if imageexist == True:
+			image = request.files['image']
+			size = json.loads(request.form['size'])
+			imagename = image.filename
+
+			if oldimage["name"] != imagename:
+				if oldimage["name"] != "" and os.path.exists("static/" + oldimage["name"]):
+					os.remove("static/" + oldimage["name"])
+
+				image.save(os.path.join('static', imagename))
+
+				service["image"] = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
+
+	if errormsg == "":
+		update_data = []
+		for key in service:
+			update_data.append(key + " = '" + service[key] + "'")
+
+		query("update service set " + ", ".join(update_data) + " where id = " + str(service["id"]))
+
+		return { "msg": "service updated", "id": service.id }
 
 @app.route("/remove_service/<id>")
 def remove_service(id):
-	service = Service.query.filter_by(id=id).first()
+	service = query("select * from service where id = " + str(id), True).fetchone()
 
-	if service != None:
-		image = json.loads(service.image)
+	image = json.loads(service.image)
 
-		if image["name"] != "" and os.path.exists("static/" + image["name"]):
-			os.remove("static/" + image["name"])
+	if image["name"] != "" and os.path.exists("static/" + image["name"]):
+		os.remove("static/" + image["name"])
 
-		db.session.delete(service)
+	query("delete from service where id = " + str(id))
 
-		location = Location.query.filter_by(id=service.locationId).first()
-		info = json.loads(location.info)
+	location = query("select * from location where id = " + str(service.locationId), True).fetchone()
+	info = json.loads(location["info"])
 
-		numMenus = Menu.query.filter_by(locationId=location.id).count() + Service.query.filter_by(locationId=location.id).count() + Product.query.filter_by(locationId=location.id).count() + len(info["menuPhotos"])
+	numMenus = query("select count(*) as num from menu where locationId = " + str(location["id"]), True).fetchone()["num"]
+	numMenus += query("select count(*) as num from service where locationId = " + str(location["id"]), True).fetchone()["num"]
+	numMenus += query("select count(*) as num from product where locationId = " + str(location["id"]), True).fetchone()["num"]
+	numMenus += len(info["menuPhotos"])
 
-		info["listed"] = True if numMenus > 0 else False
-		location.info = json.dumps(info)
+	info["listed"] = True if numMenus > 0 else False
 
-		db.session.commit()
+	query("update location set info = '" + str(json.dumps(info)) + "' where id = " + str(location["id"]))
 
-		return { "msg": "" }
-
-	return { "errormsg": "Service doesn't exist" }
+	return { "msg": "success" }

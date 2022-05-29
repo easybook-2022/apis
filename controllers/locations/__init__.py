@@ -30,58 +30,61 @@ def setup_location():
 	latitude = request.form['latitude']
 	ownerid = request.form['ownerid']
 
-	owner = Owner.query.filter_by(id=ownerid).first()
+	owner = query("select * from owner where id = " + str(ownerid), True).fetchone()
 
 	errormsg = ""
 	status = ""
 
-	if owner != None:
-		location = Location.query.filter_by(phonenumber=phonenumber).first()
+	location = query("select * from location where phonenumber = '" + str(phonenumber) + "'", True).fetchone()
 
-		if location == None:
-			isWeb = request.form.get("web")
+	if location == None:
+		isWeb = request.form.get("web")
 
-			if isWeb != None:
-				logo = json.loads(request.form['logo'])
+		if isWeb != None:
+			logo = json.loads(request.form['logo'])
 
-				uri = logo['uri'].split(",")[1]
-				name = logo['name']
-				size = logo['size']
+			uri = logo['uri'].split(",")[1]
+			name = logo['name']
+			size = logo['size']
 
-				writeToFile(uri, name)
+			writeToFile(uri, name)
 
-				logoname = json.dumps({"name": name, "width": int(size["width"]), "height": int(size["height"]) })
-			else:
-				logopath = request.files.get('logo', False)
-				logoexist = False if logopath == False else True
-
-				if logoexist == True:
-					logo = request.files['logo']
-					imagename = logo.filename
-
-					logoname = json.dumps({"name": imagename, "width": 200, "height": 200})
-
-					logo.save(os.path.join('static', imagename))
-				else:
-					logoname = json.dumps({"name": "", "width": 0, "height": 0})
-
-			if errormsg == "":
-				locationInfo = json.dumps({"listed":False, "menuPhotos": [], "type": "stylist"})
-				location = Location(
-					storeName, addressOne, addressTwo, 
-					city, province, postalcode, phonenumber, logoname,
-					longitude, latitude, '["' + str(ownerid) + '"]',
-					type, hours, locationInfo
-				)
-
-				db.session.add(location)
-				db.session.commit()
-
-				return { "msg": "location setup", "id": location.id }
+			logoname = json.dumps({"name": name, "width": int(size["width"]), "height": int(size["height"]) })
 		else:
-			errormsg = "Location phone number already taken"
+			logopath = request.files.get('logo', False)
+			logoexist = False if logopath == False else True
+
+			if logoexist == True:
+				logo = request.files['logo']
+				imagename = logo.filename
+
+				logoname = json.dumps({"name": imagename, "width": 200, "height": 200})
+
+				logo.save(os.path.join('static', imagename))
+			else:
+				logoname = json.dumps({"name": "", "width": 0, "height": 0})
+
+		if errormsg == "":
+			locationInfo = json.dumps({"listed":False, "menuPhotos": [], "type": "stylist"})
+
+			data = {
+				"name": storeName, "addressOne": addressOne, "addressTwo": addressTwo, "city": city,
+				"province": province, "postalcode": postalcode, "phonenumber": phonenumber, "logo": logoname,
+				"longitude": longitude, "latitude": latitude, "owners": '["' + str(ownerid) + '"]', "type": type,
+				"hours": hours, "info": locationInfo
+			}
+			columns = []
+			insert_data = []
+
+			for key in data:
+				columns.append(key)
+				insert_data.append("'" + str(data[key]) + "'")
+
+			id = query("insert into location (" + ", ".join(columns) + ") output inserted.id values (" + ", ".join(insert_data) + ")", True).lastrowid
+
+			return { "msg": "location setup", "id": id }
 	else:
-		errormsg = "Owner doesn't exist"
+		errormsg = "Location phone number already taken"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -100,89 +103,76 @@ def update_location():
 	latitude = request.form['latitude']
 	ownerid = request.form['ownerid']
 
-	owner = Owner.query.filter_by(id=ownerid).first()
+	owner = query("select * from owner where id = " + str(ownerid), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if owner != None:
-		location = Location.query.filter_by(id=id).first()
+	location = query("select * from location where id = " + str(id), True).fetchone()
 
-		if location != None:
-			oldlogo = json.loads(location.logo)
+	oldlogo = json.loads(location["logo"])
 
-			isWeb = request.form.get("web")
+	isWeb = request.form.get("web")
 
-			if isWeb != None:
-				logo = json.loads(request.form['logo'])
-				imagename = logo['name']
+	if isWeb != None:
+		logo = json.loads(request.form['logo'])
+		imagename = logo['name']
 
-				if imagename != '':
-					uri = logo['uri'].split(",")[1]
-					size = logo['size']
+		if imagename != '':
+			uri = logo['uri'].split(",")[1]
+			size = logo['size']
 
-					if oldlogo["name"] != "" and os.path.exists(os.path.join("static", oldlogo["name"])) == True:
-						os.remove("static/" + oldlogo["name"])
+			if oldlogo["name"] != "" and os.path.exists(os.path.join("static", oldlogo["name"])) == True:
+				os.remove("static/" + oldlogo["name"])
 
-					writeToFile(uri, imagename)
+			writeToFile(uri, imagename)
 
-					location.logo = json.dumps({"name": imagename, "width": int(size['width']), "height": int(size['height'])})
-			else:
-				logopath = request.files.get('logo', False)
-				logoexist = False if logopath == False else True
-
-				if logoexist == True:
-					logo = request.files['logo']
-					imagename = logo.filename
-
-					size = json.loads(request.form['size'])
-					
-					if logo.filename != oldlogo["name"]:
-						if oldlogo["name"] != "" and oldlogo["name"] != None and os.path.exists("static/" + oldlogo["name"]):
-							os.remove("static/" + oldlogo["name"])
-
-						logo.save(os.path.join('static', imagename))
-
-					location.logo = json.dumps({"name": imagename, "width": size["width"], "height": size["height"]})
-
-			location.name = storeName
-			location.addressOne = addressOne
-			location.addressTwo = addressTwo
-			location.city = city
-			location.province = province
-			location.postalcode = postalcode
-			location.phonenumber = phonenumber
-			location.longitude = longitude
-			location.latitude = latitude
-
-			db.session.commit()
-
-			return { "msg": "location updated", "id": location.id }
-		else:
-			errormsg = "Location doesn't exist"
+			location["logo"] = json.dumps({"name": imagename, "width": int(size['width']), "height": int(size['height'])})
 	else:
-		errormsg = "Owner doesn't exist"
+		logopath = request.files.get('logo', False)
+		logoexist = False if logopath == False else True
 
-	return { "errormsg": errormsg, "status": status }, 400
+		if logoexist == True:
+			logo = request.files['logo']
+			imagename = logo.filename
+
+			size = json.loads(request.form['size'])
+			
+			if logo.filename != oldlogo["name"]:
+				if oldlogo["name"] != "" and oldlogo["name"] != None and os.path.exists("static/" + oldlogo["name"]):
+					os.remove("static/" + oldlogo["name"])
+
+				logo.save(os.path.join('static', imagename))
+
+			location["logo"] = json.dumps({"name": imagename, "width": size["width"], "height": size["height"]})
+
+	location["name"] = storeName
+	location["addressOne"] = addressOne
+	location["addressTwo"] = addressTwo
+	location["city"] = city
+	location["province"] = province
+	location["postalcode"] = postalcode
+	location["phonenumber"] = phonenumber
+	location["longitude"] = longitude
+	location["latitude"] = latitude
+
+	update_data = []
+	for key in location:
+		if key != "table":
+			update_data.append(key + " = '" + str(location[key]) + "'")
+
+	query("update location set " + ", ".join(update_data) + " where id = " + str(location["id"]))
+
+	return { "msg": "location updated", "id": location["id"] }
 
 @app.route("/fetch_num_appointments/<ownerid>")
 def fetch_num_appointments(ownerid):
-	numAppointments = query("select count(*) as num from schedule where status = 'confirmed' and workerId = " + str(ownerid), True)
+	numAppointments = query("select count(*) as num from schedule where status = 'confirmed' and workerId = " + str(ownerid), True).fetchone()["num"]
 
-	if len(numAppointments) == 1:
-		num = numAppointments[0]["num"]
-	else:
-		num = 0
-
-	return { "numAppointments": num }
+	return { "numAppointments": numAppointments }
 
 @app.route("/fetch_num_cartorderers/<id>")
 def fetch_num_cartorderers(id):
-	numCartorderers = query("select count(*) as num from cart where locationId = " + str(id) + " and (status = 'checkout' or status = 'ready' or status = 'requestedOrder') group by adder, orderNumber", True)
-
-	if len(numCartorderers) > 0:
-		numCartorderers = len(numCartorderers)
-	else:
-		numCartorderers = 0
+	numCartorderers = query("select count(*) as num from cart where locationId = " + str(id) + " and (status = 'checkout' or status = 'ready' or status = 'requestedOrder') group by adder, orderNumber", True).fetchone()["num"]
 
 	return { "numCartorderers": numCartorderers }
 
@@ -190,29 +180,15 @@ def fetch_num_cartorderers(id):
 def set_type():
 	content = request.get_json()
 
-	ownerid = content['ownerid']
 	locationid = content['locationid']
 	type = content['type']
 
-	owner = Owner.query.filter_by(id=ownerid).first()
 	errormsg = ""
 	status = ""
 
-	if owner != None:
-		location = Location.query.filter_by(id=locationid).first()
+	query("update location set type = '" + type + "' where id = " + str(locationid))
 
-		if location != None:
-			location.type = type
-
-			db.session.commit()
-
-			return { "msg": "" }
-		else:
-			errormsg = "Location doesn't exist"
-	else:
-		errormsg = "Owner doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
+	return { "msg": "success" }
 
 @app.route("/set_location_hours", methods=["POST"])
 def set_location_hours():
@@ -221,20 +197,12 @@ def set_location_hours():
 	locationid = content['locationid']
 	hours = content['hours']
 
-	location = Location.query.filter_by(id=locationid).first()
 	errormsg = ""
 	status = ""
 
-	if location != None:
-		location.hours = json.dumps(hours)
+	query("update location set hours = '" + str(hours) + "' where id = " + str(locationid))
 
-		db.session.commit()
-
-		return { "msg": "hours updated" }
-	else:
-		errormsg = "Location doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
+	return { "msg": "hours updated" }
 
 @app.route("/set_receive_type", methods=["POST"])
 def set_receive_type():
@@ -243,21 +211,13 @@ def set_receive_type():
 	locationid = content['locationid']
 	type = content['type']
 
-	location = Location.query.filter_by(id=locationid).first()
+	location = query("select * from location where id = " + str(locationid), True).fetchone()
+	info = json.loads(location["info"])
+	info["type"] = type
 
-	if location != None:
-		info = json.loads(location.info)
-		info["type"] = type
+	query("update location set info = '" + json.dumps(info) + "' where id = " + str(locationid))
 
-		location.info = json.dumps(info)
-
-		db.session.commit()
-
-		return { "msg": "success" }
-	else:
-		errormsg = "Location doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
+	return { "msg": "success" }
 
 @app.route("/get_locations", methods=["POST"])
 def get_locations():
@@ -288,8 +248,8 @@ def get_locations():
 		# get restaurants
 		sql = "select * from location where type = 'restaurant' and info like '%\"listed\": true%' " + orderQuery + " limit 0, 10"
 		maxsql = "select count(*) as num from location where type = 'restaurant' and info like '%\"listed\": true%' " + orderQuery
-		datas = query(sql, True)
-		maxdatas = query(maxsql, True)[0]["num"]
+		datas = query(sql, True).fetchall()
+		maxdatas = query(maxsql, True).fetchone()["num"]
 		for data in datas:
 			lon2 = float(data['longitude'])
 			lat2 = float(data['latitude'])
@@ -322,8 +282,8 @@ def get_locations():
 		# get hair salons
 		sql = "select * from location where type = 'hair' and info like '%\"listed\": true%' " + orderQuery + " limit 0, 10"
 		maxsql = "select count(*) as num from location where type = 'hair' and info like '%\"listed\": true%' " + orderQuery
-		datas = query(sql, True)
-		maxdatas = query(maxsql, True)[0]["num"]
+		datas = query(sql, True).fetchall()
+		maxdatas = query(maxsql, True).fetchone()["num"]
 		for data in datas:
 			lon2 = float(data['longitude'])
 			lat2 = float(data['latitude'])
@@ -356,8 +316,8 @@ def get_locations():
 		# get nail salons
 		sql = "select * from location where type = 'nail' and info like '%\"listed\": true%' " + orderQuery + " limit 0, 10"
 		maxsql = "select count(*) as num from location where type = 'nail' and info like '%\"listed\": true%' " + orderQuery
-		datas = query(sql, True)
-		maxdatas = query(maxsql, True)[0]["num"]
+		datas = query(sql, True).fetchall()
+		maxdatas = query(maxsql, True).fetchone()["num"]
 		for data in datas:
 			lon2 = float(data['longitude'])
 			lat2 = float(data['latitude'])
@@ -389,8 +349,8 @@ def get_locations():
 
 		sql = "select * from location where type = 'store' and info like '%\"listed\": true%' " + orderQuery + " limit 0, 10"
 		maxsql = "select count(*) as num from location where type = 'store' and info like '%\"listed\": true%' " + orderQuery
-		datas = query(sql, True)
-		maxdatas = query(maxsql, True)[0]["num"]
+		datas = query(sql, True).fetchall()
+		maxdatas = query(maxsql, True).fetchone()["num"]
 		for data in datas:
 			lon2 = float(data['longitude'])
 			lat2 = float(data['latitude'])
@@ -447,8 +407,8 @@ def get_more_locations():
 	# get locations
 	sql = "select * from location where type = '" + type + "' and info like '%\"listed\": true%' " + orderQuery + " limit " + index + ", 10"
 	maxsql = "select count(*) as num from location where type = '" + type + "' and info like '%\"listed\": true%' " + orderQuery
-	datas = query(sql, True)
-	maxdatas = query(maxsql, True)[0]["num"]
+	datas = query(sql, True).fetchall()
+	maxdatas = query(maxsql, True).fetchone()["num"]
 	for data in datas:
 		lon2 = float(data['longitude'])
 		lat2 = float(data['latitude'])
@@ -480,16 +440,17 @@ def get_more_locations():
 	
 @app.route("/get_all_locations/<id>")
 def get_all_locations(id):
-	datas = Location.query.filter(Location.owners.like("%\"" + str(id) + "\"%")).all()
+	datas = query("select * from location where owners like '%\"" + str(id) + "\"%'", True).fetchall()
 	locations = []
 
 	for data in datas:
 		locations.append({
-			"id": data.id, "key": data.id,
-			"name": data.name,
-			"address": data.addressOne + ("" if data.addressTwo == "" else " " + data.addressTwo) + ", " + data.city + " " + data.province + ", " + data.postalcode,
-			"type": data.type,
-			"logo": json.loads(data.logo)
+			"id": data["id"], 
+			"key": data["id"],
+			"name": data["name"],
+			"address": data["addressOne"] + ("" if data["addressTwo"] == "" else " " + data["addressTwo"]) + ", " + data["city"] + " " + data["province"] + ", " + data["postalcode"],
+			"type": data["type"],
+			"logo": json.loads(data["logo"])
 		})
 
 	return { "locations": locations }
@@ -511,16 +472,18 @@ def get_location_profile():
 		longitude = None
 		latitude = None
 
-	location = Location.query.filter_by(id=locationid).first()
+	location = query("select * from location where id = " + str(locationid), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if location != None:
-		locationInfo = json.loads(location.info)
+	if len(location) > 0:
+		location = location[0]
+
+		locationInfo = json.loads(location["info"])
 
 		if longitude != None:
 			point1 = (longitude, latitude)
-			point2 = (float(location.longitude), float(location.latitude))
+			point2 = (float(location["longitude"]), float(location["latitude"]))
 			distance = haversine(point1, point2)
 
 			if distance < 1:
@@ -541,8 +504,8 @@ def get_location_profile():
 			{ "key": "6", "header": "Saturday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False }
 		]
 
-		if location.hours != '':
-			data = json.loads(location.hours)
+		if location["hours"] != '':
+			data = json.loads(location["hours"])
 			day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
 			for k, info in enumerate(hours):
@@ -584,7 +547,7 @@ def get_location_profile():
 
 				hours[k] = info
 
-		phonenumber = location.phonenumber
+		phonenumber = location["phonenumber"]
 
 		f3 = str(phonenumber[0:3])
 		s3 = str(phonenumber[3:6])
@@ -593,22 +556,22 @@ def get_location_profile():
 		phonenumber = "(" + f3 + ") " + s3 + "-" + l4
 
 		info = {
-			"id": location.id,
-			"name": location.name,
-			"addressOne": location.addressOne,
-			"addressTwo": location.addressTwo,
-			"city": location.city,
-			"province": location.province,
-			"postalcode": location.postalcode,
+			"id": location["id"],
+			"name": location["name"],
+			"addressOne": location["addressOne"],
+			"addressTwo": location["addressTwo"],
+			"city": location["city"],
+			"province": location["province"],
+			"postalcode": location["postalcode"],
 			"phonenumber": phonenumber,
 			"distance": distance,
-			"logo": json.loads(location.logo),
-			"longitude": float(location.longitude),
-			"latitude": float(location.latitude),
+			"logo": json.loads(location["logo"]),
+			"longitude": float(location["longitude"]),
+			"latitude": float(location["latitude"]),
 			"hours": hours,
-			"type": location.type,
+			"type": location["type"],
 			"receiveType": locationInfo["type"],
-			"fullAddress": location.addressOne + ", " + (location.addressOne if location.addressTwo != "" else "") + location.city + ", " + location.province + ", " + location.postalcode
+			"fullAddress": location["addressOne"] + ", " + (location["addressOne"] if location["addressTwo"] != "" else "") + location["city"] + ", " + location["province"] + ", " + location["postalcode"]
 		}
 
 		return { "info": info }
@@ -624,70 +587,66 @@ def get_hours():
 	locationid = content['locationid']
 	day = content['day']
 
-	scheduled = Schedule.query.filter_by(locationId=locationid).all()
-	location = Location.query.filter_by(id=locationid).first()
+	scheduled = query("select * from schedule where locationId = " + str(locationid), True).fetchone()
+	location = query("select * from location where id = " + str(locationid), True).fetchone()
 	times = []
 	errormsg = ""
 	status = ""
 	daysArr = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-	if location != None:
-		hours = json.loads(location.hours)
-		openDays = []
+	hours = json.loads(location["hours"])
+	openDays = []
 
-		openTime = hours[day]["opentime"]
-		closeTime = hours[day]["closetime"]
+	openTime = hours[day]["opentime"]
+	closeTime = hours[day]["closetime"]
 
-		for data in scheduled:
-			time = json.loads(data.time)
-			times.append(time)
+	for data in scheduled:
+		time = json.loads(data["time"])
+		times.append(time)
 
-		for day in daysArr:
-			if hours[day]["close"] == False:
-				openDays.append(day)
+	for day in daysArr:
+		if hours[day]["close"] == False:
+			openDays.append(day)
 
-		workers = {}
+	workers = {}
 
-		if location.type != "restaurant":
-			owners = Owner.query.filter(Owner.info.like("%\"locationId\": \"" + str(locationid) + "\"%")).all()
-			for owner in owners:
-				hours = json.loads(owner.hours)
+	if location["type"] != "restaurant":
+		owners = query("select * from owner where info like '%\"locationId\": \"" + str(locationid) + "\"%'", True).fetchall()
 
-				for time in hours:
-					if hours[time]["working"] == True or hours[time]["takeShift"] != "":
-						if hours[time]["working"] == True:
+		for owner in owners:
+			hours = json.loads(owner["hours"])
+
+			for time in hours:
+				if hours[time]["working"] == True or hours[time]["takeShift"] != "":
+					if hours[time]["working"] == True:
+						if time not in workers:
+							workers[time] = [{
+								"workerId": owner["id"],
+								"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
+								"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
+							}]
+						else:
+							workers[time].append({
+								"workerId": owner["id"],
+								"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
+								"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
+							})
+					else:
+						if hours[time]["takeShift"] != "":
+							coworker = query("select * from owner where id = " + str(hours[time]["takeShift"]), True).fetchone()
+							coworkerHours = json.loads(coworker["hours"])
+
 							if time not in workers:
 								workers[time] = [{
-									"workerId": owner.id,
-									"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
-									"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
+									"workerId": owner["id"],
+									"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
+									"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
 								}]
 							else:
 								workers[time].append({
-									"workerId": owner.id,
-									"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
-									"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
+									"workerId": owner["id"],
+									"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
+									"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
 								})
-						else:
-							if hours[time]["takeShift"] != "":
-								coworker = Owner.query.filter_by(id=hours[time]["takeShift"]).first()
-								coworkerHours = json.loads(coworker.hours)
 
-								if time not in workers:
-									workers[time] = [{
-										"workerId": owner.id,
-										"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
-										"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
-									}]
-								else:
-									workers[time].append({
-										"workerId": owner.id,
-										"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
-										"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
-									})
-
-		return { "openTime": openTime, "closeTime": closeTime, "scheduled": times, "openDays": openDays, "workers": workers }
-	else:
-		errormsg = "Location doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
+	return { "openTime": openTime, "closeTime": closeTime, "scheduled": times, "openDays": openDays, "workers": workers }

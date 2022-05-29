@@ -1,14 +1,16 @@
-import pymysql.cursors, json, os
+import pymysql.cursors, json, os, paramiko, pandas
 from twilio.rest import Client
 from exponent_server_sdk import PushClient, PushMessage
 from werkzeug.security import generate_password_hash, check_password_hash
 from random import randint
 from haversine import haversine
+from sshtunnel import SSHTunnelForwarder
+from os.path import expanduser
 
 test = True
 
 local = test
-test_sms = test
+test_sms = False
 send_msg = True
 push_notif = True
 
@@ -26,21 +28,52 @@ auth_token = "244371c21d9c8e735f0e08dd4c29249a" if test_sms == True else "b7f9e3
 mss = "MG376dcb41368d7deca0bda395f36bf2a7"
 client = Client(account_sid, auth_token)
 
-def query(sql, output):
+# ssh_host = '159.203.13.53'
+# ssh_username = 'root'
+# ssh_password = 'qwerty'
+
+# sql_username = 'geottuse'
+# sql_password = 'G3ottu53?'
+# sql_database = 'easygo'
+
+# key = paramiko.RSAKey.from_private_key_file("./id_rsa.pem")
+
+# tunnel = SSHTunnelForwarder(
+# 	(ssh_host, 22),
+#   ssh_username="root",
+#   ssh_pkey=key,
+#   ssh_private_key_password="qwerty",
+#   remote_bind_address=('127.0.0.1', 3306)
+# )
+
+# tunnel.start()
+
+# print("connected")
+
+# sdbconn = pymysql.connect(
+# 	host=host, user=user,
+# 	password=password, db=database,
+# 	charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor, 
+# 	port=tunnel.local_bind_port
+# )
+# scursorobj = sdbconn.cursor()
+
+# print("database established")
+
+def query(sql, output = False):
 	dbconn = pymysql.connect(
 		host=host, user=user,
 		password=password, db=database,
 		charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor, 
 		autocommit=True
 	)
-
 	cursorobj = dbconn.cursor()
 	cursorobj.execute(sql)
 
-	if output == True:
-		results = cursorobj.fetchall()
+	dbconn.close()
 
-		return results
+	if output == True:
+		return cursorobj
 
 def getRanStr():
 	strid = ""
@@ -75,3 +108,13 @@ def writeToFile(uri, name):
 	fd = open(os.path.join("static", name), 'wb')
 	fd.write(binary_data)
 	fd.close()
+
+def readOtherDB(sql, one):
+	scursorobj.execute(sql)
+
+	if one == True:
+		results = scursorobj.fetchall()[0]
+	else:
+		results = scursorobj.fetchall()
+
+	return { "data": results }

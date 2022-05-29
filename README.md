@@ -13,3 +13,8 @@ pip install -r requirements.txt
 flask db init (create migrations folder)
 flask db migrate -m "update db schema"
 flask db upgrade
+
+# convert private to pem
+sudo cp -a ~/.ssh/id_rsa ./id_rsa
+openssl rsa -in ./id_rsa -outform pem > ./id_rsa.pem
+chmod 600 ./id_rsa.pem

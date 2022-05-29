@@ -23,55 +23,50 @@ def get_num_items(id):
 
 @app.route("/get_cart_items/<id>")
 def get_cart_items(id):
-	user = User.query.filter_by(id=id).first()
+	user = query("select * from user where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if user != None:
-		datas = Cart.query.filter_by(adder=user.id, status="unlisted").all()
-		items = []
-		active = True if len(datas) > 0 else False
+	datas = query("select * from cart where adder = " + str(user["id"]) + " and status = 'unlisted'", True).fetchall()
+	items = []
+	active = True if len(datas) > 0 else False
 
-		for data in datas:
-			product = Product.query.filter_by(id=data.productId).first()
-			quantity = int(data.quantity)
-			options = json.loads(data.options)
-			others = json.loads(data.others)
-			sizes = json.loads(data.sizes)
-			userInput = json.loads(data.userInput)
+	for data in datas:
+		product = query("select * from product where id = " + str(data["productId"]), True).fetchone()
+		quantity = int(data["quantity"])
+		options = json.loads(data["options"])
+		others = json.loads(data["others"])
+		sizes = json.loads(data["sizes"])
+		userInput = json.loads(data["userInput"])
 
-			if data.status == 'checkout':
-				active = False
+		if data["status"] == 'checkout':
+			active = False
 
-			for k, option in enumerate(options):
-				option['key'] = "option-" + str(k)
+		for k, option in enumerate(options):
+			option['key'] = "option-" + str(k)
 
-			for k, other in enumerate(others):
-				other['key'] = "other-" + str(k)
+		for k, other in enumerate(others):
+			other['key'] = "other-" + str(k)
 
-			for k, size in enumerate(sizes):
-				size['key'] = "size-" + str(k)
+		for k, size in enumerate(sizes):
+			size['key'] = "size-" + str(k)
 
-			if product == None:
-				userInput = json.loads(data.userInput)
+		if len(product) == 0:
+			userInput = json.loads(data["userInput"])
 
-			image = json.loads(product.image) if product != None else {"name": ""}
-			items.append({
-				"key": "cart-item-" + str(data.id),
-				"id": str(data.id),
-				"name": product.name if product != None else userInput["name"],
-				"productId": product.id if product != None else None, 
-				"note": data.note, 
-				"image": image if image["name"] != "" else {"width": 300, "height": 300}, 
-				"options": options, "others": others, "sizes": sizes, "quantity": quantity,
-				"status": data.status
-			})
+		image = json.loads(product[0]["image"]) if len(product) > 0 else {"name": ""}
+		items.append({
+			"key": "cart-item-" + str(data["id"]),
+			"id": str(data["id"]),
+			"name": product[0]["name"] if len(product) > 0 else userInput["name"],
+			"productId": product[0]["id"] if len(product) > 0 else None, 
+			"note": data["note"], 
+			"image": image if image["name"] != "" else {"width": 300, "height": 300}, 
+			"options": options, "others": others, "sizes": sizes, "quantity": quantity,
+			"status": data["status"]
+		})
 
-		return { "cartItems": items, "activeCheckout": active }
-	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
+	return { "cartItems": items, "activeCheckout": active }
 
 @app.route("/add_item_to_cart", methods=["POST"])
 def add_item_to_cart():
@@ -88,36 +83,37 @@ def add_item_to_cart():
 	note = content['note']
 	type = content['type']
 
-	user = User.query.filter_by(id=userid).first()
-	product = Product.query.filter_by(id=productid).first()
+	options = json.dumps(options)
+	others = json.dumps(others)
+	sizes = json.dumps(sizes)
 
-	errormsg = ""
-	status = ""
+	userInput = json.dumps({ "name": productinfo, "type": type })
 
-	if errormsg == "":
-		options = json.dumps(options)
-		others = json.dumps(others)
-		sizes = json.dumps(sizes)
+	data = {
+		"locationId": locationid, "productId": productid,
+		"userInput": userInput, "quantity": quantity, "adder": userid,
+		"options": options, "others": others, "sizes": sizes, "note": note,
+		"status": "unlisted", "orderNumber": "", "waitTime": ""
+	}
+	columns = []
+	insert_data = []
 
-		userInput = json.dumps({ "name": productinfo, "type": type })
-		cartitem = Cart(locationid, productid, userInput, quantity, userid, options, others, sizes, note, "unlisted", "", "")
+	for key in data:
+		columns.append(key)
+		insert_data.append("'" + str(data[key]) + "'")
 
-		db.session.add(cartitem)
-		db.session.commit()
+	query("insert into cart (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")").lastrowid
 
-		return { "msg": "item added to cart" }
-
-	return { "errormsg": errormsg, "status": status }, 400
+	return { "msg": "item added to cart" }
 
 @app.route("/remove_item_from_cart/<id>")
 def remove_item_from_cart(id):
-	cartitem = Cart.query.filter_by(id=id).first()
+	cartitem = query("select * from cart where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if cartitem != None:
-		db.session.delete(cartitem)
-		db.session.commit()
+	if len(cartitem) > 0:
+		query("delete from cart where id = " + str(id))
 
 		return { "msg": "Cart item removed from cart" }
 	else:
@@ -127,76 +123,60 @@ def remove_item_from_cart(id):
 
 @app.route("/checkout", methods=["POST"])
 def checkout():
-	def getRanStr():
-		while True:
-			strid = ""
-
-			for k in range(4):
-				strid += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 9))
-
-			numsame = query("select count(*) as num from cart where orderNumber = '" + strid + "'", True)[0]["num"]
-
-			if numsame == 0:
-				return strid
-
 	content = request.get_json()
 
 	adder = content['userid']
 	time = content['time']
 
-	user = User.query.filter_by(id=adder).first()
+	user = query("select * from user where id = " + str(adder), True).fetchone()
+	cart = query("select * from cart where adder = " + str(adder), True).fetchone()
+	product = query("select * from product where id = " + str(cart["productId"]), True).fetchone()
+	customer = query("select * from user where id = " + str(cart["adder"]), True).fetchone()
+
 	errormsg = ""
 	status = ""
 
-	if user != None:
-		username = user.username
-		orderNumber = getRanStr()
+	username = user["username"]
+	orderNumber = getRanStr()
+	
+	locationId = str(cart["locationId"])
+	owners = query("select id, info from owner where info like '%\"locationId\": \"" + locationId + "\"%'", True).fetchall()
+	receiver = []
+	pushids = []
 
-		cart = Cart.query.filter_by(adder=adder).first()
-		locationId = str(cart.locationId)
-		owners = query("select id, info from owner where info like '%\"locationId\": \"" + locationId + "\"%'", True)
-		receiver = []
-		pushids = []
+	for owner in owners:
+		info = json.loads(owner["info"])
 
-		for owner in owners:
-			info = json.loads(owner["info"])
+		if info["pushToken"] != "" and info["signin"] == True:
+			pushids.append({ "token": info["pushToken"], "signin": info["signin"] })
 
-			if info["pushToken"] != "":
-				pushids.append(info["pushToken"])
+		receiver.append("owner" + str(owner["id"]))
 
-			receiver.append("owner" + str(owner["id"]))
-
-		productName = ""
-		quantity = int(cart.quantity)
-		if cart.productId == -1:
-			userInput = json.loads(cart.userInput)
-			productName = userInput["name"]
-		else:
-			product = Product.query.filter_by(id=cart.productId).first()
-			productName = product.name
-
-		customer = User.query.filter_by(id=cart.adder).first()
-		speak = { "name": productName, "quantity": quantity, "customer": customer.username, "orderNumber": orderNumber }
-
-		if len(pushids) > 0:
-			pushmessages = []
-			for pushid in pushids:
-				pushmessages.append(pushInfo(
-					pushid, 
-					"An order requested",
-					"A customer requested an order",
-					content
-				))
-
-			push(pushmessages)
-
-		query("update cart set status = 'checkout', orderNumber = '" + orderNumber + "' where adder = " + str(adder) + " and orderNumber = ''", False)
-
-		return { "msg": "order sent", "receiver": receiver, "speak": speak }
+	productName = ""
+	quantity = int(cart["quantity"])
+	if cart["productId"] == -1:
+		userInput = json.loads(cart["userInput"])
+		productName = userInput["name"]
 	else:
-		errormsg = "User doesn't exist"
+		productName = product["name"]
 
-	return { "errormsg": errormsg, "status": status }, 400
+	speak = { "name": productName, "quantity": quantity, "customer": customer["username"], "orderNumber": orderNumber }
+
+	if len(pushids) > 0:
+		pushmessages = []
+		for info in pushids:
+			pushmessages.append(pushInfo(
+				info["token"], 
+				"An order requested",
+				"A customer requested an order",
+				content
+			))
+
+		push(pushmessages)
+
+	query("update cart set status = 'checkout', orderNumber = '" + orderNumber + "' where adder = " + str(adder) + " and orderNumber = ''")
+
+	return { "msg": "order sent", "receiver": receiver, "speak": speak }
 
 @app.route("/order_done", methods=["POST"])
 def order_done():
@@ -206,55 +186,42 @@ def order_done():
 	ordernumber = content['ordernumber']
 	locationid = content['locationid']
 
-	user = User.query.filter_by(id=userid).first()
-	location = Location.query.filter_by(id=locationid).first()
-	errormsg = ""
-	status = ""
+	user = query("select * from user where id = " + str(userid), True).fetchone()
+	location = query("select * from location where id = " + str(locationid), True).fetchone()
 
-	if user != None and location != None:
-		locationInfo = json.loads(location.info)
-		username = user.username
-		adder = user.id
+	locationInfo = json.loads(location["info"])
+	username = user["username"]
+	adder = user["id"]
 
-		sql = "select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "' and "
-		sql += "((status = 'inprogress' and not waitTime = '' and userInput like '%\"type\": \"restaurant\"%') or "
-		sql += "(status = 'checkout' and waitTime = '' and userInput like '%\"type\": \"store\"%'))"
-		
-		datas = query(sql, True)
+	sql = "select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "' and "
+	sql += "((status = 'inprogress' and not waitTime = '' and userInput like '%\"type\": \"restaurant\"%') or "
+	sql += "(status = 'checkout' and waitTime = '' and userInput like '%\"type\": \"store\"%'))"
+	
+	datas = query(sql, True).fetchall()
 
-		if len(datas) > 0:
-			for data in datas:
-				groupId = ""
+	if len(datas) > 0:
+		for data in datas:
+			groupId = ""
 
-				for k in range(20):
-					groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
+			for k in range(20):
+				groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
 
-				product = Product.query.filter_by(id=data['productId']).first()
+			product = query("select * from product where id = " + str(data['productId']), True).fetchone()
 
-				if product != None:
-					location = Location.query.filter_by(id=product.locationId).first()
+			sizes = json.loads(data['sizes'])
+			others = json.loads(data['others'])
+			quantity = int(data['quantity'])
+			userInput = json.loads(data['userInput'])
 
-				sizes = json.loads(data['sizes'])
-				others = json.loads(data['others'])
-				quantity = int(data['quantity'])
-				userInput = json.loads(data['userInput'])
+			quantity = int(data['quantity'])
+			options = data['options']
+			others = data['others']
+			sizes = json.dumps(sizes)
+			info = json.loads(user["info"])
 
-				quantity = int(data['quantity'])
-				options = data['options']
-				others = data['others']
-				sizes = json.dumps(sizes)
-
-				userInfo = User.query.filter_by(id=userid).first()
-				info = json.loads(userInfo.info)
-
-				query("delete from cart where id = " + str(data['id']), False)
-		
-			return { "msg": "Order delivered and payment made" }
-		else:
-			errormsg = "Order doesn't exist"
-			status = "nonexist"
-
-	return { "errormsg": errormsg, "status": status }, 400
+			query("delete from cart where id = " + str(data['id']))
+	
+		return { "msg": "Order delivered and payment made" }
 
 @app.route("/set_wait_time", methods=["POST"])
 def set_wait_time():
@@ -265,77 +232,74 @@ def set_wait_time():
 	ordernumber = content['ordernumber']
 	waitTime = str(content['waitTime'])
 
-	cartitems = Cart.query.filter_by(orderNumber=ordernumber).count()
+	cartitem = query("select * from cart where orderNumber = '" + ordernumber + "'", True).fetchone()
 
-	if cartitems > 0:
-		query("update cart set status = 'inprogress', waitTime = '" + waitTime + "' where orderNumber = '" + ordernumber + "'", False)
+	cartitem["status"] = 'inprogress'
+	cartitem["waitTime"] = waitTime
 
-		data = Cart.query.filter_by(orderNumber=ordernumber).first()
-		receiver = "user" + str(data.adder)
+	update_data = []
+	for key in cartitem:
+		if key != "table":
+			update_data.append(key + " = '" + str(cartitem[key]) + "'")
 
-		return { "msg": "success", "receiver": receiver }
-	else:
-		errormsg = "Orders don't exist"
+	query("update cart set " + ", ".join(update_data) + " where id = " + str(cartitem["id"]), False)
 
-	return { "errormsg": errormsg, "status": status }, 400
+	receiver = "user" + str(cartitem["adder"])
+
+	return { "msg": "success", "receiver": receiver }
 
 @app.route("/edit_cart_item/<id>")
 def edit_cart_item(id):
-	cartitem = Cart.query.filter_by(id=id).first()
+	cartitem = query("select * from cart where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if cartitem != None:
-		product = Product.query.filter_by(id=cartitem.productId).first()
-		quantity = int(cartitem.quantity)
-		userInput = json.loads(cartitem.userInput)
-		cost = 0
+	product = query("select * from product where id = " + str(cartitem["productId"]), True).fetchone()
+	quantity = int(cartitem["quantity"])
+	userInput = json.loads(cartitem["userInput"])
+	cost = 0
 
-		options = json.loads(cartitem.options)
-		for k, option in enumerate(options):
-			option["key"] = "option-" + str(k)
+	options = json.loads(cartitem.options)
+	for k, option in enumerate(options):
+		option["key"] = "option-" + str(k)
 
-		others = json.loads(cartitem.others)
-		for k, other in enumerate(others):
-			other["key"] = "other-" + str(k)
+	others = json.loads(cartitem.others)
+	for k, other in enumerate(others):
+		other["key"] = "other-" + str(k)
 
-		sizes = json.loads(cartitem.sizes)
-		for k, size in enumerate(sizes):
-			size["key"] = "size-" + str(k)
+	sizes = json.loads(cartitem.sizes)
+	for k, size in enumerate(sizes):
+		size["key"] = "size-" + str(k)
 
-		if product != None:
-			if product.price == "":
-				for size in sizes:
-					if size["selected"] == True:
-						cost += quantity * float(size["price"])
-			else:
-				cost += quantity * float(product.price)
-
-			for other in others:
-				if other["selected"] == True:
-					cost += float(other["price"])
+	if len(product) > 0:
+		if product[0]["price"] == "":
+			for size in sizes:
+				if size["selected"] == True:
+					cost += quantity * float(size["price"])
 		else:
-			if "price" in userInput:
-				cost += quantity * float(userInput["price"])
+			cost += quantity * float(product[0]["price"])
 
-		image = json.loads(product.image) if product != None else {"name": ""}
-		info = {
-			"name": product.name if product != None else (userInput["name"] if "name" in userInput else ""),
-			"image": image if image["name"] != "" else {"width": 300, "height": 300},
-			"price": float(product.price) if product != None else (userInput["price"] if "price" in userInput else 0),
-			"quantity": quantity,
-			"options": options,
-			"others": others,
-			"sizes": sizes,
-			"note": cartitem.note,
-			"cost": cost if cost > 0 else None
-		}
-
-		return { "cartItem": info, "msg": "cart item fetched" }
+		for other in others:
+			if other["selected"] == True:
+				cost += float(other["price"])
 	else:
-		errormsg = "Cart item doesn't exist"
+		if "price" in userInput:
+			cost += quantity * float(userInput["price"])
 
-	return { "errormsg": errormsg, "status": status }, 400
+	image = json.loads(product[0]["image"]) if len(product) > 0 else {"name": ""}
+	info = {
+		"name": product[0]["name"] if len(product) > 0 else (userInput["name"] if "name" in userInput else ""),
+		"image": image if image["name"] != "" else {"width": 300, "height": 300},
+		"price": float(product[0]["price"]) if len(product) > 0 else (userInput["price"] if "price" in userInput else 0),
+		"quantity": quantity,
+		"options": options,
+		"others": others,
+		"sizes": sizes,
+		"note": cartitem["note"],
+		"cost": cost if cost > 0 else None
+	}
+
+	return { "cartItem": info, "msg": "cart item fetched" }
 
 @app.route("/update_cart_item", methods=["POST"])
 def update_cart_item():
@@ -348,37 +312,38 @@ def update_cart_item():
 	sizes = content['sizes']
 	note = content['note']
 
-	cartitem = Cart.query.filter_by(id=cartid).first()
+	cartitem = query("select * from cart where id = " + str(cartid), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if cartitem != None:
-		cartitem.quantity = quantity
-		cartitem.options = json.dumps(options)
-		cartitem.others = json.dumps(others)
-		cartitem.sizes = json.dumps(sizes)
-		cartitem.note = note
+	new_data = {
+		"quantity": quantity,
+		"options": json.dumps(options),
+		"others": json.dumps(others),
+		"sizes": json.dumps(sizes),
+		"note": note
+	}
+	update_data = []
 
-		db.session.commit()
+	for key in new_data:
+		update_data.append(key + " = '" + new_data[key] + "'")
 
-		return { "msg": "cart item is updated" }
-	else:
-		errormsg = "Cart item doesn't exist"
+	query("update cart set " + ", ".join(update_data) + " where id = " + str(cartid))
 
-	return { "errormsg": errormsg, "status": status }, 400
+	return { "msg": "cart item is updated" }
 
 @app.route("/see_orders/<id>")
 def see_orders(id):
-	datas = Cart.query.filter_by(orderNumber=id).all()
+	datas = query("select * from cart where orderNumber = " + str(id), True).fetchall()
 	orders = []
 
 	for data in datas:
-		product = Product.query.filter_by(id=data.productId).first()
-		quantity = int(data.quantity)
-		options = json.loads(data.options)
-		others = json.loads(data.others)
-		sizes = json.loads(data.sizes)
-		userInput = json.loads(data.userInput)
+		product = query("select * from product where id = " + str(data["productId"]), True).fetchone()
+		quantity = int(data["quantity"])
+		options = json.loads(data["options"])
+		others = json.loads(data["others"])
+		sizes = json.loads(data["sizes"])
+		userInput = json.loads(data["userInput"])
 
 		for k, option in enumerate(options):
 			option['key'] = "option-" + str(k)
@@ -389,12 +354,12 @@ def see_orders(id):
 		for k, size in enumerate(sizes):
 			size['key'] = "size-" + str(k)
 
-		image = json.loads(product.image) if product != None else {"name": ""}
+		image = json.loads(product[0]["image"]) if len(product) > 0 else {"name": ""}
 		orders.append({
-			"key": "cart-item-" + str(data.id),
-			"id": str(data.id),
-			"name": product.name if product != None else userInput['name'],
-			"note": data.note,
+			"key": "cart-item-" + str(data["id"]),
+			"id": str(data["id"]),
+			"name": product[0]["name"] if len(product) > 0 else userInput['name'],
+			"note": data["note"],
 			"image": image if image["name"] != "" else {"width": 300, "height": 300},
 			"options": options,
 			"others": others,

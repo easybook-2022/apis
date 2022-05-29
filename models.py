@@ -28,13 +28,23 @@ class User(db.Model):
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
 
+	@property
+	def serialize(self):
+		return {
+			"id": self.id, 
+			"cellnumber": self.cellnumber,
+			"password": self.password,
+			"username": self.username,
+			"info": self.info
+		}
+
 class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
 	password = db.Column(db.String(110), unique=True)
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(70))
-	hours = db.Column(db.Text)
+	hours = db.Column(db.String(825))
 	info = db.Column(db.String(100))
 
 	def __init__(self, cellnumber, password, username, profile, hours, info):
@@ -137,10 +147,9 @@ class Schedule(db.Model):
 	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
 	orders = db.Column(db.Text)
-	table = db.Column(db.String(20))
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, locationType, customers, note, orders, table, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, locationType, customers, note, orders, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
@@ -154,33 +163,10 @@ class Schedule(db.Model):
 		self.customers = customers
 		self.note = note
 		self.orders = orders
-		self.table = table
 		self.info = info
 
 	def __repr__(self):
 		return '<Appointment %r>' % self.time
-
-class Clientvisited(db.Model):
-	id = db.Column(db.Integer, primary_key=True)
-	locationId = db.Column(db.Integer)
-	serviceId = db.Column(db.Integer)
-	userInput = db.Column(db.String(70))
-	clientId = db.Column(db.Integer)
-	workerId = db.Column(db.Integer)
-
-	def __init__(
-		self, 
-		locationId, serviceId, userInput, clientId,
-		workerId
-	):
-		self.locationId = locationId
-		self.serviceId = serviceId
-		self.userInput = userInput
-		self.clientId = clientId
-		self.workerId = workerId
-
-	def __repr__(self):
-		return '<Clientvisited %r>' % self.locationId
 
 class Product(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -237,4 +223,3 @@ class Cart(db.Model):
 
 	def __repr__(self):
 		return '<Cart %r>' % self.productId
-

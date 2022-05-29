@@ -17,12 +17,12 @@ def welcome_products():
 
 @app.route("/get_product_info/<id>")
 def get_product_info(id):
-	product = Product.query.filter_by(id=id).first()
+	product = query("select * from product where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 
 	if product != None:
-		datas = json.loads(product.options)
+		datas = json.loads(product["options"])
 		options = []
 
 		for k, data in enumerate(datas):
@@ -35,7 +35,7 @@ def get_product_info(id):
 
 			options.append(option)
 
-		datas = json.loads(product.others)
+		datas = json.loads(product["others"])
 		others = []
 
 		for k, data in enumerate(datas):
@@ -46,7 +46,7 @@ def get_product_info(id):
 				"selected": False
 			})
 
-		datas = json.loads(product.sizes)
+		datas = json.loads(product["sizes"])
 		sizes = []
 
 		for k, data in enumerate(datas):
@@ -57,15 +57,15 @@ def get_product_info(id):
 				"selected": False
 			})
 
-		image = json.loads(product.image)
+		image = json.loads(product["image"])
 		info = {
-			"name": product.name,
-			"image": image if image["name"] != "" else {"width": 300, "height": 300},
+			"name": product["name"],
+			"productImage": image if image["name"] != "" else {"width": 300, "height": 300},
 			"options": options,
 			"others": others,
 			"sizes": sizes,
-			"price": float(product.price) if product.price != "" else 0,
-			"cost": float(product.price) if product.price != "" else 0
+			"price": float(product["price"]) if product["price"] != "" else 0,
+			"cost": float(product["price"]) if product["price"] != "" else 0
 		}
 
 		return { "productInfo": info }
@@ -81,8 +81,7 @@ def cancel_cart_order():
 	userid = content['userid']
 	cartid = content['cartid']
 
-	sql = "select * from cart where id = " + str(cartid)
-	data = query(sql, True)
+	data = query("select * from cart where id = " + str(cartid), True).fetchone()
 	errormsg = ""
 	status = ""
 
@@ -91,7 +90,7 @@ def cancel_cart_order():
 
 		receiver = ["user" + str(data['adder'])]
 
-		query("delete from cart where id = " + str(cartid), False)
+		query("delete from cart where id = " + str(cartid))
 
 		return { "msg": "Orderer deleted", "receiver": receiver }
 	else:
@@ -110,57 +109,64 @@ def add_product():
 	sizes = request.form['sizes']
 	price = request.form['price']
 
-	location = Location.query.filter_by(id=locationid).first()
-	info = json.loads(location.info)
+	location = query("select * from location where id = " + str(locationid), True).fetchone()
+	info = json.loads(location["info"])
 	info["listed"] = True
-	location.info = json.dumps(info)
+	
+	query("update location set info = '" + json.dumps(info) + "' where id = " + str(locationid))
+
 	errormsg = ""
 	status = ""
 
-	if location != None:
-		data = query("select * from product where locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "' and name = '" + name + "'", True)
+	numProducts = query("select count(*) as num from product where locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "' and name = '" + name + "'", True).fetchone()["num"]
 
-		if len(data) == 0:
-			price = price if len(sizes) > 0 else ""
+	if numProducts == 0:
+		price = price if len(sizes) > 0 else ""
 
-			isWeb = request.form.get("web")
-			imageData = json.dumps({"name": "", "width": 0, "height": 0})
+		isWeb = request.form.get("web")
+		imageData = json.dumps({"name": "", "width": 0, "height": 0})
 
-			if isWeb != None:
-				image = json.loads(request.form['image'])
-				imagename = image['name']
+		if isWeb != None:
+			image = json.loads(request.form['image'])
+			imagename = image['name']
 
-				if imagename != "":
-					uri = image['uri'].split(",")[1]
-					size = image['size']
+			if imagename != "":
+				uri = image['uri'].split(",")[1]
+				size = image['size']
 
-					imageData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
+				imageData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
 
-					writeToFile(uri, imagename)
-			else:
-				imagepath = request.files.get('image', False)
-				imageexist = False if imagepath == False else True
-
-				if imageexist == True:
-					image = request.files['image']
-					imagename = image.filename
-
-					size = json.loads(request.form['size'])
-
-					image.save(os.path.join('static', imagename))
-					imageData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
-
-			if errormsg == "":
-				product = Product(locationid, menuid, name, imageData, options, others, sizes, price)
-
-				db.session.add(product)
-				db.session.commit()
-
-				return { "id": product.id }
+				writeToFile(uri, imagename)
 		else:
-			errormsg = "Product already exist"
+			imagepath = request.files.get('image', False)
+			imageexist = False if imagepath == False else True
+
+			if imageexist == True:
+				image = request.files['image']
+				imagename = image.filename
+
+				size = json.loads(request.form['size'])
+
+				image.save(os.path.join('static', imagename))
+				imageData = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
+
+		if errormsg == "":
+			data = {
+				"locationId": locationid, "menuId": menuid, "name": name, "image": imageData,
+				"options": options, "others": others, "sizes": sizes, "price": price
+			}
+			columns = []
+			insert_data = []
+
+			for key in data:
+				columns.append(key)
+				insert_data.append("'" + str(data[key]) + "'")
+
+			id = query("insert into product (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
+
+			return { "id": id }
 	else:
-		errormsg = "Location doesn't exist"
+		errormsg = "Product already exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -175,93 +181,91 @@ def update_product():
 	sizes = request.form['sizes']
 	price = request.form['price']
 
-	location = Location.query.filter_by(id=locationid).first()
+	product = query("select * from product where id = " + str(productid) + " and locationId = " + str(locationid) + " and menuId = " + str(menuid), True).fetchone()
+
 	errormsg = ""
 	status = ""
+	new_data = {}
 
-	if location != None:
-		product = Product.query.filter_by(id=productid, locationId=locationid, menuId=menuid).first()
+	if product != None:
+		new_data["name"] = name
+		new_data["price"] = price
+		new_data["options"] = options
+		new_data["others"] = others
+		new_data["sizes"] = sizes
 
-		if product != None:
-			product.name = name
-			product.price = price
-			product.options = options
-			product.others = others
-			product.sizes = sizes
+		isWeb = request.form.get("web")
 
-			isWeb = request.form.get("web")
+		oldimage = json.loads(product["image"])
 
-			oldimage = json.loads(product.image)
+		if isWeb != None:
+			image = json.loads(request.form['image'])
+			imagename = image['name']
 
-			if isWeb != None:
-				image = json.loads(request.form['image'])
-				imagename = image['name']
+			if imagename != '' and "data" in image['uri']:
+				uri = image['uri'].split(",")[1]
+				size = image['size']
 
-				if imagename != '' and "data" in image['uri']:
-					uri = image['uri'].split(",")[1]
-					size = image['size']
+				if oldimage["name"] != "" and os.path.exists("static/" + oldimage["name"]):
+					os.remove("static/" + oldimage["name"])
 
+				writeToFile(uri, imagename)
+
+				new_data["image"] = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
+		else:
+			imagepath = request.files.get('image', False)
+			imageexist = False if imagepath == False else True
+
+			if imageexist == True:
+				image = request.files['image']
+				imagename = image.filename
+
+				size = json.loads(request.form['size'])
+
+				if oldimage["name"] != imagename:
 					if oldimage["name"] != "" and os.path.exists("static/" + oldimage["name"]):
 						os.remove("static/" + oldimage["name"])
 
-					writeToFile(uri, imagename)
+					image.save(os.path.join('static', imagename))
+					new_data["image"] = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
 
-					product.image = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
-			else:
-				imagepath = request.files.get('image', False)
-				imageexist = False if imagepath == False else True
+		if errormsg == "":
+			update_data = []
+			for key in new_data:
+				update_data.append(key + " = '" + new_data[key] + "'")
 
-				if imageexist == True:
-					image = request.files['image']
-					imagename = image.filename
+			query("update product set " + ", ".join(update_data) + " where id = " + str(product["id"]))
 
-					size = json.loads(request.form['size'])
-
-					if oldimage["name"] != imagename:
-						if oldimage["name"] != "" and os.path.exists("static/" + oldimage["name"]):
-							os.remove("static/" + oldimage["name"])
-
-						image.save(os.path.join('static', imagename))
-						product.image = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
-
-			if errormsg == "":
-				db.session.commit()
-
-				return { "msg": "product updated", "id": product.id }
-		else:
-			errormsg = "Product doesn't exist"
+			return { "msg": "product updated", "id": product["id"] }
 	else:
-		errormsg = "Location doesn't exist"
+		errormsg = "Product doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/remove_product/<id>", methods=["POST"])
 def remove_product(id):
-	product = Product.query.filter_by(id=id).first()
+	product = query("select * from product where id = " + str(id), True).fetchone()
+	location = query("select * from location where id = " + str(product["locationId"]), True).fetchone()
+
+	info = json.loads(location["info"])
+
+	numMenus = query("select count(*) as num from menu where locationId = " + str(location["id"]), True).fetchone()["num"]
+	numMenus += query("select count(*) as num from service where locationId = " + str(location["id"]), True).fetchone()["num"]
+	numMenus += query("select count(*) as num from product where locationId = " + str(location["id"]), True).fetchone()["num"]
+	numMenus += len(info["menuPhotos"])
+
 	errormsg = ""
 	status = ""
 
-	if product != None:
-		image = json.loads(product.image)
-		name = image["name"]
+	image = json.loads(product["image"])
+	name = image["name"]
 
-		if name != "" and os.path.exists("static/" + name):
-			os.remove("static/" + name)
+	if name != "" and os.path.exists("static/" + name):
+		os.remove("static/" + name)
 
-		db.session.delete(product)
+	info["listed"] = True if numMenus > 0 else False
 
-		location = Location.query.filter_by(id=product.locationId).first()
-		info = json.loads(location.info)
+	query("delete from product where id = " + str(id))
+	query("update location set info = '" + json.dumps(info) + "' where id = " + str(location["id"]))
 
-		numMenus = Menu.query.filter_by(locationId=location.id).count() + Service.query.filter_by(locationId=location.id).count() + Product.query.filter_by(locationId=location.id).count() + len(info["menuPhotos"])
-
-		info["listed"] = True if numMenus > 0 else False
-		location.info = json.dumps(info)
-
-		db.session.commit()
-
-		return { "msg": "product deleted" }
-	else:
-		errormsg = "Product doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
+	return { "msg": "product deleted" }

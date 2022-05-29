@@ -25,24 +25,26 @@ def user_login():
 	status = ""
 
 	if cellnumber != '' and password != '':
-		user = User.query.filter_by(cellnumber=cellnumber).first()
+		user = query("select * from user where cellnumber = '" + str(cellnumber) + "'", True).fetchone()
 
-		if user != None:
-			if check_password_hash(user.password, password):
-				userid = user.id
+		if check_password_hash(user["password"], password):
+			userid = user["id"]
 
-				user.password = generate_password_hash(password)
+			user["password"] = generate_password_hash(password)
 
-				db.session.commit()
+			update_data = []
+			for key in user:
+				if key != "table":
+					update_data.append(key + " = '" + str(user[key]) + "'")
 
-				if user.username == '':
-					return { "id": userid, "msg": "setup" }
-				else:
-					return { "id": userid, "msg": "main" }
+			query("update user set " + ", ".join(update_data) + " where id = " + str(userid))
+
+			if user["username"] == '':
+				return { "id": userid, "msg": "setup" }
 			else:
-				errormsg = "Password is incorrect"
+				return { "id": userid, "msg": "main" }
 		else:
-			errormsg = "User doesn't exist"
+			errormsg = "Password is incorrect"
 	else:
 		if cellnumber == '':
 			errormsg = "Cell number is blank"
@@ -56,7 +58,7 @@ def user_verify(cellnumber):
 	verifycode = getRanStr()
 
 	cellnumber = cellnumber.replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
-	user = User.query.filter_by(cellnumber=cellnumber).first()
+	user = query("select * from user where cellnumber = '" + str(cellnumber) + "'", True).fetchone()
 	errormsg = ""
 	status = ""
 
@@ -88,18 +90,28 @@ def user_register():
 	if username != "" and cellnumber != '' and password != '' and confirmPassword != '':
 		if len(password) >= 6:
 			if password == confirmPassword:
-				user = User.query.filter_by(cellnumber=cellnumber).first()
+				user = query("select * from user where cellnumber = '" + str(cellnumber) + "'", True).fetchone()
 
-				if user == None:
+				if user != None:
 					password = generate_password_hash(password)
 
 					userInfo = json.dumps({"pushToken": ""})
 
-					user = User(cellnumber, password, username, userInfo)
-					db.session.add(user)
-					db.session.commit()
+					data = {
+						"cellnumber": cellnumber,
+						"password": password,
+						"username": username,
+						"info": userInfo
+					}
+					insert_data = []
+					columns = []
+					for key in data:
+						columns.append(key)
+						insert_data.append("'" + str(data[key]) + "'")
 
-					return { "id": user.id }
+					id = query("insert into user (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
+
+					return { "id": id }
 				else:
 					errormsg = "User already exist"
 			else:
@@ -128,54 +140,53 @@ def update_user():
 	password = content['password']
 	confirmPassword = content['confirmPassword']
 
-	user = User.query.filter_by(id=userid).first()
+	user = query("select * from user where id = " + str(userid), True).fetchone()
+	existed_username = query("select count(*) as num from user where username = '" + str(username) + "'", True).fetchone()["num"]
+	existed_cellnumber = query("select count(*) as num from user where cellnumber = '" + str(cellnumber) + "'", True).fetchone()["num"]
+
 	errormsg = ""
 	status = ""
 
-	if user != None:
-		if username != "":
-			if user.username != username:
-				exist_username = User.query.filter_by(username=username).count()
-
-				if exist_username == 0:
-					user.username = username
-				else:
-					errormsg = "This username is already taken"
-					status = "sameusername"
-
-		if cellnumber != "":
-			if user.cellnumber != cellnumber:
-				exist_cellnumber = User.query.filter_by(cellnumber=cellnumber).count()
-
-				if exist_cellnumber == 0:
-					user.cellnumber = cellnumber
-				else:
-					errormsg = "This cell number is already taken"
-					status = "samecellnumber"
-
-		if password != "" or confirmPassword != "":
-			if password != "" and confirmPassword != "":
-				if len(password) > 6:
-					if password == confirmPassword:
-						user.password = generate_password_hash(password)
-					else:
-						errormsg = "Password mismatch"
-				else:
-					errormsg = "Password needs to be atleast 6 characters long"
+	if username != "":
+		if user["username"] != username:
+			if existed_username == 0:
+				user["username"] = username
 			else:
-				if password == "":
-					errormsg = "Password is blank"
+				errormsg = "This username is already taken"
+				status = "sameusername"
+
+	if cellnumber != "":
+		if user["cellnumber"] != cellnumber:
+			if existed_cellnumber == 0:
+				user["cellnumber"] = cellnumber
+			else:
+				errormsg = "This cell number is already taken"
+				status = "samecellnumber"
+
+	if password != "" or confirmPassword != "":
+		if password != "" and confirmPassword != "":
+			if len(password) > 6:
+				if password == confirmPassword:
+					user["password"] = generate_password_hash(password)
 				else:
-					errormsg = "Please confirm your new password"
+					errormsg = "Password mismatch"
+			else:
+				errormsg = "Password needs to be atleast 6 characters long"
+		else:
+			if password == "":
+				errormsg = "Password is blank"
+			else:
+				errormsg = "Please confirm your new password"
 
-		info = json.loads(user.info)
+	if errormsg == "":
+		update_data = []
+		for key in user:
+			if key != "table":
+				update_data.append(key + " = '" + str(user[key]) + "'")
 
-		if errormsg == "":
-			db.session.commit()
+		query("update user set " + ", ".join(update_data) + " where id = " + str(userid))
 
-			return { "msg": "update successfully" }
-	else:
-		errormsg = "User doesn't exist"
+		return { "msg": "update successfully" }
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -186,194 +197,160 @@ def update_user_notification_token():
 	userid = content['userid']
 	token = content['token']
 
-	user = User.query.filter_by(id=userid).first()
+	user = query("select * from user where id = " + str(userid), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if user != None:
-		info = json.loads(user.info)
-		info["pushToken"] = token
+	info = json.loads(user["info"])
+	info["pushToken"] = token
 
-		user.info = json.dumps(info)
+	query("update user set info = '" + json.dumps(info) + "' where id = " + str(info["id"]))
 
-		db.session.commit()
-
-		return { "msg": "Push token updated" }
-	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
+	return { "msg": "Push token updated" }
 
 @app.route("/get_user_info/<id>")
 def get_user_info(id):
-	user = User.query.filter_by(id=id).first()
+	user = query("select * from user where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if user != None:
-		cellnumber = user.cellnumber
+	cellnumber = user["cellnumber"]
 
-		f3 = str(cellnumber[0:3])
-		s3 = str(cellnumber[3:6])
-		l4 = str(cellnumber[6:len(cellnumber)])
+	f3 = str(cellnumber[0:3])
+	s3 = str(cellnumber[3:6])
+	l4 = str(cellnumber[6:len(cellnumber)])
 
-		cellnumber = "(" + f3 + ") " + s3 + "-" + l4
+	cellnumber = "(" + f3 + ") " + s3 + "-" + l4
 
-		info = {
-			"id": id,
-			"username": user.username,
-			"cellnumber": cellnumber
-		}
+	info = {
+		"id": id,
+		"username": user["username"],
+		"cellnumber": cellnumber
+	}
 
-		return { "userInfo": info }
-	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
+	return { "userInfo": info }
 
 @app.route("/get_num_notifications/<userid>")
 def get_num_notifications(userid):
-	user = User.query.filter_by(id=userid).first()
+	user = query("select * from user where id = " + str(userid), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if user != None:
-		num = 0
+	num = 0
 
-		# cart orders called for self
-		sql = "select count(*) as num from cart where adder = " + userid + " and (status = 'checkout' or status = 'ready') group by adder, orderNumber"
-		numCartorderers = query(sql, True)
-		num += numCartorderers[0]["num"] if len(numCartorderers) > 0 else 0
+	# cart orders called for self
+	sql = "select count(*) as num from cart where adder = " + userid + " and (status = 'checkout' or status = 'ready') group by adder, orderNumber"
+	numCartorderers = query(sql, True).fetchone()
+	num += numCartorderers if numCartorderers > 0 else 0
 
-		# get schedules
-		sql = "select count(*) as num from schedule where userId = " + userid + " and (status = 'cancel' or status = 'confirmed')"
-		num += query(sql, True)[0]["num"]
+	# get schedules
+	sql = "select count(*) as num from schedule where userId = " + userid + " and (status = 'cancel' or status = 'confirmed')"
+	num += query(sql, True).fetchone()
 
-		return { "numNotifications": num }
-	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
+	return { "numNotifications": num }
 
 @app.route("/get_notifications/<id>")
 def get_notifications(id):
-	user = User.query.filter_by(id=id).first()
+	user = query("select * from user where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if user != None:
-		userId = user.id
-		notifications = []
+	userId = user["id"]
+	notifications = []
 
-		# cart orders called for self
-		sql = "select orderNumber from cart where adder = " + str(id) + " and (status = 'checkout' or status = 'inprogress') group by orderNumber"
-		datas = query(sql, True)
+	# cart orders called for self
+	sql = "select orderNumber from cart where adder = " + str(id) + " and (status = 'checkout' or status = 'inprogress') group by orderNumber"
+	datas = query(sql, True)
 
-		for data in datas:
-			cartitem = Cart.query.filter_by(orderNumber=data["orderNumber"]).first()
-			numCartitems = Cart.query.filter_by(orderNumber=data["orderNumber"]).count()
+	for data in datas:
+		cartitem = query("select * from cart where orderNumber = '" + str(data["orderNumber"]) + "'", True).fetchone()
+		numCartitems = query("select count(*) as num from cart where orderNumber = '" + str(data["orderNumber"]) + "'", True).fetchone()["num"]
 
-			userInput = json.loads(cartitem.userInput)
+		userInput = json.loads(cartitem["userInput"])
 
-			notifications.append({
-				"key": "order-" + str(len(notifications)),
-				"type": "cart-order-self",
-				"orderNumber": data['orderNumber'],
-				"numOrders": numCartitems,
-				"status": cartitem.status,
-				"waitTime": cartitem.waitTime,
-				"locationType": userInput["type"]
-			})
+		notifications.append({
+			"key": "order-" + str(len(notifications)),
+			"type": "cart-order-self",
+			"orderNumber": data['orderNumber'],
+			"numOrders": numCartitems,
+			"status": cartitem["status"],
+			"waitTime": cartitem["waitTime"],
+			"locationType": userInput["type"]
+		})
 
-		# get schedules
-		sql = "select * from schedule where "
-		sql += "(userId = " + str(id) + " and (status = 'cancel' or status = 'confirmed'))"
-		datas = query(sql, True)
+	# get schedules
+	sql = "select * from schedule where "
+	sql += "(userId = " + str(id) + " and (status = 'cancel' or status = 'confirmed'))"
+	datas = query(sql, True)
 
-		for data in datas:
-			location = None
-			service = None
+	for data in datas:
+		location = None
+		service = None
 
-			if data['locationId'] != "":
-				location = Location.query.filter_by(id=data['locationId']).first()
+		if data['locationId'] != "":
+			location = query("select * from location where id = " + str(data["locationId"]), True).fetchone()
 
-			if data['serviceId'] != -1:
-				service = Service.query.filter_by(id=data['serviceId']).first()
+		if data['serviceId'] != -1:
+			service = query("select * from service where id = " + str(data["serviceId"]), True).fetchone()
 
-			booker = User.query.filter_by(id=data['userId']).first()
-			confirm = False
-			info = json.loads(data['info'])
-				
-			if data["workerId"] > -1:
-				owner = Owner.query.filter_by(id=data["workerId"]).first()
+		booker = query("select * from user where id = " + str(data["userId"]), True).fetchone()
+		confirm = False
+		info = json.loads(data['info'])
+			
+		if data["workerId"] > -1:
+			owner = query("select * from owner where id = " + str(data["workerId"]), True).fetchone()
 
-				worker = {
-					"id": data["workerId"],
-					"username": owner.username
-				}
-			else:
-				worker = None
+			worker = { "id": data["workerId"], "username": owner["username"] }
+		else:
+			worker = None
 
-			userInput = json.loads(data['userInput'])
-			serviceImage = json.loads(service.image) if service != None else {"name": ""}
-			notifications.append({
-				"key": "order-" + str(len(notifications)),
-				"type": "service",
-				"id": str(data['id']),
-				"locationid": data['locationId'],
-				"location": location.name,
-				"worker": worker,
-				"menuid": int(data['menuId']) if data['menuId'] != "" else "",
-				"serviceid": int(data['serviceId']) if data['serviceId'] != -1 else "",
-				"service": service.name if service != None else userInput['name'] if 'name' in userInput else "",
-				"locationimage": json.loads(location.logo),
-				"locationtype": location.type,
-				"serviceimage": serviceImage if serviceImage["name"] != "" else {"width": 300, "height": 300},
-				"serviceprice": float(service.price) if service != None else float(userInput['price']) if 'price' in userInput else "",
-				"time": json.loads(data['time']),
-				"action": data['status'],
-				"reason": data['cancelReason'],
-				"table": data['table'],
-				"booker": userId == data['userId'],
-				"bookerName": booker.username,
-				"confirm": confirm,
-				"seated": info["dinersseated"] if "dinersseated" in info else None,
-				"requestPayment": True if "price" in userInput else False,
-				"workerInfo": {
-					"id": owner.id,
-					"username": owner.username,
-					"requestprice": float(userInput["price"]) if "price" in userInput else 0,
-					"tip": 0
-				} if data["workerId"] > -1 else {}
-			})
+		userInput = json.loads(data['userInput'])
+		serviceImage = json.loads(service["image"]) if service != None else {"name": ""}
+		notifications.append({
+			"key": "order-" + str(len(notifications)),
+			"type": "service",
+			"id": str(data['id']),
+			"locationid": data['locationId'],
+			"location": location["name"],
+			"worker": worker,
+			"menuid": int(data['menuId']) if data['menuId'] != "" else "",
+			"serviceid": int(data['serviceId']) if data['serviceId'] != -1 else "",
+			"service": service["name"] if service != None else userInput['name'] if 'name' in userInput else "",
+			"locationimage": json.loads(location["logo"]),
+			"locationtype": location["type"],
+			"serviceimage": serviceImage if serviceImage["name"] != "" else {"width": 300, "height": 300},
+			"serviceprice": float(service["price"]) if service != None else float(userInput['price']) if 'price' in userInput else "",
+			"time": json.loads(data['time']),
+			"action": data['status'],
+			"reason": data['cancelReason'],
+			"table": data['table'],
+			"booker": userId == data['userId'],
+			"bookerName": booker["username"],
+			"confirm": confirm,
+			"workerInfo": {
+				"id": owner["id"],
+				"username": owner["username"]
+			} if data["workerId"] > -1 else {}
+		})
 
-		return { "notifications": notifications }
-	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
+	return { "notifications": notifications }
 
 @app.route("/get_reset_code/<phonenumber>")
 def get_user_reset_code(phonenumber):
-	user = User.query.filter_by(cellnumber=phonenumber).first()
+	user = query("select * from user where cellnumber = " + str(phonenumber), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if user != None:
-		code = getRanStr()
+	code = getRanStr()
 
-		if test_sms == False:
-			message = client.messages.create(
-				body="Your EasyGO reset code is " + code,
-				messaging_service_sid=mss,
-				to='+1' + str(user.cellnumber)
-			)
+	if test_sms == False:
+		message = client.messages.create(
+			body="Your EasyGO reset code is " + code,
+			messaging_service_sid=mss,
+			to='+1' + str(user["cellnumber"])
+		)
 
-		return { "msg": "Reset code sent", "code": code }
-	else:
-		errormsg = "Owner doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
+	return { "msg": "Reset code sent", "code": code }
 
 @app.route("/reset_password", methods=["POST"])
 def user_reset_password():
@@ -383,34 +360,27 @@ def user_reset_password():
 	password = content['newPassword']
 	confirmPassword = content['confirmPassword']
 
-	user = User.query.filter_by(cellnumber=cellnumber).first()
+	user = query("select * from user where cellnumber = " + str(cellnumber), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if user != None:
-		if password != '' and confirmPassword != '':
-			if len(password) >= 6:
-				if password == confirmPassword:
-					password = generate_password_hash(password)
+	if password != '' and confirmPassword != '':
+		if len(password) >= 6:
+			if password == confirmPassword:
+				password = generate_password_hash(password)
 
-					user.password = password
+				query("update user set password = '" + password + "' where id = " + str(user["id"]))
 
-					db.session.commit()
-
-					if user.username == '':
-						return { "id": user.id, "msg": "setup" }
-					else:
-						return { "id": user.id, "msg": "main" }
+				if user["username"] == '':
+					return { "id": user["id"], "msg": "setup" }
 				else:
-					errormsg = "Password is mismatch"
+					return { "id": user["id"], "msg": "main" }
 			else:
-				errormsg = "Password needs to be atleast 6 characters long"
+				errormsg = "Password is mismatch"
 		else:
-			if password == '':
-				errormsg = "Password is blank"
-			else:
-				errormsg = "Please confirm your password"
+			errormsg = "Password needs to be atleast 6 characters long"
 	else:
-		errormsg = "User doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
+		if password == '':
+			errormsg = "Password is blank"
+		else:
+			errormsg = "Please confirm your password"

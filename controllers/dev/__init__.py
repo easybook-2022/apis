@@ -7,34 +7,32 @@ cors = CORS(app)
 
 @app.route("/welcome_dev")
 def welcome_dev():
-	num = str(randint(0, 9))
-
-	return { "msg": "welcome to dev of easygo: " + num }
+	return { "msg": "welcome to dev of easygo" }
 
 @app.route("/reset")
 def reset():
 	delete = False
-	users = query("select * from user", True)
+	users = query("select * from user", True).fetchall()
 	
 	for user in users:
 		delete = True
 
-		query("delete from user where id = " + str(user['id']), False)
+		query("delete from user where id = " + str(user['id']))
 
 	if delete == True:
-		query("ALTER table user auto_increment = 1", False)
+		query("ALTER table user auto_increment = 1")
 
 	delete = False
-	owners = query("select * from owner", True)
+	owners = query("select * from owner", True).fetchall()
 	for owner in owners:
 		delete = True
-		query("delete from owner where id = " + str(owner['id']), False)
+		query("delete from owner where id = " + str(owner['id']))
 
 	if delete == True:
-		query("ALTER table owner auto_increment = 1", False)
+		query("ALTER table owner auto_increment = 1")
 
 	delete = False
-	locations = query("select * from location", True)
+	locations = query("select * from location", True).fetchall()
 	for location in locations:
 		delete = True
 		logo = location['logo']
@@ -44,13 +42,13 @@ def reset():
 		if logo != "" and logo != None and os.path.exists("static/" + logo):
 			os.remove("static/" + logo)
 
-		query("delete from location where id = " + str(location['id']), False)
+		query("delete from location where id = " + str(location['id']))
 
 	if delete == True:
-		query("ALTER table location auto_increment = 1", False)
+		query("ALTER table location auto_increment = 1")
 
 	delete = False
-	menus = query("select * from menu", True)
+	menus = query("select * from menu", True).fetchall()
 	for menu in menus:
 		delete = True
 		image = menu['image']
@@ -58,13 +56,13 @@ def reset():
 		if image != "" and image != None and os.path.exists("static/" + image):
 			os.remove("static/" + image)
 
-		query("delete from menu where id = " + str(menu['id']), False)
+		query("delete from menu where id = " + str(menu['id']))
 
 	if delete == True:
-		query("ALTER table menu auto_increment = 1", False)
+		query("ALTER table menu auto_increment = 1")
 
 	delete = False
-	services = query("select * from service", True)
+	services = query("select * from service", True).fetchall()
 	for service in services:
 		delete = True
 		image = service['image']
@@ -72,23 +70,23 @@ def reset():
 		if image != "" and image != None and os.path.exists("static/" + image):
 			os.remove("static/" + image)
 
-		query("delete from service where id = " + str(service['id']), False)
+		query("delete from service where id = " + str(service['id']))
 
 	if delete == True:
-		query("ALTER table service auto_increment = 1", False)
+		query("ALTER table service auto_increment = 1")
 
 	delete = False
-	schedules = query("select * from schedule", True)
+	schedules = query("select * from schedule", True).fetchall()
 	for schedule in schedules:
 		delete = True
 
-		query("delete from schedule where id = " + str(schedule['id']), False)
+		query("delete from schedule where id = " + str(schedule['id']))
 
 	if delete == True:
-		query("ALTER table schedule auto_increment = 1", False)
+		query("ALTER table schedule auto_increment = 1")
 
 	delete = False
-	products = query("select * from product", True)
+	products = query("select * from product", True).fetchall()
 	for product in products:
 		delete = True
 		image = product['image']
@@ -96,20 +94,20 @@ def reset():
 		if image != "" and image != None and os.path.exists("static/" + image):
 			os.remove("static/" + image)
 
-		query("delete from product where id = " + str(product['id']), False)
+		query("delete from product where id = " + str(product['id']))
 
 	if delete == True:
-		query("ALTER table product auto_increment = 1", False)
+		query("ALTER table product auto_increment = 1")
 
 	delete = False
-	carts = query("select * from cart", True)
+	carts = query("select * from cart", True).fetchall()
 	for cart in carts:
 		delete = True
 
-		query("delete from cart where id = " + str(cart['id']), False)
+		query("delete from cart where id = " + str(cart['id']))
 
 	if delete == True:
-		query("ALTER table cart auto_increment = 1", False)
+		query("ALTER table cart auto_increment = 1")
 
 	files = os.listdir("static")
 
@@ -128,10 +126,10 @@ def push():
 
 	if type == 'user':
 		userid = content['userid']
-		user = User.query.filter_by(id=userid).first()
+		user = query("select * from user where id = " + str(userid), True).fetchone()[0]
 	else:
 		ownerid = content['ownerid']
-		user = Owner.query.filter_by(id=ownerid).first()
+		user = query("select * from owner where id = " + str(ownerid), True).fetchone()[0]
 
 	message = content['message']
 	data = content['data']
@@ -163,7 +161,7 @@ def push():
 
 @app.route("/dev_delete_owner/<id>")
 def dev_delete_owner(id):
-	owner = Owner.query.filter_by(id=id).first()
+	owner = query("select * from owner where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 
@@ -173,8 +171,7 @@ def dev_delete_owner(id):
 		if os.path.exists("static/" + profile):
 			os.remove("static/" + profile)
 
-		db.session.delete(owner)
-		db.session.commit()
+		query("delete from owner where id = " + str(owner["id"]))
 
 		return { "msg": "Owner delete" }
 	else:
@@ -182,9 +179,22 @@ def dev_delete_owner(id):
 
 	return { "errormsg": errormsg, "status": status }, 400
 
+@app.route("/add_new_owner")
+def add_new_owner():
+	datas = db.session.query(Owner)
+	columns = []
+
+	for data in datas:
+		columns.append(json.dumps(data))
+
+	return { "columns": columns }
+
 @app.route("/delete_location/<id>")
 def delete_location(id):
-	location = Location.query.filter_by(id=id).first()
+	location = query("select * from location where id = " + str(id), True).fetchone()
+	menus = query("select * from menu where locationId = " + str(id), True).fetchone()
+	products = query("select * from product where locationId = " + str(id), True).fetchone()
+
 	errormsg = ""
 	status = ""
 
@@ -201,24 +211,17 @@ def delete_location(id):
 			if os.path.exists("static/" + photo):
 				os.remove("static/" + photo)
 
-		menus = Menu.query.filter_by(locationId=id).all()
-
 		for menu in menus:
 			if os.path.exists("static/" + menu.image):
 				os.remove("static/" + menu.image)
-
-			db.session.delete(menu)
-
-		products = Product.query.filter_by(locationId=id).all()
 
 		for product in products:
 			if os.path.exists("static/" + product.image):
 				os.remove("static/" + product.image)
 
-			db.session.delete(product)
+			query("delete from product where id = " + str(product["id"]))
 
-		db.session.delete(location)
-		db.session.commit()
+		query("delete from location where id = " + str(location["id"]))
 
 		return { "msg": "Location deleted" }
 	else:
@@ -228,15 +231,14 @@ def delete_location(id):
 
 @app.route("/delete_user/<id>")
 def delete_user(id):
-	user = User.query.filter_by(id=id).first()
+	user = query("select * from user where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 
 	if user != None:
 		info = json.loads(user.info)
 
-		db.session.delete(user)
-		db.session.commit()
+		query("delete from user where id = " + str(user["id"]))
 
 		return { "msg": "User deleted" }
 	else:
@@ -247,11 +249,12 @@ def delete_user(id):
 @app.route("/delete_all_users")
 def delete_all_users():
 	users = User.query.all()
+	ids = []
 
 	for user in users:
-		db.session.delete(user)
+		ids.append(user.id)
 
-	db.session.commit()
+	query("delete from user where id in (" + json.dumps(ids)[1:-1] + ")")
 
 	return { "msg": "Users deleted" }
 
@@ -270,3 +273,36 @@ def twilio_test():
 	)
 
 	return { "message": message.sid }
+
+@app.route("/read_other_db")
+def read_other_db():
+	results = readOtherDB("select * from user where id = 1", True).fetchone()["data"]
+
+	return results["cellnumber"]
+
+@app.route("/get_id_after_insert")
+def get_id_after_insert():
+	data = {
+		"cellnumber": "2323423",
+		"password": "fdfd",
+		"username": "dfd",
+		"profile": "",
+		"hours": "",
+		"info": ""
+	}
+
+	insert_data = []
+	columns = []
+	for key in data:
+		columns.append(key)
+		insert_data.append("'" + str(data[key]) + "'")
+
+	id = query("insert into owner (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
+
+	return { "id": id }
+
+@app.route("/get_num")
+def get_num():
+	num = query("select count(*) as num from owner where id > 100", True).fetchone()["num"]
+
+	return { "big": num > 0 }
