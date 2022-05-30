@@ -51,7 +51,7 @@ def get_cart_items(id):
 		for k, size in enumerate(sizes):
 			size['key'] = "size-" + str(k)
 
-		if len(product) == 0:
+		if product == None:
 			userInput = json.loads(data["userInput"])
 
 		image = json.loads(product["image"]) if product != None else {"name": ""}
@@ -102,7 +102,7 @@ def add_item_to_cart():
 		columns.append(key)
 		insert_data.append("'" + str(data[key]) + "'")
 
-	query("insert into cart (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")").lastrowid
+	query("insert into cart (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")")
 
 	return { "msg": "item added to cart" }
 
@@ -181,6 +181,8 @@ def checkout():
 @app.route("/order_done", methods=["POST"])
 def order_done():
 	content = request.get_json()
+	errormsg = ""
+	status = ""
 
 	userid = str(content['userid'])
 	ordernumber = content['ordernumber']
@@ -189,39 +191,48 @@ def order_done():
 	user = query("select * from user where id = " + str(userid), True).fetchone()
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
 
-	locationInfo = json.loads(location["info"])
-	username = user["username"]
-	adder = user["id"]
+	if user != None and location != None:
+		locationInfo = json.loads(location["info"])
+		username = user["username"]
+		adder = user["id"]
 
-	sql = "select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "' and "
-	sql += "((status = 'inprogress' and not waitTime = '' and userInput like '%\"type\": \"restaurant\"%') or "
-	sql += "(status = 'checkout' and waitTime = '' and userInput like '%\"type\": \"store\"%'))"
-	
-	datas = query(sql, True).fetchall()
+		sql = "select * from cart where adder = " + str(adder) + " and orderNumber = '" + ordernumber + "'"
+		sql += " and ((status = 'inprogress' or status = 'checkout') and (userInput like '%\"type\": \"store\"%' or userInput like '%\"type\": \"restaurant\"%'))"
+		
+		datas = query(sql, True).fetchall()
 
-	if len(datas) > 0:
-		for data in datas:
-			groupId = ""
+		if len(datas) > 0:
+			if datas[0]['waitTime'] != "":
+				for data in datas:
+					groupId = ""
 
-			for k in range(20):
-				groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
+					for k in range(20):
+						groupId += chr(randint(65, 90)) if randint(0, 9) % 2 == 0 else str(randint(0, 0))
 
-			product = query("select * from product where id = " + str(data['productId']), True).fetchone()
+					product = query("select * from product where id = " + str(data['productId']), True).fetchone()
 
-			sizes = json.loads(data['sizes'])
-			others = json.loads(data['others'])
-			quantity = int(data['quantity'])
-			userInput = json.loads(data['userInput'])
+					sizes = json.loads(data['sizes'])
+					others = json.loads(data['others'])
+					quantity = int(data['quantity'])
+					userInput = json.loads(data['userInput'])
 
-			quantity = int(data['quantity'])
-			options = data['options']
-			others = data['others']
-			sizes = json.dumps(sizes)
-			info = json.loads(user["info"])
+					quantity = int(data['quantity'])
+					options = data['options']
+					others = data['others']
+					sizes = json.dumps(sizes)
+					info = json.loads(user["info"])
 
-			query("delete from cart where id = " + str(data['id']))
-	
-		return { "msg": "Order delivered and payment made" }
+					query("delete from cart where id = " + str(data['id']))
+			
+				return { "msg": "Order delivered and payment made" }
+			else:
+				errormsg = "No wait time"
+				status = "nowaittime"
+		else:
+			errormsg = "Order doesn't exist"
+			status = "nonexist"
+
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/set_wait_time", methods=["POST"])
 def set_wait_time():
@@ -259,15 +270,15 @@ def edit_cart_item(id):
 	userInput = json.loads(cartitem["userInput"])
 	cost = 0
 
-	options = json.loads(cartitem.options)
+	options = json.loads(cartitem["options"])
 	for k, option in enumerate(options):
 		option["key"] = "option-" + str(k)
 
-	others = json.loads(cartitem.others)
+	others = json.loads(cartitem["others"])
 	for k, other in enumerate(others):
 		other["key"] = "other-" + str(k)
 
-	sizes = json.loads(cartitem.sizes)
+	sizes = json.loads(cartitem["sizes"])
 	for k, size in enumerate(sizes):
 		size["key"] = "size-" + str(k)
 
@@ -326,7 +337,7 @@ def update_cart_item():
 	update_data = []
 
 	for key in new_data:
-		update_data.append(key + " = '" + new_data[key] + "'")
+		update_data.append(key + " = '" + str(new_data[key]) + "'")
 
 	query("update cart set " + ", ".join(update_data) + " where id = " + str(cartid))
 

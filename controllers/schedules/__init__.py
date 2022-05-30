@@ -496,7 +496,8 @@ def get_appointments():
 @app.route("/get_cart_orderers/<id>")
 def get_cart_orderers(id):
 	datas = query("select adder, orderNumber from cart where locationId = " + str(id) + " and (status = 'checkout' or status = 'inprogress') group by adder, orderNumber", True).fetchall()
-	numCartorderers = query("select count(*) as num from cart where locationId = " + str(id) + " and (status = 'checkout' or status = 'inprogress') group by adder, orderNumber", True).fetchone()["num"]
+	numCartorderers = query("select count(*) as num from cart where locationId = " + str(id) + " and (status = 'checkout' or status = 'inprogress') group by adder, orderNumber", True).fetchone()
+	numCartorderers = numCartorderers["num"] if numCartorderers != None else 0
 	cartOrderers = []
 
 	for k, data in enumerate(datas):
@@ -526,10 +527,10 @@ def get_orders():
 	locationid = content['locationid']
 	ordernumber = content['ordernumber']
 
-	cart = query("select * from cart where adder = " + str(userid) + " and locationId = " + str(locationid) + " and orderNumber = '" + ordernumber + "'", True).fetchone()
+	datas = query("select * from cart where adder = " + str(userid) + " and locationId = " + str(locationid) + " and orderNumber = '" + ordernumber + "'", True).fetchall()
 	orders = []
 	ready = True
-	waitTime = cart["waitTime"] if cart != None else ""
+	waitTime = datas[0]["waitTime"] if len(datas) > 0 else ""
 
 	for data in datas:
 		product = query("select * from product where id = " + str(data['productId']), True).fetchone()

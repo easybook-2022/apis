@@ -31,6 +31,7 @@ def setup_location():
 	ownerid = request.form['ownerid']
 
 	owner = query("select * from owner where id = " + str(ownerid), True).fetchone()
+	ownerProfile = json.loads(owner["profile"])
 
 	errormsg = ""
 	status = ""
@@ -82,7 +83,11 @@ def setup_location():
 
 			id = query("insert into location (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
 
-			return { "msg": "location setup", "id": id }
+			return { 
+				"msg": "location setup", 
+				"id": id, 
+				"ownerProfile": ownerProfile # if it's owner's first salon
+			}
 	else:
 		errormsg = "Location phone number already taken"
 
@@ -101,78 +106,83 @@ def update_location():
 			
 	longitude = request.form['longitude']
 	latitude = request.form['latitude']
-	ownerid = request.form['ownerid']
 
-	owner = query("select * from owner where id = " + str(ownerid), True).fetchone()
 	errormsg = ""
 	status = ""
 
 	location = query("select * from location where id = " + str(id), True).fetchone()
 
-	oldlogo = json.loads(location["logo"])
+	if location != None:
+		oldlogo = json.loads(location["logo"])
 
-	isWeb = request.form.get("web")
+		isWeb = request.form.get("web")
 
-	if isWeb != None:
-		logo = json.loads(request.form['logo'])
-		imagename = logo['name']
+		if isWeb != None:
+			logo = json.loads(request.form['logo'])
+			imagename = logo['name']
 
-		if imagename != '':
-			uri = logo['uri'].split(",")[1]
-			size = logo['size']
+			if imagename != '':
+				uri = logo['uri'].split(",")[1]
+				size = logo['size']
 
-			if oldlogo["name"] != "" and os.path.exists(os.path.join("static", oldlogo["name"])) == True:
-				os.remove("static/" + oldlogo["name"])
-
-			writeToFile(uri, imagename)
-
-			location["logo"] = json.dumps({"name": imagename, "width": int(size['width']), "height": int(size['height'])})
-	else:
-		logopath = request.files.get('logo', False)
-		logoexist = False if logopath == False else True
-
-		if logoexist == True:
-			logo = request.files['logo']
-			imagename = logo.filename
-
-			size = json.loads(request.form['size'])
-			
-			if logo.filename != oldlogo["name"]:
-				if oldlogo["name"] != "" and oldlogo["name"] != None and os.path.exists("static/" + oldlogo["name"]):
+				if oldlogo["name"] != "" and os.path.exists(os.path.join("static", oldlogo["name"])) == True:
 					os.remove("static/" + oldlogo["name"])
 
-				logo.save(os.path.join('static', imagename))
+				writeToFile(uri, imagename)
 
-			location["logo"] = json.dumps({"name": imagename, "width": size["width"], "height": size["height"]})
+				location["logo"] = json.dumps({"name": imagename, "width": int(size['width']), "height": int(size['height'])})
+		else:
+			logopath = request.files.get('logo', False)
+			logoexist = False if logopath == False else True
 
-	location["name"] = storeName
-	location["addressOne"] = addressOne
-	location["addressTwo"] = addressTwo
-	location["city"] = city
-	location["province"] = province
-	location["postalcode"] = postalcode
-	location["phonenumber"] = phonenumber
-	location["longitude"] = longitude
-	location["latitude"] = latitude
+			if logoexist == True:
+				logo = request.files['logo']
+				imagename = logo.filename
 
-	update_data = []
-	for key in location:
-		if key != "table":
-			update_data.append(key + " = '" + str(location[key]) + "'")
+				size = json.loads(request.form['size'])
+				
+				if logo.filename != oldlogo["name"]:
+					if oldlogo["name"] != "" and oldlogo["name"] != None and os.path.exists("static/" + oldlogo["name"]):
+						os.remove("static/" + oldlogo["name"])
 
-	query("update location set " + ", ".join(update_data) + " where id = " + str(location["id"]))
+					logo.save(os.path.join('static', imagename))
 
-	return { "msg": "location updated", "id": location["id"] }
+				location["logo"] = json.dumps({"name": imagename, "width": size["width"], "height": size["height"]})
+
+		location["name"] = storeName
+		location["addressOne"] = addressOne
+		location["addressTwo"] = addressTwo
+		location["city"] = city
+		location["province"] = province
+		location["postalcode"] = postalcode
+		location["phonenumber"] = phonenumber
+		location["longitude"] = longitude
+		location["latitude"] = latitude
+
+		update_data = []
+		for key in location:
+			if key != "table":
+				update_data.append(key + " = '" + str(location[key]) + "'")
+
+		query("update location set " + ", ".join(update_data) + " where id = " + str(location["id"]))
+
+		return { "msg": "location updated", "id": location["id"] }
+	else:
+		errormsg = "Location doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/fetch_num_appointments/<ownerid>")
 def fetch_num_appointments(ownerid):
-	numAppointments = query("select count(*) as num from schedule where status = 'confirmed' and workerId = " + str(ownerid), True).fetchone()["num"]
+	numAppointments = query("select count(*) as num from schedule where status = 'confirmed' and workerId = " + str(ownerid), True).fetchone()
+	numAppointments = numAppointments["num"] if numAppointments != None else 0
 
 	return { "numAppointments": numAppointments }
 
 @app.route("/fetch_num_cartorderers/<id>")
 def fetch_num_cartorderers(id):
-	numCartorderers = query("select count(*) as num from cart where locationId = " + str(id) + " and (status = 'checkout' or status = 'ready' or status = 'requestedOrder') group by adder, orderNumber", True).fetchone()["num"]
+	numCartorderers = query("select count(*) as num from cart where locationId = " + str(id) + " and (status = 'checkout' or status = 'ready' or status = 'requestedOrder') group by adder, orderNumber", True).fetchone()
+	numCartorderers = numCartorderers["num"] if numCartorderers != None else 0
 
 	return { "numCartorderers": numCartorderers }
 
