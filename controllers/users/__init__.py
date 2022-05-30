@@ -27,24 +27,27 @@ def user_login():
 	if cellnumber != '' and password != '':
 		user = query("select * from user where cellnumber = '" + str(cellnumber) + "'", True).fetchone()
 
-		if check_password_hash(user["password"], password):
-			userid = user["id"]
+		if user != None:
+			if check_password_hash(user["password"], password):
+				userid = user["id"]
 
-			user["password"] = generate_password_hash(password)
+				user["password"] = generate_password_hash(password)
 
-			update_data = []
-			for key in user:
-				if key != "table":
-					update_data.append(key + " = '" + str(user[key]) + "'")
+				update_data = []
+				for key in user:
+					if key != "table":
+						update_data.append(key + " = '" + str(user[key]) + "'")
 
-			query("update user set " + ", ".join(update_data) + " where id = " + str(userid))
+				query("update user set " + ", ".join(update_data) + " where id = " + str(userid))
 
-			if user["username"] == '':
-				return { "id": userid, "msg": "setup" }
+				if user["username"] == '':
+					return { "id": userid, "msg": "setup" }
+				else:
+					return { "id": userid, "msg": "main" }
 			else:
-				return { "id": userid, "msg": "main" }
+				errormsg = "Password is incorrect"
 		else:
-			errormsg = "Password is incorrect"
+			errormsg = "Account doesn't exist"
 	else:
 		if cellnumber == '':
 			errormsg = "Cell number is blank"
@@ -92,7 +95,7 @@ def user_register():
 			if password == confirmPassword:
 				user = query("select * from user where cellnumber = '" + str(cellnumber) + "'", True).fetchone()
 
-				if user != None:
+				if user == None:
 					password = generate_password_hash(password)
 
 					userInfo = json.dumps({"pushToken": ""})
@@ -241,11 +244,15 @@ def get_num_notifications(userid):
 	# cart orders called for self
 	sql = "select count(*) as num from cart where adder = " + userid + " and (status = 'checkout' or status = 'ready') group by adder, orderNumber"
 	numCartorderers = query(sql, True).fetchone()
-	num += numCartorderers if numCartorderers > 0 else 0
+	numCartorderers = numCartorderers["num"] if numCartorderers != None else 0
+
+	return { "numCartorderers": numCartorderers }
+
+	num += numCartorderers
 
 	# get schedules
 	sql = "select count(*) as num from schedule where userId = " + userid + " and (status = 'cancel' or status = 'confirmed')"
-	num += query(sql, True).fetchone()
+	num += query(sql, True).fetchone()["num"]
 
 	return { "numNotifications": num }
 
@@ -260,7 +267,7 @@ def get_notifications(id):
 
 	# cart orders called for self
 	sql = "select orderNumber from cart where adder = " + str(id) + " and (status = 'checkout' or status = 'inprogress') group by orderNumber"
-	datas = query(sql, True)
+	datas = query(sql, True).fetchall()
 
 	for data in datas:
 		cartitem = query("select * from cart where orderNumber = '" + str(data["orderNumber"]) + "'", True).fetchone()
@@ -281,7 +288,7 @@ def get_notifications(id):
 	# get schedules
 	sql = "select * from schedule where "
 	sql += "(userId = " + str(id) + " and (status = 'cancel' or status = 'confirmed'))"
-	datas = query(sql, True)
+	datas = query(sql, True).fetchall()
 
 	for data in datas:
 		location = None
@@ -323,14 +330,10 @@ def get_notifications(id):
 			"time": json.loads(data['time']),
 			"action": data['status'],
 			"reason": data['cancelReason'],
-			"table": data['table'],
 			"booker": userId == data['userId'],
 			"bookerName": booker["username"],
 			"confirm": confirm,
-			"workerInfo": {
-				"id": owner["id"],
-				"username": owner["username"]
-			} if data["workerId"] > -1 else {}
+			"workerInfo": { "id": owner["id"], "username": owner["username"] } if data["workerId"] > -1 else {}
 		})
 
 	return { "notifications": notifications }

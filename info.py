@@ -10,8 +10,8 @@ from os.path import expanduser
 test = True
 
 local = test
-test_sms = False
-send_msg = True
+test_sms = True
+send_msg = False
 push_notif = True
 
 host = 'localhost'

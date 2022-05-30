@@ -278,7 +278,7 @@ def add_menu():
 					columns.append(key)
 					insert_data.append("'" + str(data[key]) + "'")
 
-				id = query("insert into menu (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")").lastrowid
+				id = query("insert into menu (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
 				
 				return { "id": id }
 		else:

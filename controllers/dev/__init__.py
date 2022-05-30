@@ -303,6 +303,6 @@ def get_id_after_insert():
 
 @app.route("/get_num")
 def get_num():
-	num = query("select count(*) as num from owner where id > 100", True).fetchone()["num"]
+	num = query("select count(*) as num from owner group by id", True).fetchone()["num"]
 
-	return { "big": num > 0 }
+	return { "num": num }

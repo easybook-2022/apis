@@ -57,8 +57,6 @@ def get_requests():
 			"name": service["name"] if service != None else userInput['name'] if 'name' in userInput else "",
 			"image": image if image["name"] != "" else {"width": 300, "height": 300},
 			"note": data['note'],
-			"diners": len(json.loads(data['customers'])) if data['locationType'] == 'restaurant' else False,
-			"tablenum": data['table'],
 			"status": data['status']
 		})
 
@@ -167,9 +165,7 @@ def make_appointment():
 		if info["pushToken"] != "" and info["signin"] == True:
 			pushids.append({ "token": info["pushToken"], "signin": info["signin"] })
 
-	if len(schedule) > 0: # existing schedule
-		schedule = schedule[0]
-
+	if schedule != None: # existing schedule
 		schedule["time"] = time
 		schedule["status"] = 'confirmed'
 		schedule["note"] = note
@@ -481,7 +477,7 @@ def get_appointments():
 		client = { "id": data['userId'], "username": user["username"] }
 		worker = { "id": worker["id"], "username": worker["username"] }
 		userInput = json.loads(data['userInput'])
-		image = json.loads(service[0]["image"]) if len(service) > 0 else {"name": ""}
+		image = json.loads(service["image"]) if service != None else {"name": ""}
 
 		appointments.append({
 			"key": "appointment-" + str(data['id']),
@@ -490,8 +486,8 @@ def get_appointments():
 			"client": client,
 			"worker": worker,
 			"time": json.loads(data['time']),
-			"serviceid": service[0]["id"] if len(service) > 0 else "",
-			"name": service[0]["name"] if len(service) > 0 else userInput['name'],
+			"serviceid": service["id"] if service != None else "",
+			"name": service["name"] if service != None else userInput['name'],
 			"image": image if image["name"] != "" else {"width": 300, "height": 300}
 		})
 
@@ -553,9 +549,7 @@ def get_orders():
 		for k, size in enumerate(sizes):
 			size['key'] = "size-" + str(k)
 
-		if len(product) > 0:
-			product = product[0]
-
+		if product != None:
 			if product["price"] == "":
 				for size in sizes:
 					if size["selected"] == True:
@@ -567,17 +561,14 @@ def get_orders():
 				if other["selected"] == True:
 					cost += float(other["price"])
 
-		image = json.loads(product[0]["image"]) if len(product) > 0 else {"name": ""}
+		image = json.loads(product["image"]) if product != None else {"name": ""}
 		orders.append({
 			"key": "cart-item-" + str(data['id']),
 			"id": str(data['id']),
-			"name": product[0]["name"] if len(product) > 0 else userInput['name'],
+			"name": product["name"] if product != None else userInput['name'],
 			"note": data['note'],
 			"image": image if image["name"] != "" else {"width": 300, "height": 300},
-			"options": options,
-			"others": others,
-			"sizes": sizes,
-			"quantity": quantity,
+			"options": options, "others": others, "sizes": sizes, "quantity": quantity,
 			"cost": (cost * quantity) if cost > 0 else None
 		})
 

@@ -17,9 +17,9 @@ def welcome_carts():
 
 @app.route("/get_num_items/<id>")
 def get_num_items(id):
-	datas = query("select * from cart where adder = " + str(id) + " and status = 'unlisted'", True)
+	numCartItems = query("select count(*) as num from cart where adder = " + str(id) + " and status = 'unlisted'", True).fetchone()["num"]
 
-	return { "numCartItems": len(datas) }
+	return { "numCartItems": numCartItems }
 
 @app.route("/get_cart_items/<id>")
 def get_cart_items(id):
@@ -54,12 +54,12 @@ def get_cart_items(id):
 		if len(product) == 0:
 			userInput = json.loads(data["userInput"])
 
-		image = json.loads(product[0]["image"]) if len(product) > 0 else {"name": ""}
+		image = json.loads(product["image"]) if product != None else {"name": ""}
 		items.append({
 			"key": "cart-item-" + str(data["id"]),
 			"id": str(data["id"]),
-			"name": product[0]["name"] if len(product) > 0 else userInput["name"],
-			"productId": product[0]["id"] if len(product) > 0 else None, 
+			"name": product["name"] if product != None else userInput["name"],
+			"productId": product["id"] if product != None else None, 
 			"note": data["note"], 
 			"image": image if image["name"] != "" else {"width": 300, "height": 300}, 
 			"options": options, "others": others, "sizes": sizes, "quantity": quantity,
@@ -112,7 +112,7 @@ def remove_item_from_cart(id):
 	errormsg = ""
 	status = ""
 
-	if len(cartitem) > 0:
+	if cartitem != None:
 		query("delete from cart where id = " + str(id))
 
 		return { "msg": "Cart item removed from cart" }
@@ -271,13 +271,13 @@ def edit_cart_item(id):
 	for k, size in enumerate(sizes):
 		size["key"] = "size-" + str(k)
 
-	if len(product) > 0:
-		if product[0]["price"] == "":
+	if product != None:
+		if product["price"] == "":
 			for size in sizes:
 				if size["selected"] == True:
 					cost += quantity * float(size["price"])
 		else:
-			cost += quantity * float(product[0]["price"])
+			cost += quantity * float(product["price"])
 
 		for other in others:
 			if other["selected"] == True:
@@ -286,11 +286,11 @@ def edit_cart_item(id):
 		if "price" in userInput:
 			cost += quantity * float(userInput["price"])
 
-	image = json.loads(product[0]["image"]) if len(product) > 0 else {"name": ""}
+	image = json.loads(product["image"]) if product != None else {"name": ""}
 	info = {
-		"name": product[0]["name"] if len(product) > 0 else (userInput["name"] if "name" in userInput else ""),
+		"name": product["name"] if product != None else (userInput["name"] if "name" in userInput else ""),
 		"image": image if image["name"] != "" else {"width": 300, "height": 300},
-		"price": float(product[0]["price"]) if len(product) > 0 else (userInput["price"] if "price" in userInput else 0),
+		"price": float(product["price"]) if product != None else (userInput["price"] if "price" in userInput else 0),
 		"quantity": quantity,
 		"options": options,
 		"others": others,
@@ -354,11 +354,11 @@ def see_orders(id):
 		for k, size in enumerate(sizes):
 			size['key'] = "size-" + str(k)
 
-		image = json.loads(product[0]["image"]) if len(product) > 0 else {"name": ""}
+		image = json.loads(product["image"]) if product != None else {"name": ""}
 		orders.append({
 			"key": "cart-item-" + str(data["id"]),
 			"id": str(data["id"]),
-			"name": product[0]["name"] if len(product) > 0 else userInput['name'],
+			"name": product["name"] if product != None else userInput['name'],
 			"note": data["note"],
 			"image": image if image["name"] != "" else {"width": 300, "height": 300},
 			"options": options,

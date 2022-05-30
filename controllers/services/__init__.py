@@ -109,11 +109,11 @@ def update_service():
 
 	service = query("select * from service where id = " + str(serviceid) + " and locationId = " + str(locationid) + " and menuId = " + str(menuid), True).fetchone()
 
-	service.name = name
-	service.price = price
+	service["name"] = name
+	service["price"] = price
 
 	isWeb = request.form.get("web")
-	oldimage = json.loads(service.image)
+	oldimage = json.loads(service["image"])
 
 	if isWeb != None:
 		image = json.loads(request.form['image'])
@@ -149,24 +149,24 @@ def update_service():
 	if errormsg == "":
 		update_data = []
 		for key in service:
-			update_data.append(key + " = '" + service[key] + "'")
+			update_data.append(key + " = '" + str(service[key]) + "'")
 
 		query("update service set " + ", ".join(update_data) + " where id = " + str(service["id"]))
 
-		return { "msg": "service updated", "id": service.id }
+		return { "msg": "service updated" }
 
 @app.route("/remove_service/<id>")
 def remove_service(id):
 	service = query("select * from service where id = " + str(id), True).fetchone()
 
-	image = json.loads(service.image)
+	image = json.loads(service["image"])
 
 	if image["name"] != "" and os.path.exists("static/" + image["name"]):
 		os.remove("static/" + image["name"])
 
 	query("delete from service where id = " + str(id))
 
-	location = query("select * from location where id = " + str(service.locationId), True).fetchone()
+	location = query("select * from location where id = " + str(service["locationId"]), True).fetchone()
 	info = json.loads(location["info"])
 
 	numMenus = query("select count(*) as num from menu where locationId = " + str(location["id"]), True).fetchone()["num"]

@@ -81,13 +81,11 @@ def cancel_cart_order():
 	userid = content['userid']
 	cartid = content['cartid']
 
-	data = query("select * from cart where id = " + str(cartid), True).fetchone()
+	cartitem = query("select * from cart where id = " + str(cartid), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if len(data) > 0:
-		data = data[0]
-
+	if cartitem != None:
 		receiver = ["user" + str(data['adder'])]
 
 		query("delete from cart where id = " + str(cartid))

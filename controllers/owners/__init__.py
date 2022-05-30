@@ -30,7 +30,7 @@ def owner_login():
 
 				numBusiness = query("select count(*) as num from location where owners like '%\"" + str(ownerid) + "\"%'", True).fetchone()["num"]
 
-				if data > 0:
+				if numBusiness > 0:
 					location = query("select * from location where owners like '%\"" + str(ownerid) + "\"%'", True).fetchone()
 					locationid = location['id']
 					locationtype = location['type']
@@ -124,7 +124,7 @@ def owner_register():
 	if cellnumber == "":
 		errormsg = "Cell number is blank"
 	else:
-		num_existing_cellnumber = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True).fetchone()
+		num_existing_cellnumber = query("select count(*) as num from owner where cellnumber = '" + str(cellnumber) + "'", True).fetchone()["num"]
 
 		if num_existing_cellnumber > 0:
 			errormsg = "Account already exist"
@@ -789,9 +789,7 @@ def get_owner_info(id):
 	errormsg = ""
 	status = ""
 
-	if len(owner) > 0:
-		owner = owner[0]
-
+	if owner != None:
 		ownerInfo = json.loads(owner["info"])
 
 		info = { "id": id, "isOwner": ownerInfo["owner"] }
@@ -899,13 +897,11 @@ def get_accounts(id):
 @app.route("/get_reset_code/<cellnumber>")
 def get_owner_reset_code(cellnumber):
 	cellnumber = cellnumber.replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
-	owner = query("select * from owner where cellnumber = " + str(cellnumber), True)
+	owner = query("select * from owner where cellnumber = " + str(cellnumber), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if len(owner) > 0:
-		owner = owner[0]
-
+	if owner != None:
 		code = getRanStr()
 
 		if test_sms == False:
@@ -929,13 +925,11 @@ def owner_reset_password():
 	password = content['newPassword']
 	confirmPassword = content['confirmPassword']
 
-	owner = query("select * from owner where cellnumber = " + str(cellnumber), True)
+	owner = query("select * from owner where cellnumber = " + str(cellnumber), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if len(owner) > 0:
-		owner = owner[0]
-
+	if owner != None:
 		if password != '' and confirmPassword != '':
 			if len(password) >= 6:
 				if password == confirmPassword:
@@ -945,9 +939,9 @@ def owner_reset_password():
 
 					ownerid = owner["id"]
 
-					data = query("select * from location where owners like '%\"" + str(ownerid) + "\"%'", True)
+					numLocations = query("select count(*) as num from location where owners like '%\"" + str(ownerid) + "\"%'", True).fetchone()["num"]
 
-					if len(data) == 0:
+					if numLocations == 0:
 						return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": "", "locationtype": "", "msg": "setup" }
 					else:
 						data = data[0]

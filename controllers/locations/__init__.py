@@ -80,7 +80,7 @@ def setup_location():
 				columns.append(key)
 				insert_data.append("'" + str(data[key]) + "'")
 
-			id = query("insert into location (" + ", ".join(columns) + ") output inserted.id values (" + ", ".join(insert_data) + ")", True).lastrowid
+			id = query("insert into location (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
 
 			return { "msg": "location setup", "id": id }
 	else:
@@ -476,9 +476,7 @@ def get_location_profile():
 	errormsg = ""
 	status = ""
 
-	if len(location) > 0:
-		location = location[0]
-
+	if location != None:
 		locationInfo = json.loads(location["info"])
 
 		if longitude != None:
@@ -587,7 +585,7 @@ def get_hours():
 	locationid = content['locationid']
 	day = content['day']
 
-	scheduled = query("select * from schedule where locationId = " + str(locationid), True).fetchone()
+	scheduled = query("select * from schedule where locationId = " + str(locationid), True).fetchall()
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
 	times = []
 	errormsg = ""
