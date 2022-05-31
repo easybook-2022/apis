@@ -11,7 +11,7 @@ test = True
 
 local = test
 test_sms = True
-send_msg = False
+send_msg = True
 push_notif = True
 
 host = 'localhost'

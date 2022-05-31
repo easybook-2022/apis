@@ -84,7 +84,7 @@ def setup_location():
 			id = query("insert into location (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
 
 			return { 
-				"msg": "location setup", 
+				"msg": "success", 
 				"id": id, 
 				"ownerProfile": ownerProfile # if it's owner's first salon
 			}
@@ -166,7 +166,7 @@ def update_location():
 
 		query("update location set " + ", ".join(update_data) + " where id = " + str(location["id"]))
 
-		return { "msg": "location updated", "id": location["id"] }
+		return { "msg": "success", "id": location["id"] }
 	else:
 		errormsg = "Location doesn't exist"
 
@@ -212,7 +212,7 @@ def set_location_hours():
 
 	query("update location set hours = '" + str(hours) + "' where id = " + str(locationid))
 
-	return { "msg": "hours updated" }
+	return { "msg": "success" }
 
 @app.route("/set_receive_type", methods=["POST"])
 def set_receive_type():

@@ -48,6 +48,7 @@ def user_login():
 				errormsg = "Password is incorrect"
 		else:
 			errormsg = "Account doesn't exist"
+			status = "nonexist"
 	else:
 		if cellnumber == '':
 			errormsg = "Cell number is blank"

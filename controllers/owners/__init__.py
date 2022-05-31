@@ -60,6 +60,7 @@ def owner_login():
 				errormsg = "Password is incorrect"
 		else:
 			errormsg = "Account doesn't exist"
+			status = "nonexist"
 	else:
 		if cellnumber == "":
 			errormsg = "Phone number is blank"
@@ -644,6 +645,54 @@ def search_workers():
 @app.route("/get_workers_time/<id>") # salon profile
 def get_workers_time(id):
 	location = query("select * from location where id = " + str(id), True).fetchone()
+	data = json.loads(location["hours"])
+
+	locationHours = [
+		{ "key": "0", "header": "Sunday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False },
+		{ "key": "1", "header": "Monday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False },
+		{ "key": "2", "header": "Tuesday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False },
+		{ "key": "3", "header": "Wednesday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False },
+		{ "key": "4", "header": "Thursday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False },
+		{ "key": "5", "header": "Friday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False },
+		{ "key": "6", "header": "Saturday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False }
+	]
+	day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+	for k, info in enumerate(locationHours):
+		openhour = int(data[day[k][:3]]["opentime"]["hour"])
+		closehour = int(data[day[k][:3]]["closetime"]["hour"])
+		close = data[day[k][:3]]["close"]
+
+		openperiod = "PM" if openhour >= 12 else "AM"
+		openhour = int(openhour)
+
+		if openhour == 0:
+			openhour = 12
+		elif openhour > 12:
+			openhour -= 12
+
+		openhour = "0" + str(openhour) if openhour < 10 else str(openhour)
+
+		closeperiod = "PM" if closehour >= 12 else "AM"
+		closehour = int(closehour)
+
+		if closehour == 0:
+			closehour = 12
+		elif closehour > 12:
+			closehour -= 12
+
+		closehour = "0" + str(closehour) if closehour < 10 else str(closehour)
+
+		info["opentime"]["hour"] = int(openhour)
+		info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
+		info["opentime"]["period"] = openperiod
+
+		info["closetime"]["hour"] = int(closehour)
+		info["closetime"]["minute"] = data[day[k][:3]]["closetime"]["minute"]
+		info["closetime"]["period"] = closeperiod
+		info["close"] = close
+
+		locationHours[k] = info
 
 	workers = "(" + location["owners"][1:-1] + ")"
 	owners = query("select * from owner where id in " + workers, True).fetchall()
@@ -661,7 +710,6 @@ def get_workers_time(id):
 		]
 
 		data = json.loads(owner["hours"])
-		day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
 		for k, info in enumerate(hours):
 			openhour = int(data[day[k][:3]]["opentime"]["hour"])
@@ -708,7 +756,7 @@ def get_workers_time(id):
 			"hours": hours
 		})
 
-	return { "workerHours": workerHours }
+	return { "workers": workerHours, "locationHours": locationHours }
 
 @app.route("/get_other_workers", methods=["POST"])
 def get_other_workers():
