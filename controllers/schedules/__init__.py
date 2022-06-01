@@ -118,6 +118,7 @@ def make_appointment():
 	errormsg = ""
 	status = ""
 
+	scheduleid = content['id']
 	userid = content['userid']
 	workerid = content['workerid']
 	locationid = content['locationid']
@@ -136,7 +137,11 @@ def make_appointment():
 		servicename = service["name"]
 		menuid = service["menuId"]
 	else:
-		schedule = query("select * from schedule where userId = " + str(userid) + " and userInput like '%\"name\": \"" + str(serviceinfo) + "\"%'", True).fetchone()
+		if scheduleid != None:
+			schedule = query("select * from schedule where id = " + str(scheduleid), True).fetchone()
+		else:
+			schedule = None
+		
 		servicename = serviceinfo
 		menuid = -1
 
@@ -232,6 +237,7 @@ def salon_change_appointment():
 	errormsg = ""
 	status = ""
 
+	scheduleid = content['id']
 	clientid = content['clientid']
 	workerid = content['workerid']
 	locationid = content['locationid']
@@ -250,7 +256,11 @@ def salon_change_appointment():
 		servicename = service["name"]
 		menuid = service["menuId"]
 	else:
-		schedule = query("select * from schedule where userId = " + str(clientid) + " and userInput like '%\"name\": \"" + str(serviceinfo) + "\"%'", True).fetchone()
+		if scheduleid != None:
+			schedule = query("select * from schedule where id = " + str(scheduleid), True).fetchone()
+		else:
+			schedule = None
+		
 		servicename = serviceinfo
 		menuid = -1
 

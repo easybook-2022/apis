@@ -1,3 +1,4 @@
+import datetime
 from flask import request
 from flask_cors import CORS
 from info import *
@@ -213,6 +214,83 @@ def set_location_hours():
 	query("update location set hours = '" + str(hours) + "' where id = " + str(locationid))
 
 	return { "msg": "success" }
+
+@app.route("/get_day_hours", methods=["POST"])
+def get_day_hours():
+	content = request.get_json()
+	errormsg = ""
+	status = ""
+
+	days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+	locationid = content['locationid']
+	day = days[content['day']]
+	todayJson = content['todayJson']
+
+	location = query("select owners, hours from location where id = " + str(locationid), True).fetchone()
+
+	if location != None:
+		datas = query("select workerId, time from schedule where locationId = " + str(locationid), True).fetchall()
+		scheduled = {}
+
+		for data in datas:
+			if data["workerId"] not in scheduled:
+				scheduled[data["workerId"]] = [data["time"]]
+			else:
+				scheduled[data["workerId"]].append(data["time"])
+
+		owners = query("select id, username, profile from owner where id in (" + str(location["owners"])[1:-1] + ")", True).fetchall()
+		hours = json.loads(location["hours"])[day]
+		opentime = hours["opentime"]
+		closetime = hours["closetime"]
+
+		openhour = int(opentime["hour"])
+		openminute = int(opentime["minute"])
+		closehour = int(closetime["hour"])
+		closeminute = int(closetime["minute"])
+
+		workers = []
+		for index, owner in enumerate(owners):
+			profile = json.loads(owner["profile"])
+			workers.append({ 
+				"key": "worker-" + str(index) + "-" + str(owner["id"]), 
+				"id": owner["id"], "username": owner["username"], 
+				"profile": profile if profile["name"] != "" else {"width": 360, "height": 360}
+			})
+
+		chart = []
+		key = 0
+
+		while openhour < closehour or openminute < closeminute:
+			openminute += 15
+
+			if openminute > 59:
+				openminute = 0
+				openhour += 1
+
+			displayOpenhour = str(openhour) if openhour < 10 else (str(openhour) if openhour < 13 else str(openhour - 12))
+			displayClosehour = "0" + str(openminute) if openminute < 10 else str(openminute)
+			displayPeriod = "AM" if openhour < 13 else "PM"
+
+			jsonDate = { 
+				"day": todayJson["day"], "month": todayJson["month"], 
+				"date": todayJson["date"], "year": todayJson["year"], 
+				"hour": openhour, "minute": openminute 
+			}
+
+			chart.append({
+				"key": "time-" + str(key),
+				"time": displayOpenhour + ":" + displayClosehour + " " + displayPeriod,
+				"dateJson": jsonDate
+			})
+
+			key += 1
+
+		return { "opentime": opentime, "closetime": closetime, "chart": chart, "workers": workers, "scheduled": scheduled }
+	else:
+		errormsg = "Location doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/set_receive_type", methods=["POST"])
 def set_receive_type():
