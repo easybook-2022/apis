@@ -71,6 +71,7 @@ def get_appointment_info(id):
 	locationId = schedule["locationId"]
 	serviceId = schedule["serviceId"]
 	userId = schedule["userId"]
+	userInput = json.loads(schedule["userInput"])
 	
 	client = query("select * from user where id = " + str(userId), True).fetchone()
 
@@ -93,9 +94,13 @@ def get_appointment_info(id):
 		worker = { "id": schedule["workerId"], "username": workerInfo["username"], "profile": workerInfo["profile"], "days": info }
 
 	info = { 
-		"client": { "id": userId, "name": client["username"] },
+		"client": { 
+			"id": userId, 
+			"name": client["username"] if client != None else userInput["name"] if "name" in userInput else "", 
+			"cellnumber": userInput["cellnumber"] if "cellnumber" in userInput else None
+		},
 		"locationId": int(locationId), 
-		"serviceId": int(serviceId), 
+		"serviceId": int(serviceId) if serviceId > -1 else None, 
 		"time": json.loads(schedule["time"]), 
 		"worker": worker
 	}
@@ -107,10 +112,10 @@ def get_appointment_info(id):
 	else:
 		userInput = json.loads(schedule["userInput"])
 
-		info["name"] = userInput["name"]
+		info["name"] = userInput["name"] if "name" in userInput else ""
 
 	if errormsg == "":
-		return { "appointmentInfo": info }
+		return info
 
 @app.route("/make_appointment", methods=["POST"])
 def make_appointment():
@@ -230,6 +235,47 @@ def make_appointment():
 		speak = { "name": servicename, "time": json.loads(time), "worker": worker["username"] }
 
 		return { "msg": "appointment added", "receiver": receiver, "speak": speak }
+
+@app.route("/book_walk_in", methods=["POST"])
+def book_walk_in():
+	content = request.get_json()
+
+	workerid = content['workerid']
+	locationid = content['locationid']
+	time = content['time']
+	note = content['note']
+	type = content['type']
+	client = content['client']
+
+	data = {
+		"userId": -1,"workerId": workerid,"locationId": locationid,"menuId": -1,"serviceId": -1,
+		"userInput": json.dumps(client),"time": json.dumps(time),"status": "confirmed","cancelReason": "","locationType": type,
+		"customers": 1,"note": note,"orders": "[]","info": "{}"
+	}
+	columns = []
+	insert_data = []
+	for key in data:
+		columns.append(key)
+		insert_data.append("'" + str(data[key]) + "'")
+
+	query("insert into schedule (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")")
+
+	return { "msg": "success" }
+
+@app.route("/remove_booking/<id>")
+def remove_booking(id):
+	schedule = query("select * from schedule where id = " + str(id), True).fetchone()
+	errormsg = ""
+	status = ""
+
+	if schedule != None:
+		query("delete from schedule where id = " + str(id))
+		
+		return { "msg": "success" }
+	else:
+		errormsg = "Schedule doens't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/salon_change_appointment", methods=["POST"])
 def salon_change_appointment():
@@ -482,9 +528,13 @@ def get_appointments():
 		user = query("select * from user where id = " + str(data['userId']), True).fetchone()
 		service = query("select * from service where id = " + str(data['serviceId']), True).fetchone()
 		worker = query("select * from owner where id = " + str(data['workerId']), True).fetchone()
+		userInput = json.loads(data['userInput'])
 			
 		info = json.loads(data["info"])
-		client = { "id": data['userId'], "username": user["username"] }
+		client = { 
+			"id": data['userId'], 
+			"username": user["username"] if user != None else userInput["name"] if "name" in userInput else ""
+		}
 		worker = { "id": worker["id"], "username": worker["username"] }
 		userInput = json.loads(data['userInput'])
 		image = json.loads(service["image"]) if service != None else {"name": ""}
@@ -492,12 +542,12 @@ def get_appointments():
 		appointments.append({
 			"key": "appointment-" + str(data['id']),
 			"id": str(data['id']),
-			"username": user["username"],
+			"username": user["username"] if user != None else userInput["name"] if "name" in userInput else "",
 			"client": client,
 			"worker": worker,
 			"time": json.loads(data['time']),
 			"serviceid": service["id"] if service != None else "",
-			"name": service["name"] if service != None else userInput['name'],
+			"name": service["name"] if service != None else userInput['name'] if "name" in userInput else "",
 			"image": image if image["name"] != "" else {"width": 300, "height": 300}
 		})
 
