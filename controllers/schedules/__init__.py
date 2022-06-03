@@ -258,9 +258,9 @@ def book_walk_in():
 		columns.append(key)
 		insert_data.append("'" + str(data[key]) + "'")
 
-	query("insert into schedule (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")")
+	id = query("insert into schedule (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
 
-	return { "msg": "success" }
+	return { "msg": "success", "id": id }
 
 @app.route("/remove_booking/<id>")
 def remove_booking(id):
@@ -270,7 +270,7 @@ def remove_booking(id):
 
 	if schedule != None:
 		query("delete from schedule where id = " + str(id))
-		
+
 		return { "msg": "success" }
 	else:
 		errormsg = "Schedule doens't exist"

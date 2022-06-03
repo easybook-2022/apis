@@ -137,6 +137,8 @@ def user_register():
 @app.route("/update_user", methods=["POST"])
 def update_user():
 	content = request.get_json()
+	errormsg = ""
+	status = ""
 
 	userid = content['userid']
 	username = content['username']
@@ -145,199 +147,226 @@ def update_user():
 	confirmPassword = content['confirmPassword']
 
 	user = query("select * from user where id = " + str(userid), True).fetchone()
-	existed_username = query("select count(*) as num from user where username = '" + str(username) + "'", True).fetchone()["num"]
-	existed_cellnumber = query("select count(*) as num from user where cellnumber = '" + str(cellnumber) + "'", True).fetchone()["num"]
 
-	errormsg = ""
-	status = ""
+	if user != None:
+		existed_username = query("select count(*) as num from user where username = '" + str(username) + "'", True).fetchone()["num"]
+		existed_cellnumber = query("select count(*) as num from user where cellnumber = '" + str(cellnumber) + "'", True).fetchone()["num"]
 
-	if username != "":
-		if user["username"] != username:
-			if existed_username == 0:
-				user["username"] = username
-			else:
-				errormsg = "This username is already taken"
-				status = "sameusername"
-
-	if cellnumber != "":
-		if user["cellnumber"] != cellnumber:
-			if existed_cellnumber == 0:
-				user["cellnumber"] = cellnumber
-			else:
-				errormsg = "This cell number is already taken"
-				status = "samecellnumber"
-
-	if password != "" or confirmPassword != "":
-		if password != "" and confirmPassword != "":
-			if len(password) > 6:
-				if password == confirmPassword:
-					user["password"] = generate_password_hash(password)
+		if username != "":
+			if user["username"] != username:
+				if existed_username == 0:
+					user["username"] = username
 				else:
-					errormsg = "Password mismatch"
+					errormsg = "This username is already taken"
+					status = "sameusername"
+
+		if cellnumber != "":
+			if user["cellnumber"] != cellnumber:
+				if existed_cellnumber == 0:
+					user["cellnumber"] = cellnumber
+				else:
+					errormsg = "This cell number is already taken"
+					status = "samecellnumber"
+
+		if password != "" or confirmPassword != "":
+			if password != "" and confirmPassword != "":
+				if len(password) > 6:
+					if password == confirmPassword:
+						user["password"] = generate_password_hash(password)
+					else:
+						errormsg = "Password mismatch"
+				else:
+					errormsg = "Password needs to be atleast 6 characters long"
 			else:
-				errormsg = "Password needs to be atleast 6 characters long"
-		else:
-			if password == "":
-				errormsg = "Password is blank"
-			else:
-				errormsg = "Please confirm your new password"
+				if password == "":
+					errormsg = "Password is blank"
+				else:
+					errormsg = "Please confirm your new password"
 
-	if errormsg == "":
-		update_data = []
-		for key in user:
-			if key != "table":
-				update_data.append(key + " = '" + str(user[key]) + "'")
+		if errormsg == "":
+			update_data = []
+			for key in user:
+				if key != "table":
+					update_data.append(key + " = '" + str(user[key]) + "'")
 
-		query("update user set " + ", ".join(update_data) + " where id = " + str(userid))
+			query("update user set " + ", ".join(update_data) + " where id = " + str(userid))
 
-		return { "msg": "update successfully" }
+			return { "msg": "update successfully" }
+	else:
+		errormsg = "User doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/update_user_notification_token", methods=["POST"])
 def update_user_notification_token():
 	content = request.get_json()
+	errormsg = ""
+	status = ""
 
 	userid = content['userid']
 	token = content['token']
 
 	user = query("select * from user where id = " + str(userid), True).fetchone()
-	errormsg = ""
-	status = ""
 
-	info = json.loads(user["info"])
-	info["pushToken"] = token
+	if user != None:
+		errormsg = ""
+		status = ""
 
-	query("update user set info = '" + json.dumps(info) + "' where id = " + str(info["id"]))
+		info = json.loads(user["info"])
+		info["pushToken"] = token
 
-	return { "msg": "Push token updated" }
+		query("update user set info = '" + json.dumps(info) + "' where id = " + str(info["id"]))
+
+		return { "msg": "Push token updated" }
+	else:
+		errormsg = "User doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_user_info/<id>")
 def get_user_info(id):
-	user = query("select * from user where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	cellnumber = user["cellnumber"]
+	user = query("select * from user where id = " + str(id), True).fetchone()
 
-	f3 = str(cellnumber[0:3])
-	s3 = str(cellnumber[3:6])
-	l4 = str(cellnumber[6:len(cellnumber)])
+	if user != None:
+		cellnumber = user["cellnumber"]
 
-	cellnumber = "(" + f3 + ") " + s3 + "-" + l4
+		f3 = str(cellnumber[0:3])
+		s3 = str(cellnumber[3:6])
+		l4 = str(cellnumber[6:len(cellnumber)])
 
-	info = {
-		"id": id,
-		"username": user["username"],
-		"cellnumber": cellnumber
-	}
+		cellnumber = "(" + f3 + ") " + s3 + "-" + l4
 
-	return { "userInfo": info }
+		info = {
+			"id": id,
+			"username": user["username"],
+			"cellnumber": cellnumber
+		}
+
+		return { "userInfo": info }
+	else:
+		errormsg = "User doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_num_notifications/<userid>")
 def get_num_notifications(userid):
-	user = query("select * from user where id = " + str(userid), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	num = 0
+	user = query("select * from user where id = " + str(userid), True).fetchone()
 
-	# cart orders called for self
-	sql = "select count(*) as num from cart where adder = " + userid + " and (status = 'checkout' or status = 'ready') group by adder, orderNumber"
-	numCartorderers = query(sql, True).fetchone()
-	numCartorderers = numCartorderers["num"] if numCartorderers != None else 0
+	if user != None:
+		num = 0
 
-	return { "numCartorderers": numCartorderers }
+		# cart orders called for self
+		sql = "select count(*) as num from cart where adder = " + userid + " and (status = 'checkout' or status = 'ready') group by adder, orderNumber"
+		numCartorderers = query(sql, True).fetchone()
+		numCartorderers = numCartorderers["num"] if numCartorderers != None else 0
 
-	num += numCartorderers
+		return { "numCartorderers": numCartorderers }
 
-	# get schedules
-	sql = "select count(*) as num from schedule where userId = " + userid + " and (status = 'cancel' or status = 'confirmed')"
-	num += query(sql, True).fetchone()["num"]
+		num += numCartorderers
 
-	return { "numNotifications": num }
+		# get schedules
+		sql = "select count(*) as num from schedule where userId = " + userid + " and (status = 'cancel' or status = 'confirmed')"
+		num += query(sql, True).fetchone()["num"]
+
+		return { "numNotifications": num }
+	else:
+		errormsg = "User doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_notifications/<id>")
 def get_notifications(id):
-	user = query("select * from user where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	userId = user["id"]
-	notifications = []
+	user = query("select * from user where id = " + str(id), True).fetchone()
 
-	# cart orders called for self
-	sql = "select orderNumber from cart where adder = " + str(id) + " and (status = 'checkout' or status = 'inprogress') group by orderNumber"
-	datas = query(sql, True).fetchall()
+	if user != None:
+		userId = user["id"]
+		notifications = []
 
-	for data in datas:
-		cartitem = query("select * from cart where orderNumber = '" + str(data["orderNumber"]) + "'", True).fetchone()
-		numCartitems = query("select count(*) as num from cart where orderNumber = '" + str(data["orderNumber"]) + "'", True).fetchone()["num"]
+		# cart orders called for self
+		sql = "select orderNumber from cart where adder = " + str(id) + " and (status = 'checkout' or status = 'inprogress') group by orderNumber"
+		datas = query(sql, True).fetchall()
 
-		userInput = json.loads(cartitem["userInput"])
+		for data in datas:
+			cartitem = query("select * from cart where orderNumber = '" + str(data["orderNumber"]) + "'", True).fetchone()
+			numCartitems = query("select count(*) as num from cart where orderNumber = '" + str(data["orderNumber"]) + "'", True).fetchone()["num"]
 
-		notifications.append({
-			"key": "order-" + str(len(notifications)),
-			"type": "cart-order-self",
-			"orderNumber": data['orderNumber'],
-			"numOrders": numCartitems,
-			"status": cartitem["status"],
-			"waitTime": cartitem["waitTime"],
-			"locationType": userInput["type"]
-		})
+			userInput = json.loads(cartitem["userInput"])
 
-	# get schedules
-	sql = "select * from schedule where "
-	sql += "(userId = " + str(id) + " and (status = 'cancel' or status = 'confirmed'))"
-	datas = query(sql, True).fetchall()
+			notifications.append({
+				"key": "order-" + str(len(notifications)),
+				"type": "cart-order-self",
+				"orderNumber": data['orderNumber'],
+				"numOrders": numCartitems,
+				"status": cartitem["status"],
+				"waitTime": cartitem["waitTime"],
+				"locationType": userInput["type"]
+			})
 
-	for data in datas:
-		location = None
-		service = None
+		# get schedules
+		sql = "select * from schedule where "
+		sql += "(userId = " + str(id) + " and (status = 'cancel' or status = 'confirmed'))"
+		datas = query(sql, True).fetchall()
 
-		if data['locationId'] != "":
-			location = query("select * from location where id = " + str(data["locationId"]), True).fetchone()
+		for data in datas:
+			location = None
+			service = None
 
-		if data['serviceId'] != -1:
-			service = query("select * from service where id = " + str(data["serviceId"]), True).fetchone()
+			if data['locationId'] != "":
+				location = query("select * from location where id = " + str(data["locationId"]), True).fetchone()
 
-		booker = query("select * from user where id = " + str(data["userId"]), True).fetchone()
-		confirm = False
-		info = json.loads(data['info'])
-			
-		if data["workerId"] > -1:
-			owner = query("select * from owner where id = " + str(data["workerId"]), True).fetchone()
+			if data['serviceId'] != -1:
+				service = query("select * from service where id = " + str(data["serviceId"]), True).fetchone()
 
-			worker = { "id": data["workerId"], "username": owner["username"] }
-		else:
-			worker = None
+			booker = query("select * from user where id = " + str(data["userId"]), True).fetchone()
+			confirm = False
+			info = json.loads(data['info'])
+				
+			if data["workerId"] > -1:
+				owner = query("select * from owner where id = " + str(data["workerId"]), True).fetchone()
 
-		userInput = json.loads(data['userInput'])
-		serviceImage = json.loads(service["image"]) if service != None else {"name": ""}
-		notifications.append({
-			"key": "order-" + str(len(notifications)),
-			"type": "service",
-			"id": str(data['id']),
-			"locationid": data['locationId'],
-			"location": location["name"],
-			"worker": worker,
-			"menuid": int(data['menuId']) if data['menuId'] != "" else "",
-			"serviceid": int(data['serviceId']) if data['serviceId'] != -1 else "",
-			"service": service["name"] if service != None else userInput['name'] if 'name' in userInput else "",
-			"locationimage": json.loads(location["logo"]),
-			"locationtype": location["type"],
-			"serviceimage": serviceImage if serviceImage["name"] != "" else {"width": 300, "height": 300},
-			"serviceprice": float(service["price"]) if service != None else float(userInput['price']) if 'price' in userInput else "",
-			"time": json.loads(data['time']),
-			"action": data['status'],
-			"reason": data['cancelReason'],
-			"booker": userId == data['userId'],
-			"bookerName": booker["username"],
-			"confirm": confirm,
-			"workerInfo": { "id": owner["id"], "username": owner["username"] } if data["workerId"] > -1 else {}
-		})
+				worker = { "id": data["workerId"], "username": owner["username"] }
+			else:
+				worker = None
 
-	return { "notifications": notifications }
+			userInput = json.loads(data['userInput'])
+			serviceImage = json.loads(service["image"]) if service != None else {"name": ""}
+			notifications.append({
+				"key": "order-" + str(len(notifications)),
+				"type": "service",
+				"id": str(data['id']),
+				"locationid": data['locationId'],
+				"location": location["name"],
+				"worker": worker,
+				"menuid": int(data['menuId']) if data['menuId'] != "" else "",
+				"serviceid": int(data['serviceId']) if data['serviceId'] != -1 else "",
+				"service": service["name"] if service != None else userInput['name'] if 'name' in userInput else "",
+				"locationimage": json.loads(location["logo"]),
+				"locationtype": location["type"],
+				"serviceimage": serviceImage if serviceImage["name"] != "" else {"width": 300, "height": 300},
+				"serviceprice": float(service["price"]) if service != None else float(userInput['price']) if 'price' in userInput else "",
+				"time": json.loads(data['time']),
+				"action": data['status'],
+				"reason": data['cancelReason'],
+				"booker": userId == data['userId'],
+				"bookerName": booker["username"],
+				"confirm": confirm,
+				"workerInfo": { "id": owner["id"], "username": owner["username"] } if data["workerId"] > -1 else {}
+			})
+
+		return { "notifications": notifications }
+	else:
+		errormsg = "User doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_reset_code/<phonenumber>")
 def get_user_reset_code(phonenumber):
