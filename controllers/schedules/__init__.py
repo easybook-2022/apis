@@ -377,23 +377,26 @@ def cancel_schedule():
 				receiver.append("user" + str(customer["userid"]))
 		else:
 			receiver.append("user" + str(appointment["userId"]))
-		
-		info = json.loads(user["info"])
 
-		if info["pushToken"] != "":
-			message = "The "
-			message += "restaurant" if locationType == "restaurant" else "salon"
-			message += " cancelled your "
-			message == "appointment"
-			message += " with "
-			message += "no reason" if reason == "" else "a reason"
+		if user != None:
+			info = json.loads(user["info"])
 
-			push(pushInfo(
-				info["pushToken"],
-				"Appointment cancelled",
-				message,
-				content
-			))
+			if info["pushToken"] != "":
+				message = "The "
+				message += "restaurant" if locationType == "restaurant" else "salon"
+				message += " cancelled your "
+				message == "appointment"
+				message += " with "
+				message += "no reason" if reason == "" else "a reason"
+
+				push(pushInfo(
+					info["pushToken"],
+					"Appointment cancelled",
+					message,
+					content
+				))
+		else:
+			query("delete from schedule where id = " + str(id))
 					
 		return { "msg": "request cancelled", "receiver": receiver }
 	else:
