@@ -565,6 +565,10 @@ def get_location_profile():
 			{ "key": "6", "header": "Saturday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False }
 		]
 
+		# {
+		# "Sun":{"opentime":{"hour":"11","minute":"00"},"closetime":{"hour":"18","minute":"00"},"close":false},
+		# "Mon":{"opentime":{"hour":"12","minute":"00"},"closetime":{"hour":"19","minute":"00"},"close":false},"Tue":{"opentime":{"hour":"14","minute":"00"},"closetime":{"hour":"19","minute":"00"},"close":false},"Wed":{"opentime":{"hour":"14","minute":"00"},"closetime":{"hour":"19","minute":"00"},"close":false},"Thu":{"opentime":{"hour":"11","minute":"00"},"closetime":{"hour":"18","minute":"00"},"close":false},"Fri":{"opentime":{"hour":"11","minute":"00"},"closetime":{"hour":"18","minute":"00"},"close":false},"Sat":{"opentime":{"hour":"11","minute":"00"},"closetime":{"hour":"18","minute":"00"},"close":false}}
+
 		if location["hours"] != '':
 			data = json.loads(location["hours"])
 			day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -583,7 +587,7 @@ def get_location_profile():
 					openhour = "0" + str(openhour)
 				elif openhour > 12:
 					openhour -= 12
-					openhour = "0" + str(openhour) if openhour < 10 else str(openhour)
+					openhour = str(openhour)
 
 				closeperiod = "PM" if closehour > 12 else "AM"
 				closehour = int(closehour)
@@ -594,7 +598,7 @@ def get_location_profile():
 					closehour = "0" + str(closehour)
 				elif closehour > 12:
 					closehour -= 12
-					closehour = "0" + str(closehour) if closehour < 10 else str(closehour)
+					closehour = str(closehour)
 
 				info["opentime"]["hour"] = str(openhour)
 				info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]

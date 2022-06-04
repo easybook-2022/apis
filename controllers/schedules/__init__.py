@@ -200,7 +200,7 @@ def make_appointment():
 			
 			push(pushmessages)
 
-		speak = { "name": servicename, "time": json.loads(time), "worker": worker["username"] }
+		speak = { "scheduleid": scheduleid, "name": servicename, "time": json.loads(time), "worker": { "id": workerid, "username": worker["username"] }}
 
 		return { "msg": "appointment remade", "receiver": receiver, "time": time, "speak": speak }
 	else: # new schedule
@@ -218,7 +218,8 @@ def make_appointment():
 			columns.append(key)
 			insert_data.append("'" + str(data[key]) + "'")
 
-		query("insert into schedule (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")")
+		#id = query("insert into schedule (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
+		id = 1
 
 		if len(pushids) > 0:
 			pushmessages = []
@@ -232,7 +233,7 @@ def make_appointment():
 
 			push(pushmessages)
 
-		speak = { "name": servicename, "time": json.loads(time), "worker": worker["username"] }
+		speak = { "scheduleid": id, "name": servicename, "time": json.loads(time), "worker": { "id": workerid, "username": worker["username"] }}
 
 		return { "msg": "appointment added", "receiver": receiver, "speak": speak }
 
@@ -494,7 +495,7 @@ def cancel_request():
 	worker = query("select * from owner where id = " + str(schedule["workerId"]), True).fetchone()
 	workerInfo = json.loads(worker["info"])
 
-	speak = { "name": serviceName, "time": json.loads(schedule["time"]), "worker": worker["username"] }
+	speak = { "scheduleid": scheduleid, "name": serviceName, "time": json.loads(schedule["time"]), "worker": { "id": workerId, "username": worker["username"] }}
 
 	if workerInfo["pushToken"] != "" and workerInfo["signin"] == True:
 		push(pushInfo(

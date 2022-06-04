@@ -215,7 +215,7 @@ def update_user_notification_token():
 		info = json.loads(user["info"])
 		info["pushToken"] = token
 
-		query("update user set info = '" + json.dumps(info) + "' where id = " + str(info["id"]))
+		query("update user set info = '" + json.dumps(info) + "' where id = " + str(userid))
 
 		return { "msg": "Push token updated" }
 	else:
