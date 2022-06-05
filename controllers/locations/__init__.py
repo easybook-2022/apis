@@ -650,60 +650,6 @@ def get_location_hours(id):
 		daysArr = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 		hours = json.loads(location["hours"])
-
-		# if day != None:
-		# 	openDays = []
-
-		# 	openTime = hours[day]["opentime"]
-		# 	closeTime = hours[day]["closetime"]
-
-		# 	for day in daysArr:
-		# 		if hours[day]["close"] == False:
-		# 			openDays.append(day)
-
-		# 	workers = {}
-
-		# 	if location["type"] != "restaurant":
-		# 		owners = query("select * from owner where info like '%\"locationId\": \"" + str(locationid) + "\"%'", True).fetchall()
-
-		# 	for owner in owners:
-		# 		hours = json.loads(owner["hours"])
-
-		# 		for time in hours:
-		# 			if hours[time]["working"] == True or hours[time]["takeShift"] != "":
-		# 				if hours[time]["working"] == True:
-		# 					if time not in workers:
-		# 						workers[time] = [{
-		# 							"workerId": owner["id"],
-		# 							"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
-		# 							"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
-		# 						}]
-		# 					else:
-		# 						workers[time].append({
-		# 							"workerId": owner["id"],
-		# 							"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
-		# 							"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
-		# 						})
-		# 				else:
-		# 					if hours[time]["takeShift"] != "":
-		# 						coworker = query("select * from owner where id = " + str(hours[time]["takeShift"]), True).fetchone()
-		# 						coworkerHours = json.loads(coworker["hours"])
-
-		# 						if time not in workers:
-		# 							workers[time] = [{
-		# 								"workerId": owner["id"],
-		# 								"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
-		# 								"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
-		# 							}]
-		# 						else:
-		# 							workers[time].append({
-		# 								"workerId": owner["id"],
-		# 								"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
-		# 								"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
-		# 							})
-
-		# 	return { "openTime": openTime, "closeTime": closeTime, "openDays": openDays, "workers": workers }
-		# else:
 		openDays = {}
 
 		for day in hours:

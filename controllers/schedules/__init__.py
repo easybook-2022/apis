@@ -262,16 +262,50 @@ def book_walk_in():
 
 	return { "msg": "success", "id": id }
 
-@app.route("/remove_booking/<id>")
-def remove_booking(id):
-	schedule = query("select * from schedule where id = " + str(id), True).fetchone()
+@app.route("/remove_booking", methods=["POST"])
+def remove_booking():
+	content = request.get_json()
+
+	id = content['scheduleid']
+	reason = content['reason']
+
+	appointment = query("select * from schedule where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 
-	if schedule != None:
-		query("delete from schedule where id = " + str(id))
+	if appointment != None:
+		user = query("select * from user where id = " + str(appointment["userId"]), True).fetchone()
 
-		return { "msg": "success" }
+		if appointment["status"] == "confirmed":
+			appointment["status"] = "cancel"
+			appointment["cancelReason"] = reason
+
+			update_data = []
+			for key in appointment:
+				if key != "table":
+					update_data.append(key + " = '" + str(appointment[key]) + "'")
+
+			query("update schedule set " + ", ".join(update_data) + " where id = " + str(id))
+
+			receiver = ["user" + str(appointment["userId"])]
+
+			if user != None:
+				info = json.loads(user["info"])
+
+				if info["pushToken"] != "":
+					message = "The salon cancelled your salonappointment with "
+					message += "no reason" if reason == "" else "a reason"
+
+					push(pushInfo(
+						info["pushToken"],
+						"Appointment cancelled",
+						message,
+						content
+					))
+			else:
+				query("delete from schedule where id = " + str(id))
+
+			return { "msg": "success", "receiver": receiver }
 	else:
 		errormsg = "Schedule doens't exist"
 
@@ -353,54 +387,53 @@ def cancel_schedule():
 	errormsg = ""
 	status = ""
 
-	user = query("select * from user where id = " + str(appointment["userId"]), True).fetchone()
+	if appointment != None:
+		user = query("select * from user where id = " + str(appointment["userId"]), True).fetchone()
 
-	if appointment["status"] == "confirmed":
-		appointment["status"] = "cancel"
-		appointment["cancelReason"] = reason
+		if appointment["status"] == "confirmed":
+			appointment["status"] = "cancel"
+			appointment["cancelReason"] = reason
 
-		update_data = []
-		for key in appointment:
-			if key != "table":
-				update_data.append(key + " = '" + str(appointment[key]) + "'")
+			update_data = []
+			for key in appointment:
+				if key != "table":
+					update_data.append(key + " = '" + str(appointment[key]) + "'")
 
-		query("update schedule set " + ", ".join(update_data) + " where id = " + str(id))
+			query("update schedule set " + ", ".join(update_data) + " where id = " + str(id))
 
-		receiver = []
+			receiver = []
 
-		locationType = appointment["locationType"]
+			locationType = appointment["locationType"]
 
-		if locationType == "restaurant":
-			customers = json.loads(appointment["customers"])
+			if locationType == "restaurant":
+				customers = json.loads(appointment["customers"])
 
-			for customer in customers:
-				receiver.append("user" + str(customer["userid"]))
+				for customer in customers:
+					receiver.append("user" + str(customer["userid"]))
+			else:
+				receiver.append("user" + str(appointment["userId"]))
+
+			if user != None:
+				info = json.loads(user["info"])
+
+				if info["pushToken"] != "":
+					message = "The salon cancelled your appointment with "
+					message += "no reason" if reason == "" else "a reason"
+
+					push(pushInfo(
+						info["pushToken"],
+						"Appointment cancelled",
+						message,
+						content
+					))
+			else:
+				query("delete from schedule where id = " + str(id))
+						
+			return { "msg": "request cancelled", "receiver": receiver }
 		else:
-			receiver.append("user" + str(appointment["userId"]))
-
-		if user != None:
-			info = json.loads(user["info"])
-
-			if info["pushToken"] != "":
-				message = "The "
-				message += "restaurant" if locationType == "restaurant" else "salon"
-				message += " cancelled your "
-				message == "appointment"
-				message += " with "
-				message += "no reason" if reason == "" else "a reason"
-
-				push(pushInfo(
-					info["pushToken"],
-					"Appointment cancelled",
-					message,
-					content
-				))
-		else:
-			query("delete from schedule where id = " + str(id))
-					
-		return { "msg": "request cancelled", "receiver": receiver }
+			errormsg = "Action is denied"
 	else:
-		errormsg = "Action is denied"
+		errormsg = "Appointment doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 

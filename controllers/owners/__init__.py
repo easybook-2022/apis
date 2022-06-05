@@ -180,7 +180,7 @@ def save_user_info():
 
 	isWeb = request.form.get("web")
 
-	new_profile = json.dumps({"name": "", "width": 0, "height": 0})
+	new_profile = json.dumps({"name": "", "width": 360, "height": 360})
 
 	if isWeb != None:
 		profile = json.loads(request.form['profile'])
@@ -256,7 +256,7 @@ def add_owner():
 				errormsg = "Please confirm your password"
 
 		isWeb = request.form.get("web")
-		profileData = json.dumps({"name": "", "width": 0, "height": 0})
+		profileData = json.dumps({"name": "", "width": 360, "height": 360})
 
 		if isWeb != None:
 			profile = json.loads(request.form['profile'])
@@ -526,14 +526,22 @@ def get_workers_hour():
 			owners = {}
 
 			for data in datas:
-				scheduledDatas = query("select id, time from schedule where workerId = " + str(data["id"]), True).fetchall()
+				scheduledDatas = query("select id, time from schedule where workerId = " + str(data["id"]) + " and status = 'confirmed'", True).fetchall()
 				scheduled = {}
 
 				for scheduledData in scheduledDatas:
 					scheduled[scheduledData["time"]] = scheduledData["id"]
 
 				hours = json.loads(data['hours'])
-				hoursData = {"scheduled": scheduled}
+				profile = json.loads(data["profile"])
+
+				hoursData = {
+					"scheduled": scheduled,
+					"profileInfo": {
+						"username": data["username"],
+						"profile": profile if profile["name"] != "" else {"width": 360, "height": 360},
+					}
+				}
 
 				for day in hours:
 					openTime = hours[day]["opentime"]["hour"] + ":" + hours[day]["opentime"]["minute"]
@@ -560,14 +568,20 @@ def get_workers_hour():
 			data = query("select * from owner where id = " + str(ownerid), True).fetchone()
 
 			if data != None:
-				scheduledDatas = query("select id, time from schedule where workerId = " + str(ownerid), True).fetchall()
+				scheduledDatas = query("select id, time from schedule where workerId = " + str(ownerid) + " and status = 'confirmed'", True).fetchall()
 				scheduled = {}
 
 				for scheduledData in scheduledDatas:
 					scheduled[scheduledData["time"]] = scheduledData["id"]
 
 				hours = json.loads(data['hours'])
-				hoursData = {"scheduled": scheduled}
+				hoursData = {
+					"scheduled": scheduled,
+					"profileInfo": {
+						"username": data["username"],
+						"profile": profile if profile["name"] != "" else {"width": 360, "height": 360},
+					}
+				}
 
 				for day in hours:
 					openTime = hours[day]["opentime"]["hour"] + ":" + hours[day]["opentime"]["minute"]
@@ -588,8 +602,46 @@ def get_workers_hour():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/get_worker_info/<id>")
-def get_worker_info(id):
+@app.route("/get_workers/<id>")
+def get_workers(id):
+	location = query("select * from location where id = " + str(id), True).fetchone()
+
+	workers = "(" + location["owners"][1:-1] + ")"
+	datas = query("select * from owner where id in " + workers, True).fetchall()
+
+	owners = []
+	row = []
+	key = 0
+	numWorkers = 0
+
+	for data in datas:
+		profile = json.loads(data["profile"])
+		row.append({
+			"key": "worker-" + str(key),
+			"id": data["id"],
+			"username": data["username"],
+			"profile": profile if profile["name"] != "" else {"width": 360, "height": 360}
+		})
+		key += 1
+		numWorkers += 1
+
+		if len(row) >= 3:
+			owners.append({ "key": str(len(owners)), "row": row })
+			row = []
+
+	if len(row) > 0:
+		leftover = 3 - len(row)
+
+		for k in range(leftover):
+			row.append({ "key": "worker-" + str(key) })
+			key += 1
+
+		owners.append({ "key": str(len(owners)), "row": row })
+
+	return { "msg": "get workers", "owners": owners, "numWorkers": numWorkers }
+	
+@app.route("/get_stylist_info/<id>")
+def get_stylist_info(id):
 	owner = query("select * from owner where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
