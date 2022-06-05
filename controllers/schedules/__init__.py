@@ -158,7 +158,7 @@ def make_appointment():
 	sql = "select id, info from owner where "
 
 	if type == "computer":
-		sql += "info like '%\"locationId\": \"" + str(location["id"]) + "\"%' and info like '%\"owner\": true\"%'"
+		sql += "info like '%\"locationId\": \"" + str(locationid) + "\"%' and info like '%\"owner\": true\"%'"
 	else:
 		sql += "id = " + str(workerid)
 
@@ -200,7 +200,7 @@ def make_appointment():
 			
 			push(pushmessages)
 
-		speak = { "scheduleid": scheduleid, "name": servicename, "time": json.loads(time), "worker": { "id": workerid, "username": worker["username"] }}
+		speak = { "scheduleid": schedule["id"], "name": servicename, "time": json.loads(time), "worker": { "id": workerid, "username": worker["username"] }}
 
 		return { "msg": "appointment remade", "receiver": receiver, "time": time, "speak": speak }
 	else: # new schedule
@@ -218,8 +218,7 @@ def make_appointment():
 			columns.append(key)
 			insert_data.append("'" + str(data[key]) + "'")
 
-		#id = query("insert into schedule (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
-		id = 1
+		id = query("insert into schedule (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
 
 		if len(pushids) > 0:
 			pushmessages = []
