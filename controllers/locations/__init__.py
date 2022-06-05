@@ -565,10 +565,6 @@ def get_location_profile():
 			{ "key": "6", "header": "Saturday", "opentime": { "hour": "06", "minute": "00", "period": "AM" }, "closetime": { "hour": "09", "minute": "00", "period": "PM" }, "close": False }
 		]
 
-		# {
-		# "Sun":{"opentime":{"hour":"11","minute":"00"},"closetime":{"hour":"18","minute":"00"},"close":false},
-		# "Mon":{"opentime":{"hour":"12","minute":"00"},"closetime":{"hour":"19","minute":"00"},"close":false},"Tue":{"opentime":{"hour":"14","minute":"00"},"closetime":{"hour":"19","minute":"00"},"close":false},"Wed":{"opentime":{"hour":"14","minute":"00"},"closetime":{"hour":"19","minute":"00"},"close":false},"Thu":{"opentime":{"hour":"11","minute":"00"},"closetime":{"hour":"18","minute":"00"},"close":false},"Fri":{"opentime":{"hour":"11","minute":"00"},"closetime":{"hour":"18","minute":"00"},"close":false},"Sat":{"opentime":{"hour":"11","minute":"00"},"closetime":{"hour":"18","minute":"00"},"close":false}}
-
 		if location["hours"] != '':
 			data = json.loads(location["hours"])
 			day = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
@@ -578,7 +574,7 @@ def get_location_profile():
 				closehour = int(data[day[k][:3]]["closetime"]["hour"])
 				close = data[day[k][:3]]["close"]
 
-				openperiod = "PM" if openhour > 12 else "AM"
+				openperiod = "PM" if openhour >= 12 else "AM"
 				openhour = int(openhour)
 
 				if openhour == 0:
@@ -589,7 +585,7 @@ def get_location_profile():
 					openhour -= 12
 					openhour = str(openhour)
 
-				closeperiod = "PM" if closehour > 12 else "AM"
+				closeperiod = "PM" if closehour >= 12 else "AM"
 				closehour = int(closehour)
 
 				if closehour == 0:
@@ -644,14 +640,9 @@ def get_location_profile():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/get_hours", methods=["POST"])
-def get_hours():
-	content = request.get_json()
-
-	locationid = content['locationid']
-	day = content['day']
-
-	location = query("select * from location where id = " + str(locationid), True).fetchone()
+@app.route("/get_location_hours/<id>")
+def get_location_hours(id):
+	location = query("select * from location where id = " + str(id), True).fetchone()
 	errormsg = ""
 	status = ""
 
@@ -659,57 +650,84 @@ def get_hours():
 		daysArr = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 		hours = json.loads(location["hours"])
-		openDays = []
 
-		openTime = hours[day]["opentime"]
-		closeTime = hours[day]["closetime"]
+		# if day != None:
+		# 	openDays = []
 
-		for day in daysArr:
-			if hours[day]["close"] == False:
-				openDays.append(day)
+		# 	openTime = hours[day]["opentime"]
+		# 	closeTime = hours[day]["closetime"]
 
-		workers = {}
+		# 	for day in daysArr:
+		# 		if hours[day]["close"] == False:
+		# 			openDays.append(day)
 
-		if location["type"] != "restaurant":
-			owners = query("select * from owner where info like '%\"locationId\": \"" + str(locationid) + "\"%'", True).fetchall()
+		# 	workers = {}
 
-			for owner in owners:
-				hours = json.loads(owner["hours"])
+		# 	if location["type"] != "restaurant":
+		# 		owners = query("select * from owner where info like '%\"locationId\": \"" + str(locationid) + "\"%'", True).fetchall()
 
-				for time in hours:
-					if hours[time]["working"] == True or hours[time]["takeShift"] != "":
-						if hours[time]["working"] == True:
-							if time not in workers:
-								workers[time] = [{
-									"workerId": owner["id"],
-									"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
-									"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
-								}]
-							else:
-								workers[time].append({
-									"workerId": owner["id"],
-									"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
-									"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
-								})
-						else:
-							if hours[time]["takeShift"] != "":
-								coworker = query("select * from owner where id = " + str(hours[time]["takeShift"]), True).fetchone()
-								coworkerHours = json.loads(coworker["hours"])
+		# 	for owner in owners:
+		# 		hours = json.loads(owner["hours"])
 
-								if time not in workers:
-									workers[time] = [{
-										"workerId": owner["id"],
-										"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
-										"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
-									}]
-								else:
-									workers[time].append({
-										"workerId": owner["id"],
-										"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
-										"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
-									})
+		# 		for time in hours:
+		# 			if hours[time]["working"] == True or hours[time]["takeShift"] != "":
+		# 				if hours[time]["working"] == True:
+		# 					if time not in workers:
+		# 						workers[time] = [{
+		# 							"workerId": owner["id"],
+		# 							"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
+		# 							"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
+		# 						}]
+		# 					else:
+		# 						workers[time].append({
+		# 							"workerId": owner["id"],
+		# 							"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
+		# 							"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
+		# 						})
+		# 				else:
+		# 					if hours[time]["takeShift"] != "":
+		# 						coworker = query("select * from owner where id = " + str(hours[time]["takeShift"]), True).fetchone()
+		# 						coworkerHours = json.loads(coworker["hours"])
 
-		return { "openTime": openTime, "closeTime": closeTime, "openDays": openDays, "workers": workers }
+		# 						if time not in workers:
+		# 							workers[time] = [{
+		# 								"workerId": owner["id"],
+		# 								"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
+		# 								"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
+		# 							}]
+		# 						else:
+		# 							workers[time].append({
+		# 								"workerId": owner["id"],
+		# 								"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
+		# 								"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
+		# 							})
+
+		# 	return { "openTime": openTime, "closeTime": closeTime, "openDays": openDays, "workers": workers }
+		# else:
+		openDays = {}
+
+		for day in hours:
+			dayInfo = hours[day]
+			openTime = dayInfo["opentime"]
+			closeTime = dayInfo["closetime"]
+
+			openHour = int(openTime["hour"])
+			openMinute = int(openTime["minute"])
+			closeHour = int(closeTime["hour"])
+			closeMinute = int(closeTime["minute"])
+
+			if dayInfo["close"] == False:
+				openDays[day] = {
+					"close": dayInfo["close"],
+					"openHour": openHour,
+					"openMinute": openMinute,
+					"openPeriod": "PM" if openHour >= 12 else "AM",
+					"closeHour": closeHour,
+					"closeMinute": closeMinute,
+					"closePeriod": "PM" if closeHour >= 12 else "AM"
+				}
+
+		return { "hours": openDays }
 	else:
 		errormsg = "Location doesn't exist"
 

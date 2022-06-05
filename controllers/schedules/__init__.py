@@ -439,9 +439,9 @@ def done_service(id):
 
 	booker = schedule["userId"]
 
-	query("delete from schedule where id = " + str(id))
+	query("update schedule set status = 'done' where id = " + str(id))
 
-	return { "msg": "Schedule deleted", "receiver": "user" + str(booker) }
+	return { "msg": "Schedule done", "receiver": "user" + str(booker) }
 
 @app.route("/cancel_request", methods=["POST"])
 def cancel_request():
