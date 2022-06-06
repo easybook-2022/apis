@@ -202,7 +202,7 @@ def order_done():
 		datas = query(sql, True).fetchall()
 
 		if len(datas) > 0:
-			if datas[0]['waitTime'] != "":
+			if (location['type'] == 'restaurant' and datas[0]['waitTime'] != "") or location['type'] == 'store':
 				for data in datas:
 					groupId = ""
 
