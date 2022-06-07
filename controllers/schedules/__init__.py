@@ -555,7 +555,7 @@ def get_appointments():
 	if receiveType == "stylist":
 		sql += " and workerId = " + str(ownerid)
 		
-	sql += " order by time"
+	sql += " order by time limit 10"
 
 	datas = query(sql, True)
 	appointments = []
