@@ -176,6 +176,9 @@ def make_appointment():
 			pushids.append({ "token": info["pushToken"], "signin": info["signin"] })
 
 	if schedule != None: # existing schedule
+		if "1969" in time:
+			print("make: " + str(time))
+			
 		schedule["time"] = time
 		schedule["status"] = 'confirmed'
 		schedule["note"] = note
@@ -328,51 +331,58 @@ def salon_change_appointment():
 	timeDisplay = content['timeDisplay']
 
 	client = query("select * from user where id = " + str(clientid), True).fetchone()
+	worker = query("select username from owner where id = " + str(workerid), True).fetchone()
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
 
-	if serviceid != -1:
-		service = query("select * from service where id = " + str(serviceid), True).fetchone()
-		schedule = query("select * from schedule where userId = " + str(clientid) + " and serviceId = " + str(serviceid), True).fetchone()
-		servicename = service["name"]
-		menuid = service["menuId"]
-	else:
-		if scheduleid != None:
-			schedule = query("select * from schedule where id = " + str(scheduleid), True).fetchone()
+	if location != None:
+		if serviceid != -1:
+			service = query("select * from service where id = " + str(serviceid), True).fetchone()
+			schedule = query("select * from schedule where userId = " + str(clientid) + " and serviceId = " + str(serviceid), True).fetchone()
+			servicename = service["name"]
+			menuid = service["menuId"]
 		else:
-			schedule = None
+			if scheduleid != None:
+				schedule = query("select * from schedule where id = " + str(scheduleid), True).fetchone()
+			else:
+				schedule = None
+			
+			servicename = serviceinfo
+			menuid = -1
+
+		pushids = []
+
+		info = json.loads(client["info"])
+		pushToken = info["pushToken"]
+		receiver = "user" + str(clientid)
+
+		if "1969" in time:
+			print("salon change: " + str(time))
+
+		schedule["time"] = time
+		schedule["status"] = 'confirmed'
+		schedule["note"] = note
+		schedule["workerId"] = workerid
+
+		update_data = []
+		for key in schedule:
+			if key != "table":
+				update_data.append(key + " = '" + str(schedule[key]) + "'")
+
+		query("update schedule set " + ", ".join(update_data) + " where id = " + str(schedule["id"]))
+
+		if pushToken != "":
+			pushmessage = pushInfo(
+				pushToken, 
+				"Appointment remade",
+				"A salon requested a different appointment for you for service: " + servicename + " " + str(timeDisplay),
+				content
+			)
 		
-		servicename = serviceinfo
-		menuid = -1
+			push(pushmessage)
 
-	pushids = []
-
-	info = json.loads(client["info"])
-	pushToken = info["pushToken"]
-	receiver = "user" + str(clientid)
-
-	schedule["time"] = time
-	schedule["status"] = 'confirmed'
-	schedule["note"] = note
-	schedule["workerId"] = workerid
-
-	update_data = []
-	for key in schedule:
-		if key != "table":
-			update_data.append(key + " = '" + str(schedule[key]) + "'")
-
-	query("update schedule set " + ", ".join(update_data) + " where id = " + str(schedule["id"]))
-
-	if pushToken != "":
-		pushmessage = pushInfo(
-			pushToken, 
-			"Appointment remade",
-			"A salon requested a different appointment for you for service: " + servicename + " " + str(timeDisplay),
-			content
-		)
-	
-		push(pushmessage)
-
-	return { "msg": "appointment remade", "receiver": receiver, "time": time }
+		return { "msg": "appointment remade", "receiver": receiver, "time": time, "worker": { "id": workerid, "username": worker["username"] }}
+	else:
+		errormsg = "Location doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 

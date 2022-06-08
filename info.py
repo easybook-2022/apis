@@ -6,6 +6,7 @@ from random import randint
 from haversine import haversine
 from sshtunnel import SSHTunnelForwarder
 from os.path import expanduser
+from binascii import a2b_base64
 
 test = True
 
