@@ -529,7 +529,7 @@ def get_workers_hour():
 			owners = {}
 
 			for data in datas:
-				scheduledDatas = query("select id, time from schedule where workerId = " + str(data["id"]) + " and status = 'confirmed'", True).fetchall()
+				scheduledDatas = query("select id, time from schedule where workerId = " + str(data["id"]), True).fetchall()
 				scheduled = {}
 
 				for scheduledData in scheduledDatas:
@@ -571,7 +571,7 @@ def get_workers_hour():
 			data = query("select * from owner where id = " + str(ownerid), True).fetchone()
 
 			if data != None:
-				scheduledDatas = query("select id, time from schedule where workerId = " + str(ownerid) + " and status = 'confirmed'", True).fetchall()
+				scheduledDatas = query("select id, time from schedule where workerId = " + str(ownerid), True).fetchall()
 				scheduled = {}
 
 				for scheduledData in scheduledDatas:
