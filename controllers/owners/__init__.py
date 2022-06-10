@@ -100,11 +100,14 @@ def owner_verify(cellnumber):
 
 	if owner == None:
 		if test_sms == False:
-			message = client.messages.create(
-				body='Verify code: ' + str(verifycode),
-				messaging_service_sid=mss,
-				to='+1' + str(cellnumber)
-			)
+			try:
+				message = client.messages.create(
+					body='Verify code: ' + str(verifycode),
+					messaging_service_sid=mss,
+					to='+1' + str(cellnumber)
+				)
+			except:
+				print("could not verify: " + str(cellnumber))
 
 		return { "verifycode": verifycode }
 	else:
