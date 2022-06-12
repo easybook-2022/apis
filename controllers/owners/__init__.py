@@ -59,8 +59,11 @@ def owner_login():
 			else:
 				errormsg = "Password is incorrect"
 		else:
-			errormsg = "Account doesn't exist"
-			status = "nonexist"
+			if len(password) >= 6:
+				errormsg = "Account doesn't exist"
+				status = "nonexist"
+			else:
+				errormsg = "Password needs to be atleast 6 characters long"
 	else:
 		if cellnumber == "":
 			errormsg = "Phone number is blank"
@@ -92,7 +95,7 @@ def owner_logout(id):
 @app.route("/owner_verify/<cellnumber>")
 def owner_verify(cellnumber):
 	verifycode = getRanStr()
-
+	
 	cellnumber = cellnumber.replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 	owner = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True).fetchone()
 	errormsg = ""
@@ -186,16 +189,17 @@ def save_user_info():
 	new_profile = json.dumps({"name": "", "width": 360, "height": 360})
 
 	if isWeb != None:
-		profile = json.loads(request.form['profile'])
-		name = profile['name']
+		if request.form.get('profile') == True:
+			profile = json.loads(request.form['profile'])
+			name = profile['name']
 
-		if name != "":
-			uri = profile['uri'].split(",")[1]
-			size = profile['size']
+			if name != "":
+				uri = profile['uri'].split(",")[1]
+				size = profile['size']
 
-			writeToFile(uri, name)
+				writeToFile(uri, name)
 
-			new_profile = json.dumps({"name": name, "width": int(size["width"]), "height": int(size["height"])})			
+				new_profile = json.dumps({"name": name, "width": int(size["width"]), "height": int(size["height"])})			
 	else:
 		profilepath = request.files.get('profile', False)
 		profileexist = False if profilepath == False else True

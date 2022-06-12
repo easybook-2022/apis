@@ -70,7 +70,7 @@ def user_verify(cellnumber):
 		if test_sms == False:
 			try:
 				message = client.messages.create(
-					body='Verify code: ' + str(verifycode),
+					body='EasyGO User Verify code: ' + str(verifycode),
 					messaging_service_sid=mss,
 					to='+1' + str(cellnumber)
 				)

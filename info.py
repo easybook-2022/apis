@@ -11,7 +11,7 @@ from binascii import a2b_base64
 test = True
 
 local = test
-test_sms = False
+test_sms = True
 push_notif = test == False
 
 host = 'localhost'
