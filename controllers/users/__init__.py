@@ -67,7 +67,7 @@ def user_verify(cellnumber):
 	status = ""
 
 	if user == None:
-		if test_sms == False:
+		if send_text == True:
 			try:
 				message = client.messages.create(
 					body='EasyGO User Verify code: ' + str(verifycode),
@@ -379,7 +379,7 @@ def get_user_reset_code(phonenumber):
 
 	code = getRanStr()
 
-	if test_sms == False:
+	if send_text == True:
 		message = client.messages.create(
 			body="Your EasyGO reset code is " + code,
 			messaging_service_sid=mss,

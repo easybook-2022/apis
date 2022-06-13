@@ -176,9 +176,6 @@ def make_appointment():
 			pushids.append({ "token": info["pushToken"], "signin": info["signin"] })
 
 	if schedule != None: # existing schedule
-		if "1969" in time:
-			print("make: " + str(time))
-			
 		schedule["time"] = time
 		schedule["status"] = 'confirmed'
 		schedule["note"] = note
@@ -354,9 +351,6 @@ def salon_change_appointment():
 		info = json.loads(client["info"])
 		pushToken = info["pushToken"]
 		receiver = "user" + str(clientid)
-
-		if "1969" in time:
-			print("salon change: " + str(time))
 
 		schedule["time"] = time
 		schedule["status"] = 'confirmed'

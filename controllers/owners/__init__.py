@@ -5,7 +5,7 @@ from models import *
 
 cors = CORS(app)
 
-@app.route("/welcome_owners", methods=["GET"])
+@app.route("/welcome_owners")
 def welcome_owners():
 	return { "msg": "welcome to owners of easygo" }
 
@@ -102,7 +102,7 @@ def owner_verify(cellnumber):
 	status = ""
 
 	if owner == None:
-		if test_sms == False:
+		if send_text == True:
 			try:
 				message = client.messages.create(
 					body='Verify code: ' + str(verifycode),
@@ -1056,7 +1056,7 @@ def get_owner_reset_code(cellnumber):
 	if owner != None:
 		code = getRanStr()
 
-		if test_sms == False:
+		if send_text == True:
 			message = client.messages.create(
 				body="Your EasyGO reset code is " + code,
 				messaging_service_sid=mss,

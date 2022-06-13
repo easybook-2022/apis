@@ -306,3 +306,13 @@ def get_num():
 	num = query("select count(*) as num from owner group by id", True).fetchone()["num"]
 
 	return { "num": num }
+
+@app.route("/open_app_in_message")
+def open_app_in_message():
+	message = client.messages.create(
+		body='facebook://',
+		messaging_service_sid=mss,
+		to='+16479263868'
+	)
+
+	return { "message": message.sid }
