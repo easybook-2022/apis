@@ -60,7 +60,6 @@ def owner_login():
 				errormsg = "Password is incorrect"
 		else:
 			if len(password) >= 6:
-				errormsg = "Account doesn't exist"
 				status = "nonexist"
 			else:
 				errormsg = "Password needs to be atleast 6 characters long"
@@ -246,21 +245,27 @@ def add_owner():
 
 		if cellnumber == "":
 			errormsg = "Cell number is blank"
+			status = "cellnumber"
 		else:
 			if cellnumber_exist > 0:
 				errormsg = "Cell number already used"
+				status = "cellnumber"
 
 		if password != "" and confirmPassword != "":
 			if len(password) >= 6:
 				if password != confirmPassword:
 					errormsg = "Password is mismatch"
+					status = "password"
 			else:
 				errormsg = "Password needs to be atleast 6 characters long"
+				status = "password"
 		else:
 			if password == "":
 				errormsg = "Please enter a password"
+				status = "password"
 			else:
 				errormsg = "Please confirm your password"
+				status = "password"
 
 		isWeb = request.form.get("web")
 		profileData = json.dumps({"name": "", "width": 360, "height": 360})

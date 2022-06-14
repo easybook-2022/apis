@@ -67,7 +67,7 @@ def setup_location():
 				logoname = json.dumps({"name": "", "width": 0, "height": 0})
 
 		if errormsg == "":
-			locationInfo = json.dumps({"listed":False, "menuPhotos": [], "type": "stylist"})
+			locationInfo = json.dumps({"listed":False, "menuPhotos": [], "type": "owner"})
 
 			data = {
 				"name": storeName, "addressOne": addressOne, "addressTwo": addressTwo, "city": city,

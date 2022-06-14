@@ -153,14 +153,10 @@ def make_appointment():
 	worker = query("select * from owner where id = " + str(workerid), True).fetchone()
 
 	info = json.loads(location["info"])
+	owners = "(" + location["owners"][1:-1] + ")"
 	type = info["type"]
 
-	sql = "select id, info from owner where "
-
-	if type == "computer":
-		sql += "info like '%\"locationId\": \"" + str(locationid) + "\"%' and info like '%\"owner\": true\"%'"
-	else:
-		sql += "id = " + str(workerid)
+	sql = "select id, info from owner where id in " + owners
 
 	owners = query(sql, True)
 	locationInfo = json.loads(location["info"])
@@ -496,14 +492,10 @@ def cancel_request():
 
 	location = query("select * from location where id = " + str(locationId), True).fetchone()
 	info = json.loads(location["info"])
+	owners = "(" + location["owners"][1:-1] + ")"
 	type = info["type"]
 
-	sql = "select id from owner where "
-
-	if type == "computer":
-		sql += "info like '%\"locationId\": \"" + str(locationId) + "\"%' and info like '%\"owner\": true\"%'"
-	else:
-		sql += "id = " + workerId
+	sql = "select id from owner where id in " + owners + " and info like '%\"owner\": true\"%'"
 
 	owners = query(sql, True)
 	receivers = { "owners": [], "users": [] }
