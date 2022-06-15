@@ -406,20 +406,27 @@ def update_owner():
 								new_data["password"] = password
 							else:
 								errormsg = "Password is mismatch"
+								status = "password"
 						else:
 							errormsg = "Password needs to be atleast 6 characters long"
+							status = "password"
 					else:
 						if newPassword == "":
 							errormsg = "Please enter a password"
+							status = "password"
 						else:
 							errormsg = "Please confirm your password"
+							status = "password"
 				else:
 					if newPassword == "":
 						errormsg = "New password is blank"
+						status = "password"
 					else:
 						errormsg = "Please confirm your new password"
+						status = "password"
 			else:
 				errormsg = "Current password is incorrect"
+				status = "password"
 		elif type == "hours":
 			hours = request.form['hours']
 
