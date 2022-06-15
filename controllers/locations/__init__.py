@@ -578,29 +578,23 @@ def get_location_profile():
 				openhour = int(openhour)
 
 				if openhour == 0:
-					openhour = "12"
-				elif openhour < 10:
-					openhour = "0" + str(openhour)
+					openhour = 12
 				elif openhour > 12:
 					openhour -= 12
-					openhour = "0" + str(openhour) if openhour < 10 else openhour
 
 				closeperiod = "PM" if closehour >= 12 else "AM"
 				closehour = int(closehour)
 
 				if closehour == 0:
-					closehour = "12"
-				elif closehour < 10:
-					closehour = "0" + str(closehour)
+					closehour = 12
 				elif closehour > 12:
 					closehour -= 12
-					closehour = "0" + str(closehour) if closehour < 10 else closehour
 
-				info["opentime"]["hour"] = str(openhour)
+				info["opentime"]["hour"] = openhour
 				info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
 				info["opentime"]["period"] = openperiod
 
-				info["closetime"]["hour"] = str(closehour)
+				info["closetime"]["hour"] = closehour
 				info["closetime"]["minute"] = data[day[k][:3]]["closetime"]["minute"]
 				info["closetime"]["period"] = closeperiod
 				info["close"] = close

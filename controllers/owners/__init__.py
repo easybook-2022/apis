@@ -832,8 +832,6 @@ def get_workers_time(id):
 			elif openhour > 12:
 				openhour -= 12
 
-			openhour = "0" + str(openhour) if openhour < 10 else str(openhour)
-
 			closeperiod = "PM" if closehour >= 12 else "AM"
 			closehour = int(closehour)
 
@@ -842,13 +840,11 @@ def get_workers_time(id):
 			elif closehour > 12:
 				closehour -= 12
 
-			closehour = "0" + str(closehour) if closehour < 10 else str(closehour)
-
-			info["opentime"]["hour"] = int(openhour)
+			info["opentime"]["hour"] = openhour
 			info["opentime"]["minute"] = data[day[k][:3]]["opentime"]["minute"]
 			info["opentime"]["period"] = openperiod
 
-			info["closetime"]["hour"] = int(closehour)
+			info["closetime"]["hour"] = closehour
 			info["closetime"]["minute"] = data[day[k][:3]]["closetime"]["minute"]
 			info["closetime"]["period"] = closeperiod
 			info["working"] = working
