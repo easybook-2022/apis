@@ -40,9 +40,14 @@ def owner_login():
 					
 					if locationhours != '{}' and ownerhours != '{}':
 						if numBusiness > 1:
-							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list" }
+							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list", "isOwner": ownerInfo["owner"] }
 						else:
-							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "main" }
+							return { 
+								"ownerid": ownerid, "cellnumber": cellnumber, 
+								"locationid": locationid, "locationtype": locationtype, 
+								"msg": "authoption" if locationtype == "nail" or locationtype == "hair" else "main", 
+								"isOwner": ownerInfo["owner"] 
+							}
 					else:
 						if locationhours == '{}': # location setup not done
 							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": "", "msg": "locationsetup" }
@@ -51,9 +56,14 @@ def owner_login():
 								return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "register" }
 							else:
 								if numBusiness > 1:
-									return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list" }
+									return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list", "isOwner": ownerInfo["owner"] }
 								else:
-									return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "main" }
+									return { 
+										"ownerid": ownerid, "cellnumber": cellnumber, 
+										"locationid": locationid, "locationtype": locationtype, 
+										"msg": "authoption" if locationtype == "nail" or locationtype == "hair" else "main", 
+										"isOwner": ownerInfo["owner"] 
+									}
 				else:
 					return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": None, "locationtype": "", "msg": "locationsetup" }
 			else:
