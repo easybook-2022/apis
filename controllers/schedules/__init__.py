@@ -242,9 +242,10 @@ def book_walk_in():
 	note = content['note']
 	type = content['type']
 	client = content['client']
+	serviceid = content['serviceid'] if 'serviceid' in content else -1
 
 	data = {
-		"userId": -1,"workerId": workerid,"locationId": locationid,"menuId": -1,"serviceId": -1,
+		"userId": -1,"workerId": workerid,"locationId": locationid,"menuId": -1,"serviceId": serviceid if serviceid != None else -1,
 		"userInput": json.dumps(client),"time": json.dumps(time),"status": "confirmed","cancelReason": "","locationType": type,
 		"customers": 1,"note": note,"orders": "[]","info": "{}"
 	}

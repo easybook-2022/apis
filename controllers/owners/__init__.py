@@ -727,12 +727,14 @@ def get_all_workers_time(id):
 					if time not in workers:
 						workers[time] = [{
 							"workerId": owner["id"],
+							"username": owner["username"],
 							"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
 							"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
 						}]
 					else:
 						workers[time].append({
 							"workerId": owner["id"],
+							"username": owner["username"],
 							"start": hours[time]["opentime"]["hour"] + ":" + hours[time]["opentime"]["minute"],
 							"end": hours[time]["closetime"]["hour"] + ":" + hours[time]["closetime"]["minute"]
 						})
@@ -744,12 +746,14 @@ def get_all_workers_time(id):
 						if time not in workers:
 							workers[time] = [{
 								"workerId": owner["id"],
+								"username": owner["username"],
 								"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
 								"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
 							}]
 						else:
 							workers[time].append({
 								"workerId": owner["id"],
+								"username": owner["username"],
 								"start": coworkerHours[time]["opentime"]["hour"] + ":" + coworkerHours[time]["opentime"]["minute"],
 								"end": coworkerHours[time]["closetime"]["hour"] + ":" + coworkerHours[time]["closetime"]["minute"]
 							})
