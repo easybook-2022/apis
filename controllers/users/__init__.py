@@ -67,14 +67,11 @@ def user_verify(cellnumber):
 
 	if user == None:
 		if send_text == True:
-			try:
-				message = client.messages.create(
-					body='EasyGO User Verify code: ' + str(verifycode),
-					messaging_service_sid=mss,
-					to='+1' + str(cellnumber)
-				)
-			except:
-				print("could not verify: " + str(cellnumber))
+			message = client.messages.create(
+				body='EasyGO User Verify code: ' + str(verifycode),
+				messaging_service_sid=mss,
+				to='+1' + str(cellnumber)
+			)
 
 		return { "verifycode": verifycode }
 	else:
@@ -172,7 +169,7 @@ def update_user():
 
 		if password != "" or confirmPassword != "":
 			if password != "" and confirmPassword != "":
-				if len(password) > 6:
+				if len(password) >= 6:
 					if password == confirmPassword:
 						user["password"] = generate_password_hash(password)
 					else:

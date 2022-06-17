@@ -345,9 +345,14 @@ def salon_change_appointment():
 
 		pushids = []
 
-		info = json.loads(client["info"])
-		pushToken = info["pushToken"]
-		receiver = "user" + str(clientid)
+		info = { "msg": "appointment remade", "time": time, "worker": { "id": workerid, "username": worker["username"] }}
+
+		if client != None:
+			info = json.loads(client["info"])
+			pushToken = info["pushToken"]
+			receiver = "user" + str(clientid)
+
+			info["receiver"] = receiver
 
 		schedule["time"] = time
 		schedule["status"] = 'confirmed'
@@ -361,17 +366,18 @@ def salon_change_appointment():
 
 		query("update schedule set " + ", ".join(update_data) + " where id = " + str(schedule["id"]))
 
-		if pushToken != "":
-			pushmessage = pushInfo(
-				pushToken, 
-				"Appointment remade",
-				"A salon requested a different appointment for you for service: " + servicename + " " + str(timeDisplay),
-				content
-			)
-		
-			push(pushmessage)
+		if client != None:
+			if pushToken != "":
+				pushmessage = pushInfo(
+					pushToken, 
+					"Appointment remade",
+					"A salon requested a different appointment for you for service: " + servicename + " " + str(timeDisplay),
+					content
+				)
+			
+				push(pushmessage)
 
-		return { "msg": "appointment remade", "receiver": receiver, "time": time, "worker": { "id": workerid, "username": worker["username"] }}
+		return info
 	else:
 		errormsg = "Location doesn't exist"
 
