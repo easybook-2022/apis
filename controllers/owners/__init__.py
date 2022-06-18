@@ -552,11 +552,11 @@ def get_workers_hour():
 			owners = {}
 
 			for data in datas:
-				scheduledDatas = query("select id, time from schedule where workerId = " + str(data["id"]), True).fetchall()
+				scheduledDatas = query("select id, time, status from schedule where workerId = " + str(data["id"]) + " and (status = 'confirmed' or status = 'blocked')", True).fetchall()
 				scheduled = {}
 
 				for scheduledData in scheduledDatas:
-					scheduled[scheduledData["time"]] = scheduledData["id"]
+					scheduled[scheduledData["time"] + "-" + (scheduledData["status"][:1])] = scheduledData["id"]
 
 				hours = json.loads(data['hours'])
 				profile = json.loads(data["profile"])
@@ -594,11 +594,11 @@ def get_workers_hour():
 			data = query("select * from owner where id = " + str(ownerid), True).fetchone()
 
 			if data != None:
-				scheduledDatas = query("select id, time from schedule where workerId = " + str(ownerid), True).fetchall()
+				scheduledDatas = query("select id, time from schedule where workerId = " + str(ownerid) + " and (status = 'confirmed' or status = 'blocked')", True).fetchall()
 				scheduled = {}
 
 				for scheduledData in scheduledDatas:
-					scheduled[scheduledData["time"]] = scheduledData["id"]
+					scheduled[scheduledData["time"] + "-" + (scheduledData["status"][:1])] = scheduledData["id"]
 
 				hours = json.loads(data['hours'])
 				hoursData = {

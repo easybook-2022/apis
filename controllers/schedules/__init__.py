@@ -308,6 +308,44 @@ def remove_booking():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
+@app.route("/block_time", methods=["POST"])
+def block_time():
+	content = request.get_json()
+	errormsg = ""
+	status = ""
+
+	workerid = content['workerid']
+	jsonDate = content['jsonDate']
+
+	blocked = query("select count(*) as num from schedule where workerId = " + str(workerid) + " and status = 'blocked' and time = '" + str(jsonDate) + "'", True).fetchone()["num"]
+
+	if blocked == 0:
+		location = query("select id, type from location where owners like '%\"" + str(workerid) + "\"%'", True).fetchone()
+
+		if location != None:
+			data = {
+				"userId": -1,"workerId": workerid, "locationId": location["id"], "menuId": -1, "serviceId": -1,
+				"userInput": json.dumps({}), "time": jsonDate, "status": "blocked", "cancelReason": "", "locationType": location["type"],
+				"customers": 0, "note": "", "orders": "[]", "info": "{}"
+			}
+			columns = []
+			insert_data = []
+			for key in data:
+				columns.append(key)
+				insert_data.append("'" + str(data[key]) + "'")
+
+			query("insert into schedule (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")")
+
+			return { "msg": "success", "action": "add" }
+		else:
+			errormsg = "Location doesn't exist"
+	else:
+		query("delete from schedule where workerId = " + str(workerid) + " and status = 'blocked' and time = '" + str(jsonDate) + "'")
+
+		return { "msg": "success", "action": "remove" }
+
+	return { "errormsg": errormsg, "status": status }, 400
+
 @app.route("/salon_change_appointment", methods=["POST"])
 def salon_change_appointment():
 	content = request.get_json()
@@ -348,8 +386,8 @@ def salon_change_appointment():
 		info = { "msg": "appointment remade", "time": time, "worker": { "id": workerid, "username": worker["username"] }}
 
 		if client != None:
-			info = json.loads(client["info"])
-			pushToken = info["pushToken"]
+			clientInfo = json.loads(client["info"])
+			pushToken = clientInfo["pushToken"]
 			receiver = "user" + str(clientid)
 
 			info["receiver"] = receiver
