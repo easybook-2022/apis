@@ -2,6 +2,7 @@ from flask import request
 from flask_cors import CORS
 from info import *
 from models import *
+import datetime, time
 
 cors = CORS(app)
 
@@ -129,7 +130,7 @@ def make_appointment():
 	locationid = content['locationid']
 	serviceid = content['serviceid']
 	serviceinfo = content['serviceinfo']
-	time = content['time']
+	clientTime = content['time']
 	note = content['note']
 	timeDisplay = content['timeDisplay']
 
@@ -172,7 +173,7 @@ def make_appointment():
 			pushids.append({ "token": info["pushToken"], "signin": info["signin"] })
 
 	if schedule != None: # existing schedule
-		schedule["time"] = time
+		schedule["time"] = clientTime
 		schedule["status"] = 'confirmed'
 		schedule["note"] = note
 		schedule["workerId"] = workerid
@@ -196,16 +197,16 @@ def make_appointment():
 			
 			push(pushmessages)
 
-		speak = { "scheduleid": schedule["id"], "name": servicename, "time": json.loads(time), "worker": { "id": workerid, "username": worker["username"] }}
+		speak = { "scheduleid": schedule["id"], "name": servicename, "time": json.loads(clientTime), "worker": { "id": workerid, "username": worker["username"] }}
 
-		return { "msg": "appointment remade", "receiver": receiver, "time": time, "speak": speak }
+		return { "msg": "appointment remade", "receiver": receiver, "time": clientTime, "speak": speak }
 	else: # new schedule
 		info = json.dumps({})
 		userInput = json.dumps({ "name": serviceinfo, "type": "service" })
 
 		data = {
 			"userId": userid,"workerId": workerid,"locationId": locationid,"menuId": menuid,"serviceId": serviceid,
-			"userInput": userInput,"time": time,"status": "confirmed","cancelReason": "","locationType": location["type"],
+			"userInput": userInput,"time": clientTime,"status": "confirmed","cancelReason": "","locationType": location["type"],
 			"customers": 1,"note": note,"orders": "[]","info": info
 		}
 		columns = []
@@ -228,7 +229,7 @@ def make_appointment():
 
 			push(pushmessages)
 
-		speak = { "scheduleid": id, "name": servicename, "time": json.loads(time), "worker": { "id": workerid, "username": worker["username"] }}
+		speak = { "scheduleid": id, "name": servicename, "time": json.loads(clientTime), "worker": { "id": workerid, "username": worker["username"] }}
 
 		return { "msg": "appointment added", "receiver": receiver, "speak": speak }
 
@@ -238,26 +239,137 @@ def book_walk_in():
 
 	workerid = content['workerid']
 	locationid = content['locationid']
-	time = content['time']
+	clientTime = content["time"]
 	note = content['note']
 	type = content['type']
 	client = content['client']
 	serviceid = content['serviceid'] if 'serviceid' in content else -1
 
+	# get now or the next available time for client
+	# check if current time is valid
+	monthsArr = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+	daysArr = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+	months = {'January': '1', 'February': '2', 'March': '3', 'April': '4', 'May': '5', 'June': '6', 'July': '7', 'August': '8', 'September': '9', 'October': '10', 'November': '11', 'December': '12'}
+	days = {'Sunday': '1', 'Monday': '2', 'Tuesday': '3', 'Wednesday': '4', 'Thursday': '5', 'Friday': '6', 'Saturday': '7'}
+
+	day = int(days[clientTime["day"]])
+	month = int(months[clientTime["month"]])
+	date = clientTime["date"]
+	year = clientTime["year"]
+	hour = clientTime["hour"]
+	minute = clientTime["minute"]
+
+	date_time = datetime.datetime(year, month, date, 0, 0)
+	date_time_info = str(date_time).split(" ")
+	date_date = date_time_info[0].split("-")
+
+	date_year = str(date_date[0])
+	date_month = monthsArr[int(date_date[1]) - 1]
+	date_day = str(int(date_date[2]))
+	date_weekday = daysArr[date_time.weekday()]
+
+	bM = "0"
+	eM = "10"
+	bH = hour
+	eH = hour
+
+	if minute >= 10:
+		bM = str(minute)[:1]
+		eM = int(str(minute)[1:])
+
+	if minute >= 0 and minute < 15: # 0 to 14
+		eMone = 0
+		eMtwo = 15
+	elif minute < 30: # 15 to 29
+		eMone = 15
+		eMtwo = 30
+	elif minute < 45: # 30 to 45
+		eMone = 30
+		eMtwo = 45
+	else: # 45 to above
+		eMone = 45
+		eMtwo = 0
+
+		eH = eH + 1 if eH < 23 else 0
+
+	bTime = str(bH) + ":" + str(eMone)
+	eTime = str(eH) + ":" + str(eMtwo)
+	timeDisplay = ""
+	valid = False
+
+	clientTime = json.dumps({"day": date_weekday, "month": date_month, "date": date_day, "year": date_year, "hour": bH, "minute": eMone })
+	scheduled = query("select count(*) as num from schedule where time = '" + clientTime + "' and workerId = " + str(workerid), True).fetchone()["num"]
+
+	if scheduled == 0:
+		valid = True
+		timeDisplay = "right now"
+
+	while valid == False:
+		bTimeInfo = bTime.split(":")
+		eTimeInfo = eTime.split(":")
+
+		bTimeInfo[0] = int(bTimeInfo[0])
+		bTimeInfo[1] = int(bTimeInfo[1])
+
+		eTimeInfo[0] = int(eTimeInfo[0])
+		eTimeInfo[1] = int(eTimeInfo[1])
+
+		bTimeInfo[1] += 15
+		eTimeInfo[1] += 15
+
+		if bTimeInfo[1] == 60:
+			bTimeInfo[0] = bTimeInfo[0] + 1 if bTimeInfo[0] < 23 else 0
+			bTimeInfo[1] = 0
+
+		if eTimeInfo[1] == 60:
+			eTimeInfo[0] = eTimeInfo[0] + 1 if eTimeInfo[0] < 23 else 0
+			eTimeInfo[1] = 0
+
+		bTime = str(bTimeInfo[0]) + ":" + ("0" + str(bTimeInfo[1]) if bTimeInfo[1] < 10 else str(bTimeInfo[1]))
+		eTime = str(eTimeInfo[0]) + ":" + ("0" + str(eTimeInfo[1]) if eTimeInfo[1] < 10 else str(eTimeInfo[1]))
+
+		if eTime == "0:00":
+			new_date = date_time + datetime.timedelta(days=1)
+			date_time = new_date
+			date_time_info = str(date_time).split(" ")
+			date_date = date_time_info[0].split("-")
+			date_year = str(date_date[0])
+			date_month = monthsArr[int(date_date[1]) - 1]
+			date_day = str(int(date_date[2]))
+			date_weekday = daysArr[date_time.weekday()]
+
+		timeInfo = bTime.split(":")
+		hour = int(timeInfo[0])
+		minute = int(timeInfo[1])
+
+		clientTime = json.dumps({"day": date_weekday, "month": date_month, "date": date_day, "year": date_year, "hour": hour, "minute": minute})
+
+		scheduled = query("select count(*) as num from schedule where time = '" + clientTime + "' and workerId = " + str(workerid), True).fetchone()["num"]
+
+		if scheduled == 0:
+			valid = True
+
+			timeInfo = json.loads(clientTime)
+			hour = int(timeInfo["hour"])
+			minute = int(timeInfo["minute"])
+			timeDisplay = str(hour - 12 if hour > 12 else hour) + ":" + str("0" + str(minute) if minute < 10 else minute)
+			timeDisplay += "pm" if hour >= 12 else "am"
+
 	data = {
 		"userId": -1,"workerId": workerid,"locationId": locationid,"menuId": -1,"serviceId": serviceid if serviceid != None else -1,
-		"userInput": json.dumps(client),"time": json.dumps(time),"status": "confirmed","cancelReason": "","locationType": type,
+		"userInput": json.dumps(client),"time": clientTime,"status": "confirmed","cancelReason": "","locationType": type,
 		"customers": 1,"note": note,"orders": "[]","info": "{}"
 	}
+
 	columns = []
 	insert_data = []
 	for key in data:
 		columns.append(key)
 		insert_data.append("'" + str(data[key]) + "'")
 
-	id = query("insert into schedule (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
+	query("insert into schedule (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")")
 
-	return { "msg": "success", "id": id }
+	return { "msg": "success", "timeDisplay": timeDisplay }
 
 @app.route("/remove_booking", methods=["POST"])
 def remove_booking():
@@ -358,7 +470,7 @@ def salon_change_appointment():
 	locationid = content['locationid']
 	serviceid = content['serviceid']
 	serviceinfo = content['serviceinfo']
-	time = content['time']
+	clientTime = content['time']
 	note = content['note']
 	timeDisplay = content['timeDisplay']
 
@@ -383,7 +495,7 @@ def salon_change_appointment():
 
 		pushids = []
 
-		info = { "msg": "appointment remade", "time": time, "worker": { "id": workerid, "username": worker["username"] }}
+		info = { "msg": "appointment remade", "time": clientTime, "worker": { "id": workerid, "username": worker["username"] }}
 
 		if client != None:
 			clientInfo = json.loads(client["info"])
@@ -392,7 +504,7 @@ def salon_change_appointment():
 
 			info["receiver"] = receiver
 
-		schedule["time"] = time
+		schedule["time"] = clientTime
 		schedule["status"] = 'confirmed'
 		schedule["note"] = note
 		schedule["workerId"] = workerid
@@ -502,6 +614,36 @@ def close_schedule(id):
 
 		query("delete from schedule where id = " + str(id))
 
+		time = json.loads(appointment["time"])
+		hour = int(time["hour"])
+		minute = int(time["minute"])
+		delete = []
+		blockedEnd = False
+
+		while hour > 0 and blockedEnd == False:
+			minute += 15
+
+			if minute > 59:
+				hour += 1
+				minute = 0
+
+				if hour == 24:
+					hour = 0
+
+			time["hour"] = hour
+			time["minute"] = minute
+
+			scheduled = query("select id, status from schedule where time = '" + json.dumps(time).replace(" ", "") + "'", True).fetchone()
+
+			if scheduled != None:
+				if scheduled["status"] == "confirmed":
+					blockedEnd = True
+				else:
+					delete.append(scheduled["id"])
+
+		if len(delete) > 0:
+			query("delete from schedule where id in (" + json.dumps(delete)[1:-1] + ")", False)
+
 		return { "msg": "request deleted", "receiver": receiver }
 
 	errormsg = "Action is denied"
@@ -517,6 +659,36 @@ def done_service(id):
 	booker = schedule["userId"]
 
 	query("update schedule set status = 'done' where id = " + str(id))
+
+	time = json.loads(schedule["time"])
+	hour = int(time["hour"])
+	minute = int(time["minute"])
+	delete = []
+	blockedEnd = False
+
+	while hour > 0 and blockedEnd == False:
+		minute += 15
+
+		if minute > 59:
+			hour += 1
+			minute = 0
+
+			if hour == 24:
+				hour = 0
+
+		time["hour"] = hour
+		time["minute"] = minute
+
+		scheduled = query("select id, status from schedule where time = '" + json.dumps(time).replace(" ", "") + "'", True).fetchone()
+
+		if scheduled != None:
+			if scheduled["status"] == "confirmed":
+				blockedEnd = True
+			else:
+				delete.append(scheduled["id"])
+
+	if len(delete) > 0:
+		query("delete from schedule where id in (" + json.dumps(delete)[1:-1] + ")", False)
 
 	return { "msg": "Schedule done", "receiver": "user" + str(booker) }
 

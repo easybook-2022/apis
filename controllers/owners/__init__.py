@@ -188,7 +188,7 @@ def save_user_info():
 	update_data = []
 
 	if username == "":
-		errormsg = "Please provide a username for identification"
+		errormsg = "Please enter a name you like"
 
 	isWeb = request.form.get("web")
 
