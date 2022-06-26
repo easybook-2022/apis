@@ -6,6 +6,69 @@ import datetime, time
 
 cors = CORS(app)
 
+def removeBlockedSchedules(time):
+	time = json.loads(time)
+
+	hour = int(time["hour"])
+	minute = int(time["minute"])
+	delete = []
+	blockedEnd = False
+
+	while hour > 0 and blockedEnd == False:
+		minute += 15
+
+		if minute > 59:
+			hour += 1
+			minute = 0
+
+			if hour == 24:
+				hour = 0
+
+		time["hour"] = hour
+		time["minute"] = minute
+
+		scheduled = query("select id, status from schedule where replace(time, ' ', '') = '" + json.dumps(time).replace(" ", "") + "'", True).fetchone()
+
+		if scheduled != None:
+			if scheduled["status"] == "confirmed":
+				blockedEnd = True
+			else:
+				delete.append(scheduled["id"])
+
+	if len(delete) > 0:
+		query("delete from schedule where id in (" + json.dumps(delete)[1:-1] + ")", False)
+
+def getBlockedSchedules(time):
+	time = json.loads(time)
+
+	hour = int(time["hour"])
+	minute = int(time["minute"])
+	delete = []
+	blockedEnd = False
+
+	while hour > 0 and blockedEnd == False:
+		minute += 15
+
+		if minute > 59:
+			hour += 1
+			minute = 0
+
+			if hour == 24:
+				hour = 0
+
+		time["hour"] = hour
+		time["minute"] = minute
+
+		scheduled = query("select id, status, time from schedule where replace(time, ' ', '') = '" + json.dumps(time).replace(" ", "") + "'", True).fetchone()
+
+		if scheduled != None:
+			if scheduled["status"] == "confirmed":
+				blockedEnd = True
+			else:
+				delete.append(scheduled)
+
+	return delete
+
 @app.route("/welcome_schedules", methods=["GET"])
 def welcome_schedules():
 	datas = Schedule.query.all()
@@ -69,54 +132,62 @@ def get_appointment_info(id):
 	errormsg = ""
 	status = ""
 
-	locationId = schedule["locationId"]
-	serviceId = schedule["serviceId"]
-	userId = schedule["userId"]
-	userInput = json.loads(schedule["userInput"])
-	
-	client = query("select * from user where id = " + str(userId), True).fetchone()
-
-	worker = None
-
-	if schedule["workerId"] > 0:
-		workerInfo = query("select * from owner where id = " + str(schedule["workerId"]), True).fetchone()
-
-		days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-		hours = json.loads(workerInfo["hours"])
-		info = {}
-		for day in days:
-			if hours[day]["working"] == True:
-				info[day] = {
-					"start": hours[day]["opentime"]["hour"] + ":" + hours[day]["opentime"]["minute"],
-					"end": hours[day]["closetime"]["hour"] + ":" + hours[day]["closetime"]["minute"],
-					"working": hours[day]["working"]
-				}
-
-		worker = { "id": schedule["workerId"], "username": workerInfo["username"], "profile": workerInfo["profile"], "days": info }
-
-	info = { 
-		"client": { 
-			"id": userId, 
-			"name": client["username"] if client != None else userInput["name"] if "name" in userInput else "", 
-			"cellnumber": userInput["cellnumber"] if "cellnumber" in userInput else None
-		},
-		"locationId": int(locationId), 
-		"serviceId": int(serviceId) if serviceId > -1 else None, 
-		"time": json.loads(schedule["time"]), 
-		"worker": worker
-	}
-
-	if serviceId != -1:
-		service = query("select * from service where id = " + str(serviceId), True).fetchone()
-
-		info["name"] = service["name"]
-	else:
+	if schedule != None:
+		blockedSchedules = getBlockedSchedules(schedule["time"])
+		locationId = schedule["locationId"]
+		serviceId = schedule["serviceId"]
+		userId = schedule["userId"]
 		userInput = json.loads(schedule["userInput"])
+		
+		client = query("select * from user where id = " + str(userId), True).fetchone()
 
-		info["name"] = userInput["name"] if "name" in userInput else ""
+		worker = None
 
-	if errormsg == "":
-		return info
+		if schedule["workerId"] > 0:
+			workerInfo = query("select * from owner where id = " + str(schedule["workerId"]), True).fetchone()
+
+			days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+			hours = json.loads(workerInfo["hours"])
+			info = {}
+			for day in days:
+				if hours[day]["working"] == True:
+					info[day] = {
+						"start": hours[day]["opentime"]["hour"] + ":" + hours[day]["opentime"]["minute"],
+						"end": hours[day]["closetime"]["hour"] + ":" + hours[day]["closetime"]["minute"],
+						"working": hours[day]["working"]
+					}
+
+			worker = { "id": schedule["workerId"], "username": workerInfo["username"], "profile": workerInfo["profile"], "days": info }
+
+		info = { 
+			"client": { 
+				"id": userId, 
+				"name": client["username"] if client != None else userInput["name"] if "name" in userInput else "", 
+				"cellnumber": userInput["cellnumber"] if "cellnumber" in userInput else None
+			},
+			"locationId": int(locationId), 
+			"serviceId": int(serviceId) if serviceId > -1 else None, 
+			"time": json.loads(schedule["time"]), 
+			"note": schedule["note"],
+			"worker": worker,
+			"blocked": blockedSchedules
+		}
+
+		if serviceId != -1:
+			service = query("select * from service where id = " + str(serviceId), True).fetchone()
+
+			info["name"] = service["name"]
+		else:
+			userInput = json.loads(schedule["userInput"])
+
+			info["name"] = userInput["name"] if "name" in userInput else ""
+
+		if errormsg == "":
+			return info
+	else:
+		status = "nonexist"
+
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/make_appointment", methods=["POST"])
 def make_appointment():
@@ -133,6 +204,7 @@ def make_appointment():
 	clientTime = content['time']
 	note = content['note']
 	timeDisplay = content['timeDisplay']
+	blocked = content['blocked']
 
 	user = query("select * from user where id = " + str(userid), True).fetchone()
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
@@ -172,66 +244,89 @@ def make_appointment():
 		if info["pushToken"] != "" and info["signin"] == True:
 			pushids.append({ "token": info["pushToken"], "signin": info["signin"] })
 
-	if schedule != None: # existing schedule
-		schedule["time"] = clientTime
-		schedule["status"] = 'confirmed'
-		schedule["note"] = note
-		schedule["workerId"] = workerid
+	scheduled = query("select * from schedule where replace(time, ' ', '') = '" + clientTime.replace(" ", "") + "'", True).fetchone()
 
-		update_data = []
-		for key in schedule:
-			if key != "table":
-				update_data.append(key + " = '" + str(schedule[key]) + "'")
+	if scheduled == None:
+		if schedule != None: # existing schedule
+			schedule["time"] = clientTime
+			schedule["status"] = 'confirmed'
+			schedule["note"] = note
+			schedule["workerId"] = workerid
 
-		query("update schedule set " + ", ".join(update_data) + " where id = " + str(schedule["id"]))
+			# recreate blocked times
+			for info in blocked:
+				existing = query("select count(*) as num from schedule where replace(time, ' ', '') = '" + json.dumps(info["newTime"]).replace(" ", "") + "'", True).fetchone()["num"] > 0
 
-		if len(pushids) > 0:
-			pushmessages = []
-			for info in pushids:
-				pushmessages.append(pushInfo(
-					info["token"], 
-					"Appointment remade",
-					"A client remade an appointment for service: " + servicename + " " + str(timeDisplay),
-					content
-				))
-			
-			push(pushmessages)
+				if existing == True:
+					status = "scheduleConflict"
 
-		speak = { "scheduleid": schedule["id"], "name": servicename, "time": json.loads(clientTime), "worker": { "id": workerid, "username": worker["username"] }}
+			if status == "":
+				update_data = []
+				for key in schedule:
+					if key != "table":
+						if key == "time":
+							update_data.append(key + " = '" + str(schedule[key]).replace(" ", "") + "'")
+						else:
+							update_data.append(key + " = '" + str(schedule[key]) + "'")
 
-		return { "msg": "appointment remade", "receiver": receiver, "time": clientTime, "speak": speak }
-	else: # new schedule
-		info = json.dumps({})
-		userInput = json.dumps({ "name": serviceinfo, "type": "service" })
+				query("update schedule set " + ", ".join(update_data) + " where id = " + str(schedule["id"]))
 
-		data = {
-			"userId": userid,"workerId": workerid,"locationId": locationid,"menuId": menuid,"serviceId": serviceid,
-			"userInput": userInput,"time": clientTime,"status": "confirmed","cancelReason": "","locationType": location["type"],
-			"customers": 1,"note": note,"orders": "[]","info": info
-		}
-		columns = []
-		insert_data = []
-		for key in data:
-			columns.append(key)
-			insert_data.append("'" + str(data[key]) + "'")
+				for info in blocked:
+					query("update schedule set time = '" + json.dumps(info["newTime"]).replace(" ", "") + "' where id = " + str(info["id"]))
+			# end code
 
-		id = query("insert into schedule (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
+			if status == "":
+				if len(pushids) > 0:
+					pushmessages = []
+					for info in pushids:
+						pushmessages.append(pushInfo(
+							info["token"], 
+							"Appointment remade",
+							"A client remade an appointment for service: " + servicename + " " + str(timeDisplay),
+							content
+						))
+					
+					push(pushmessages)
 
-		if len(pushids) > 0:
-			pushmessages = []
-			for info in pushids:
-				pushmessages.append(pushInfo(
-					info["token"], 
-					"Appointment made",
-					"A client made an appointment for service: " + servicename + " " + str(timeDisplay),
-					content
-				))
+				speak = { "scheduleid": schedule["id"], "name": servicename, "time": json.loads(clientTime), "worker": { "id": workerid, "username": worker["username"] }}
 
-			push(pushmessages)
+				return { "msg": "appointment remade", "receiver": receiver, "time": clientTime, "speak": speak }
+		else: # new schedule
+			info = json.dumps({})
+			userInput = json.dumps({ "name": serviceinfo, "type": "service" })
 
-		speak = { "scheduleid": id, "name": servicename, "time": json.loads(clientTime), "worker": { "id": workerid, "username": worker["username"] }}
+			data = {
+				"userId": userid,"workerId": workerid,"locationId": locationid,"menuId": menuid,"serviceId": serviceid,
+				"userInput": userInput,"time": clientTime,"status": "confirmed","cancelReason": "","locationType": location["type"],
+				"customers": 1,"note": note,"orders": "[]","info": info
+			}
+			columns = []
+			insert_data = []
+			for key in data:
+				columns.append(key)
+				insert_data.append("'" + str(data[key]) + "'")
 
-		return { "msg": "appointment added", "receiver": receiver, "speak": speak }
+			id = query("insert into schedule (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
+
+			if len(pushids) > 0:
+				pushmessages = []
+				for info in pushids:
+					pushmessages.append(pushInfo(
+						info["token"], 
+						"Appointment made",
+						"A client made an appointment for service: " + servicename + " " + str(timeDisplay),
+						content
+					))
+
+				push(pushmessages)
+
+			speak = { "scheduleid": id, "name": servicename, "time": json.loads(clientTime), "worker": { "id": workerid, "username": worker["username"] }}
+
+			return { "msg": "appointment added", "receiver": receiver, "speak": speak }
+	else:
+		status = scheduled["status"]
+
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/book_walk_in", methods=["POST"])
 def book_walk_in():
@@ -298,7 +393,7 @@ def book_walk_in():
 	valid = False
 
 	clientTime = json.dumps({"day": date_weekday, "month": date_month, "date": date_day, "year": date_year, "hour": bH, "minute": eMone })
-	scheduled = query("select count(*) as num from schedule where time = '" + clientTime + "' and workerId = " + str(workerid), True).fetchone()["num"]
+	scheduled = query("select count(*) as num from schedule where replace(time, ' ', '') = '" + clientTime.replace(" ", "") + "' and workerId = " + str(workerid), True).fetchone()["num"]
 
 	if scheduled == 0:
 		valid = True
@@ -344,7 +439,7 @@ def book_walk_in():
 
 		clientTime = json.dumps({"day": date_weekday, "month": date_month, "date": date_day, "year": date_year, "hour": hour, "minute": minute})
 
-		scheduled = query("select count(*) as num from schedule where time = '" + clientTime + "' and workerId = " + str(workerid), True).fetchone()["num"]
+		scheduled = query("select count(*) as num from schedule where replace(time, ' ', '') = '" + clientTime.replace(" ", "") + "' and workerId = " + str(workerid), True).fetchone()["num"]
 
 		if scheduled == 0:
 			valid = True
@@ -392,7 +487,10 @@ def remove_booking():
 			update_data = []
 			for key in appointment:
 				if key != "table":
-					update_data.append(key + " = '" + str(appointment[key]) + "'")
+					if key == "time":
+						update_data.append(key + " = '" + str(appointment[key]).replace(" ", "") + "'")
+					else:
+						update_data.append(key + " = '" + str(appointment[key]) + "'")
 
 			query("update schedule set " + ", ".join(update_data) + " where id = " + str(id))
 
@@ -429,7 +527,7 @@ def block_time():
 	workerid = content['workerid']
 	jsonDate = content['jsonDate']
 
-	blocked = query("select count(*) as num from schedule where workerId = " + str(workerid) + " and status = 'blocked' and time = '" + str(jsonDate) + "'", True).fetchone()["num"]
+	blocked = query("select count(*) as num from schedule where workerId = " + str(workerid) + " and status = 'blocked' and replace(time, ' ', '') = '" + str(jsonDate).replace(" ", "") + "'", True).fetchone()["num"]
 
 	if blocked == 0:
 		location = query("select id, type from location where owners like '%\"" + str(workerid) + "\"%'", True).fetchone()
@@ -452,7 +550,7 @@ def block_time():
 		else:
 			errormsg = "Location doesn't exist"
 	else:
-		query("delete from schedule where workerId = " + str(workerid) + " and status = 'blocked' and time = '" + str(jsonDate) + "'")
+		query("delete from schedule where workerId = " + str(workerid) + " and status = 'blocked' and replace(time, ' ', '') = '" + str(jsonDate).replace(" ", "") + "'")
 
 		return { "msg": "success", "action": "remove" }
 
@@ -473,6 +571,7 @@ def salon_change_appointment():
 	clientTime = content['time']
 	note = content['note']
 	timeDisplay = content['timeDisplay']
+	blocked = content['blocked']
 
 	client = query("select * from user where id = " + str(clientid), True).fetchone()
 	worker = query("select username from owner where id = " + str(workerid), True).fetchone()
@@ -495,39 +594,59 @@ def salon_change_appointment():
 
 		pushids = []
 
-		info = { "msg": "appointment remade", "time": clientTime, "worker": { "id": workerid, "username": worker["username"] }}
+		scheduled = query("select * from schedule where replace(time, ' ', '') = '" + clientTime.replace(" ", "") + "'", True).fetchone()
 
-		if client != None:
-			clientInfo = json.loads(client["info"])
-			pushToken = clientInfo["pushToken"]
-			receiver = "user" + str(clientid)
+		if scheduled == None:
+			info = { "msg": "appointment remade", "time": clientTime, "worker": { "id": workerid, "username": worker["username"] }}
 
-			info["receiver"] = receiver
+			if client != None:
+				clientInfo = json.loads(client["info"])
+				pushToken = clientInfo["pushToken"]
+				receiver = "user" + str(clientid)
 
-		schedule["time"] = clientTime
-		schedule["status"] = 'confirmed'
-		schedule["note"] = note
-		schedule["workerId"] = workerid
+				info["receiver"] = receiver
 
-		update_data = []
-		for key in schedule:
-			if key != "table":
-				update_data.append(key + " = '" + str(schedule[key]) + "'")
+			schedule["time"] = clientTime
+			schedule["status"] = 'confirmed'
+			schedule["note"] = note
+			schedule["workerId"] = workerid
 
-		query("update schedule set " + ", ".join(update_data) + " where id = " + str(schedule["id"]))
+			# recreate blocked times
+			for blockedInfo in blocked:
+				existing = query("select count(*) as num from schedule where replace(time, ' ', '') = '" + json.dumps(blockedInfo["newTime"]).replace(" ", "") + "'", True).fetchone()["num"] > 0
 
-		if client != None:
-			if pushToken != "":
-				pushmessage = pushInfo(
-					pushToken, 
-					"Appointment remade",
-					"A salon requested a different appointment for you for service: " + servicename + " " + str(timeDisplay),
-					content
-				)
-			
-				push(pushmessage)
+				if existing == True:
+					status = "scheduleConflict"
 
-		return info
+			if status == "":
+				update_data = []
+				for key in schedule:
+					if key != "table":
+						if key == "time":
+							update_data.append(key + " = '" + str(schedule[key]).replace(" ", "") + "'")
+						else:
+							update_data.append(key + " = '" + str(schedule[key]) + "'")
+
+				query("update schedule set " + ", ".join(update_data) + " where id = " + str(schedule["id"]))
+
+				for blockedInfo in blocked:
+					query("update schedule set time = '" + json.dumps(blockedInfo["newTime"]).replace(" ", "") + "' where id = " + str(blockedInfo["id"]))
+			# end code
+
+			if client != None:
+				if pushToken != "":
+					pushmessage = pushInfo(
+						pushToken, 
+						"Appointment remade",
+						"A salon requested a different appointment for you for service: " + servicename + " " + str(timeDisplay),
+						content
+					)
+				
+					push(pushmessage)
+
+			return info
+		else:
+			status = scheduled["status"]
 	else:
 		errormsg = "Location doesn't exist"
 
@@ -554,7 +673,10 @@ def cancel_schedule():
 			update_data = []
 			for key in appointment:
 				if key != "table":
-					update_data.append(key + " = '" + str(appointment[key]) + "'")
+					if key == "time":
+						update_data.append(key + " = '" + str(appointment[key]).replace(" ", "") + "'")
+					else:
+						update_data.append(key + " = '" + str(appointment[key]) + "'")
 
 			query("update schedule set " + ", ".join(update_data) + " where id = " + str(id))
 
@@ -614,35 +736,7 @@ def close_schedule(id):
 
 		query("delete from schedule where id = " + str(id))
 
-		time = json.loads(appointment["time"])
-		hour = int(time["hour"])
-		minute = int(time["minute"])
-		delete = []
-		blockedEnd = False
-
-		while hour > 0 and blockedEnd == False:
-			minute += 15
-
-			if minute > 59:
-				hour += 1
-				minute = 0
-
-				if hour == 24:
-					hour = 0
-
-			time["hour"] = hour
-			time["minute"] = minute
-
-			scheduled = query("select id, status from schedule where time = '" + json.dumps(time).replace(" ", "") + "'", True).fetchone()
-
-			if scheduled != None:
-				if scheduled["status"] == "confirmed":
-					blockedEnd = True
-				else:
-					delete.append(scheduled["id"])
-
-		if len(delete) > 0:
-			query("delete from schedule where id in (" + json.dumps(delete)[1:-1] + ")", False)
+		removeBlockedSchedules(appointment["time"])
 
 		return { "msg": "request deleted", "receiver": receiver }
 
@@ -660,36 +754,8 @@ def done_service(id):
 
 	query("update schedule set status = 'done' where id = " + str(id))
 
-	time = json.loads(schedule["time"])
-	hour = int(time["hour"])
-	minute = int(time["minute"])
-	delete = []
-	blockedEnd = False
-
-	while hour > 0 and blockedEnd == False:
-		minute += 15
-
-		if minute > 59:
-			hour += 1
-			minute = 0
-
-			if hour == 24:
-				hour = 0
-
-		time["hour"] = hour
-		time["minute"] = minute
-
-		scheduled = query("select id, status from schedule where time = '" + json.dumps(time).replace(" ", "") + "'", True).fetchone()
-
-		if scheduled != None:
-			if scheduled["status"] == "confirmed":
-				blockedEnd = True
-			else:
-				delete.append(scheduled["id"])
-
-	if len(delete) > 0:
-		query("delete from schedule where id in (" + json.dumps(delete)[1:-1] + ")", False)
-
+	removeBlockedSchedules(schedule["time"])
+	
 	return { "msg": "Schedule done", "receiver": "user" + str(booker) }
 
 @app.route("/cancel_request", methods=["POST"])
@@ -728,6 +794,8 @@ def cancel_request():
 				receivers["users"].append("user" + str(customer["userid"]))
 
 	query("delete from schedule where id = " + str(scheduleid))
+
+	removeBlockedSchedules(schedule["time"])
 
 	serviceName = ""
 	if schedule["serviceId"] == -1:
