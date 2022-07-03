@@ -141,7 +141,7 @@ class Schedule(db.Model):
 	serviceId = db.Column(db.Integer)
 	userInput = db.Column(db.String(70))
 	time = db.Column(db.String(100))
-	status = db.Column(db.String(10))
+	status = db.Column(db.String(15))
 	cancelReason = db.Column(db.String(200))
 	locationType = db.Column(db.String(15))
 	customers = db.Column(db.Text)

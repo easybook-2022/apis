@@ -255,10 +255,11 @@ def make_appointment():
 
 			# recreate blocked times
 			for info in blocked:
-				existing = query("select count(*) as num from schedule where replace(time, ' ', '') = '" + json.dumps(info["newTime"]).replace(" ", "") + "'", True).fetchone()["num"] > 0
+				data = query("select id, time from schedule where replace(time, ' ', '') = '" + json.dumps(info["newTime"]).replace(" ", "") + "'", True).fetchone()
 
-				if existing == True:
-					status = "scheduleConflict"
+				if data != None:
+					if ("\"id\": " + str(data["id"])) not in json.dumps(blocked):
+						status = "scheduleConflict"
 
 			if status == "":
 				update_data = []
@@ -272,7 +273,7 @@ def make_appointment():
 				query("update schedule set " + ", ".join(update_data) + " where id = " + str(schedule["id"]))
 
 				for info in blocked:
-					query("update schedule set time = '" + json.dumps(info["newTime"]).replace(" ", "") + "' where id = " + str(info["id"]))
+					query("update schedule set status = 'blocked', time = '" + json.dumps(info["newTime"]).replace(" ", "") + "' where id = " + str(info["id"]))
 			# end code
 
 			if status == "":
@@ -596,7 +597,7 @@ def salon_change_appointment():
 
 		scheduled = query("select * from schedule where replace(time, ' ', '') = '" + clientTime.replace(" ", "") + "'", True).fetchone()
 
-		if scheduled == None:
+		if scheduled == None or (scheduled != None and "\"id\": " + str(scheduled["id"])) in json.dumps(blocked):
 			info = { "msg": "appointment remade", "time": clientTime, "worker": { "id": workerid, "username": worker["username"] }}
 
 			if client != None:
@@ -613,10 +614,11 @@ def salon_change_appointment():
 
 			# recreate blocked times
 			for blockedInfo in blocked:
-				existing = query("select count(*) as num from schedule where replace(time, ' ', '') = '" + json.dumps(blockedInfo["newTime"]).replace(" ", "") + "'", True).fetchone()["num"] > 0
+				data = query("select id, time from schedule where replace(time, ' ', '') = '" + json.dumps(blockedInfo["newTime"]).replace(" ", "") + "'", True).fetchone()
 
-				if existing == True:
-					status = "scheduleConflict"
+				if data != None:
+					if ("\"id\": " + str(data["id"])) not in json.dumps(blocked) and str(data["id"]) != str(schedule["id"]):
+						status = "scheduleConflict"
 
 			if status == "":
 				update_data = []
@@ -631,20 +633,19 @@ def salon_change_appointment():
 
 				for blockedInfo in blocked:
 					query("update schedule set time = '" + json.dumps(blockedInfo["newTime"]).replace(" ", "") + "' where id = " + str(blockedInfo["id"]))
-			# end code
 
-			if client != None:
-				if pushToken != "":
-					pushmessage = pushInfo(
-						pushToken, 
-						"Appointment remade",
-						"A salon requested a different appointment for you for service: " + servicename + " " + str(timeDisplay),
-						content
-					)
-				
-					push(pushmessage)
+				if client != None:
+					if pushToken != "":
+						pushmessage = pushInfo(
+							pushToken, 
+							"Appointment remade",
+							"A salon requested a different appointment for you for service: " + servicename + " " + str(timeDisplay),
+							content
+						)
+					
+						push(pushmessage)
 
-			return info
+				return info
 		else:
 			status = scheduled["status"]
 	else:
@@ -664,6 +665,7 @@ def cancel_schedule():
 	status = ""
 
 	if appointment != None:
+		blockedSchedules = getBlockedSchedules(appointment["time"])
 		user = query("select * from user where id = " + str(appointment["userId"]), True).fetchone()
 
 		if appointment["status"] == "confirmed":
@@ -679,6 +681,9 @@ def cancel_schedule():
 						update_data.append(key + " = '" + str(appointment[key]) + "'")
 
 			query("update schedule set " + ", ".join(update_data) + " where id = " + str(id))
+
+			for info in blockedSchedules:
+				query("update schedule set status = 'cancel_blocked' where id = " + str(info["id"]))
 
 			receiver = []
 
