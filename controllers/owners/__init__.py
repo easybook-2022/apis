@@ -161,7 +161,7 @@ def owner_register():
 			"username": "",
 			"profile": "{}",
 			"hours": "{}",
-			"info": json.dumps({ "pushToken": "", "owner": True, "signin": False })
+			"info": json.dumps({ "pushToken": "", "owner": True, "signin": False, "voice": False })
 		}
 
 		insert_data = []
@@ -503,6 +503,7 @@ def get_all_stylists(id):
 	datas = query("select * from owner where id in " + workers, True).fetchall()
 
 	owners = []
+	ids = []
 	row = []
 	key = 0
 	numWorkers = 0
@@ -522,6 +523,8 @@ def get_all_stylists(id):
 			owners.append({ "key": str(len(owners)), "row": row })
 			row = []
 
+		ids.append(data["id"])
+
 	if len(row) > 0:
 		leftover = 3 - len(row)
 
@@ -531,7 +534,7 @@ def get_all_stylists(id):
 
 		owners.append({ "key": str(len(owners)), "row": row })
 
-	return { "msg": "get workers", "owners": owners, "numWorkers": numWorkers }
+	return { "msg": "get workers", "owners": owners, "numWorkers": numWorkers, "ids": ids }
 
 @app.route("/get_workers_hour", methods=["POST"])
 def get_workers_hour():
@@ -552,11 +555,12 @@ def get_workers_hour():
 			owners = {}
 
 			for data in datas:
-				scheduledDatas = query("select id, time, status from schedule where workerId = " + str(data["id"]) + " and (status = 'confirmed' or status = 'blocked')", True).fetchall()
+				scheduledDatas = query("select id, status, day, month, date, year, hour, minute from schedule where workerId = " + str(data["id"]) + " and (status = 'confirmed' or status = 'blocked')", True).fetchall()
 				scheduled = {}
 
 				for scheduledData in scheduledDatas:
-					scheduled[scheduledData["time"] + "-" + (scheduledData["status"][:1])] = scheduledData["id"]
+					time = json.dumps({ "day": scheduledData["day"], "month": scheduledData["month"], "date": scheduledData["date"], "year": scheduledData["year"], "hour": scheduledData["hour"], "minute": scheduledData["minute"] })
+					scheduled[time + "-" + (scheduledData["status"][:1])] = scheduledData["id"]
 
 				hours = json.loads(data['hours'])
 				profile = json.loads(data["profile"])
@@ -594,11 +598,12 @@ def get_workers_hour():
 			data = query("select * from owner where id = " + str(ownerid), True).fetchone()
 
 			if data != None:
-				scheduledDatas = query("select id, time from schedule where workerId = " + str(ownerid) + " and (status = 'confirmed' or status = 'blocked')", True).fetchall()
+				scheduledDatas = query("select id, day, month, date, year, hour, minute from schedule where workerId = " + str(ownerid) + " and (status = 'confirmed' or status = 'blocked')", True).fetchall()
 				scheduled = {}
 
 				for scheduledData in scheduledDatas:
-					scheduled[scheduledData["time"] + "-" + (scheduledData["status"][:1])] = scheduledData["id"]
+					time = json.dumps({ "day": scheduledData["day"], "month": scheduledData["month"], "date": scheduledData["date"], "year": scheduledData["year"], "hour": scheduledData["hour"], "minute": scheduledData["minute"] })
+					scheduled[time + "-" + (scheduledData["status"][:1])] = scheduledData["id"]
 
 				hours = json.loads(data['hours'])
 				hoursData = {
@@ -625,6 +630,29 @@ def get_workers_hour():
 				errormsg = "Worker doesn't exist"
 	else:
 		errormsg = "Location doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/set_use_voice", methods=["POST"])
+def set_use_voice():
+	content = request.get_json()
+	errormsg = ""
+	status = ""
+
+	ownerid = content['ownerid']
+	option = content['option']
+
+	owner = query("select id, info from owner where id = " + str(ownerid), True).fetchone()
+
+	if owner != None:
+		info = json.loads(owner["info"])
+		info["voice"] = option
+
+		query("update owner set info = '" + json.dumps(info) + "' where id = " + str(owner["id"]))
+
+		return { "msg": "success" }
+	else:
+		errormsg = "Owner doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -954,7 +982,7 @@ def get_owner_info(id):
 	if owner != None:
 		ownerInfo = json.loads(owner["info"])
 
-		info = { "id": id, "isOwner": ownerInfo["owner"] }
+		info = { "id": id, "isOwner": ownerInfo["owner"], "useVoice": ownerInfo["voice"] }
 
 		return info
 	else:

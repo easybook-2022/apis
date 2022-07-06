@@ -316,3 +316,32 @@ def open_app_in_message():
 	)
 
 	return { "message": message.sid }
+
+@app.route("/set_time")
+def set_time():
+	schedules = query("select * from schedule", True).fetchall()
+
+	for info in schedules:
+		id = info["id"]
+
+		day = info["day"]
+		month = info["month"]
+		date = info["date"]
+		year = info["year"]
+		hour = info["hour"]
+		minute = info["minute"]
+
+		query("update schedule set day = '" + day + "', month = '" + month + "', date = " + str(date) + ", year = " + str(year) + ", hour = " + str(hour) + ", minute = " + str(minute) + " where id = " + str(id), False)
+
+	return { "msg": "all schedules updated" }
+
+@app.route("/get_data")
+def get_data():
+	schedules = query("select id, time, day, month, date, year, hour, minute from schedule", True).fetchall()
+	data = []
+
+	for info in data:
+		query("update schedule set time = " + str(info["time"]) + " where id = " + str(info["id"]))
+
+	return {"msg": "success"}
+

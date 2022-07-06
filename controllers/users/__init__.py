@@ -312,7 +312,7 @@ def get_notifications(id):
 
 		# get schedules
 		sql = "select * from schedule where "
-		sql += "(userId = " + str(id) + " and (status = 'cancel' or status = 'confirmed'))"
+		sql += "(userId = " + str(id) + " and (status = 'cancel' or status = 'confirmed')) order by time"
 		datas = query(sql, True).fetchall()
 
 		for data in datas:
@@ -338,6 +338,7 @@ def get_notifications(id):
 
 			userInput = json.loads(data['userInput'])
 			serviceImage = json.loads(service["image"]) if service != None else {"name": ""}
+			time = {"day": data["day"], "month": data["month"], "date": data["date"], "year": data["year"], "hour": data["hour"], "minute": data["minute"]}
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
 				"type": "service",
@@ -352,7 +353,7 @@ def get_notifications(id):
 				"locationtype": location["type"],
 				"serviceimage": serviceImage if serviceImage["name"] != "" else {"width": 300, "height": 300},
 				"serviceprice": float(service["price"]) if service != None else float(userInput['price']) if 'price' in userInput else "",
-				"time": json.loads(data['time']),
+				"time": time,
 				"action": data['status'],
 				"reason": data['cancelReason'],
 				"booker": userId == data['userId'],

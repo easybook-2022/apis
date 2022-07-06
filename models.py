@@ -45,7 +45,7 @@ class Owner(db.Model):
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(70))
 	hours = db.Column(db.String(900))
-	info = db.Column(db.String(105))
+	info = db.Column(db.String(110))
 
 	def __init__(self, cellnumber, password, username, profile, hours, info):
 		self.cellnumber = cellnumber
@@ -140,7 +140,13 @@ class Schedule(db.Model):
 	menuId = db.Column(db.Text)
 	serviceId = db.Column(db.Integer)
 	userInput = db.Column(db.String(70))
-	time = db.Column(db.String(100))
+	time = db.Column(db.String(15))
+	day = db.Column(db.String(10))
+	month = db.Column(db.String(10))
+	date = db.Column(db.Integer)
+	year = db.Column(db.Integer)
+	hour = db.Column(db.Integer)
+	minute = db.Column(db.Integer)
 	status = db.Column(db.String(15))
 	cancelReason = db.Column(db.String(200))
 	locationType = db.Column(db.String(15))
@@ -149,7 +155,7 @@ class Schedule(db.Model):
 	orders = db.Column(db.Text)
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, status, cancelReason, locationType, customers, note, orders, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, day, month, date, year, hour, minute, status, cancelReason, locationType, customers, note, orders, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
@@ -157,6 +163,10 @@ class Schedule(db.Model):
 		self.serviceId = serviceId
 		self.userInput = userInput
 		self.time = time
+		self.day = day
+		self.month = month
+		self.date = date
+		self.year = year
 		self.status = status
 		self.cancelReason = cancelReason
 		self.locationType = locationType
