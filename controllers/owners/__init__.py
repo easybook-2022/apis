@@ -308,7 +308,7 @@ def add_owner():
 				"username": username,
 				"profile": profileData,
 				"hours": hours,
-				"info": json.dumps({"pushToken": "", "owner": False, "signin": False})
+				"info": json.dumps({"pushToken": "", "owner": False, "signin": False, "voice": False})
 			}
 
 			insert_data = []
@@ -585,8 +585,8 @@ def get_workers_hour():
 					}
 
 					hoursData[day] = {
-						"open": openTime,
-						"close": closeTime,
+						"begin": openTime,
+						"end": closeTime,
 						"working": hours[day]["working"],
 						"takeShift": hours[day]["takeShift"]
 					}
@@ -955,16 +955,13 @@ def delete_owner(id):
 	status = ""
 
 	if owner != None:
-		info = json.loads(owner["info"])
-
-		location = query("select * from location where id = " + str(info["locationId"]), True).fetchone()
+		location = query("select id, owners from location where owners like '%\"" + str(id) + "\"%'", True).fetchone()
 		owners = json.loads(location["owners"])
 
 		if str(id) in owners:
 			owners.remove(str(id))
 
-			location.owners = json.dumps(owners)
-
+		query("update location set owners = '" + json.dumps(owners) + "' where id = " + str(location["id"]))
 		query("delete from owner where id = " + str(id))
 
 		return { "msg": "Owner deleted" }

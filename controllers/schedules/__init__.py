@@ -645,7 +645,7 @@ def salon_change_appointment():
 	unix = str(content['unix'])
 
 	client = query("select * from user where id = " + str(clientid), True).fetchone()
-	worker = query("select username from owner where id = " + str(workerid), True).fetchone()
+	worker = query("select username, hours from owner where id = " + str(workerid), True).fetchone()
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
 
 	if location != None:
@@ -689,6 +689,8 @@ def salon_change_appointment():
 			schedule["workerId"] = workerid
 
 			# recreate blocked times
+			workingHours = json.loads(worker["hours"])
+
 			for blockedInfo in blocked:
 				newTime = blockedInfo["newTime"]
 				day = newTime["day"]
@@ -698,15 +700,25 @@ def salon_change_appointment():
 				hour = str(newTime["hour"])
 				minute = str(newTime["minute"])
 
-				sql = "select id from schedule where "
-				sql += "day = '" + day + "' and month = '" + month + "' and date = " + date + " and year = " + year + " and "
-				sql += "hour = " + hour + " and minute = " + minute
-				data = query(sql, True).fetchone()
+				dayInfo = workingHours[day[:3]]
+				endtime = dayInfo["closetime"]
+				endhour = str(endtime["hour"])
+				endminute = str(endtime["minute"])
 
-				if data != None:
-					print(data)
-					if ("\"id\": " + str(data["id"])) not in json.dumps(blocked) and str(data["id"]) != str(schedule["id"]):
-						status = "scheduleConflict"
+				timeOne = int(hour + minute)
+				timeTwo = int(endhour + endminute)
+
+				if timeOne <= timeTwo:
+					sql = "select id from schedule where "
+					sql += "day = '" + day + "' and month = '" + month + "' and date = " + date + " and year = " + year + " and "
+					sql += "hour = " + str(hour) + " and minute = " + str(minute)
+					data = query(sql, True).fetchone()
+
+					if data != None:
+						if ("\"id\": " + str(data["id"])) not in json.dumps(blocked) and str(data["id"]) != str(schedule["id"]):
+							status = "scheduleConflict"
+				else:
+					status = "scheduleConflict"
 
 			if status == "":
 				update_data = []
