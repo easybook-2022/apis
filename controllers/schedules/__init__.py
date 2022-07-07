@@ -456,10 +456,10 @@ def book_walk_in():
 	timeDisplay = ""
 	valid = False
 
-	clientTime = json.dumps({"day": date_weekday, "month": date_month, "date": date_day, "year": date_year, "hour": bH, "minute": eMone })
+	clientTime = {"day": date_weekday, "month": date_month, "date": date_day, "year": date_year, "hour": bH, "minute": eMone }
 	sql = "select count(*) as num from schedule where "
-	sql += "day = '" + date_weekday + "' and month = '" + date_month + "' and date = " + str(date_day) + " and year = " + str(date_year) + " "
-	sql += "hour = " + str(bH) + " and minute = " + str(eMone) + " "
+	sql += "day = '" + date_weekday + "' and month = '" + date_month + "' and date = " + str(date_day) + " and year = " + str(date_year) + " and "
+	sql += "hour = " + str(bH) + " and minute = " + str(eMone) + " and "
 	sql += "workerId = " + str(workerid)
 	scheduled = query(sql, True).fetchone()["num"]
 
@@ -513,17 +513,15 @@ def book_walk_in():
 		if scheduled == 0:
 			valid = True
 
-			timeInfo = json.loads(clientTime)
-			hour = int(timeInfo["hour"])
-			minute = int(timeInfo["minute"])
+			hour = int(clientTime["hour"])
+			minute = int(clientTime["minute"])
 			timeDisplay = str(hour - 12 if hour > 12 else hour) + ":" + str("0" + str(minute) if minute < 10 else minute)
 			timeDisplay += "pm" if hour >= 12 else "am"
 
-	time = json.loads(clientTime)
 	data = {
 		"userId": -1,"workerId": workerid,"locationId": locationid,"menuId": -1,"serviceId": serviceid if serviceid != None else -1,
-		"userInput": json.dumps(client),"day": time["day"], "month": time["month"], "date": time["date"], "year": time["year"], 
-		"hour": time["hour"], "minute": time["minute"], "time": str(unix), "status": "confirmed","cancelReason": "","locationType": type,
+		"userInput": json.dumps(client),"day": clientTime["day"], "month": clientTime["month"], "date": clientTime["date"], "year": clientTime["year"], 
+		"hour": clientTime["hour"], "minute": clientTime["minute"], "time": str(unix), "status": "confirmed","cancelReason": "","locationType": type,
 		"customers": 1,"note": note,"orders": "[]","info": "{}"
 	}
 
@@ -665,7 +663,7 @@ def salon_change_appointment():
 
 		pushids = []
 
-		scheduled = query("select * from schedule where time = " + unix, True).fetchone()
+		scheduled = query("select * from schedule where time = " + unix + " and workerId = " + str(workerid), True).fetchone()
 
 		if scheduled == None or (scheduled != None and "\"id\": " + str(scheduled["id"])) in json.dumps(blocked):
 			info = { "msg": "appointment remade", "time": clientTime, "worker": { "id": workerid, "username": worker["username"] }}
@@ -711,7 +709,7 @@ def salon_change_appointment():
 				if timeOne <= timeTwo:
 					sql = "select id from schedule where "
 					sql += "day = '" + day + "' and month = '" + month + "' and date = " + date + " and year = " + year + " and "
-					sql += "hour = " + str(hour) + " and minute = " + str(minute)
+					sql += "hour = " + str(hour) + " and minute = " + str(minute) + " and workerId = " + str(workerid)
 					data = query(sql, True).fetchone()
 
 					if data != None:
@@ -739,7 +737,7 @@ def salon_change_appointment():
 
 					sql = "update schedule set time = " + blockedInfo["newUnix"] + ", "
 					sql += "day = '" + newTime["day"] + "', month = '" + newTime["month"] + "', date = " + str(newTime["date"]) + ", year = " + str(newTime["year"]) + ", "
-					sql += "hour = " + str(newTime["hour"]) + ", minute = " + str(newTime["minute"]) + " "
+					sql += "hour = " + str(newTime["hour"]) + ", minute = " + str(newTime["minute"]) + ", workerId = " + str(workerid) + " "
 					sql += "where id = " + str(blockedInfo["id"])
 
 					query(sql)
