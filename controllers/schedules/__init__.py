@@ -398,6 +398,8 @@ def book_walk_in():
 	workerid = content['workerid']
 	locationid = content['locationid']
 	clientTime = content["time"]
+	bTime = content['bTime']
+	eTime = content['eTime']
 	note = content['note']
 	type = content['type']
 	client = content['client']
@@ -415,51 +417,12 @@ def book_walk_in():
 	month = int(months[clientTime["month"]])
 	date = clientTime["date"]
 	year = clientTime["year"]
-	hour = clientTime["hour"]
-	minute = clientTime["minute"]
-
-	date_time = datetime.datetime(year, month, date, 0, 0)
-	date_time_info = str(date_time).split(" ")
-	date_date = date_time_info[0].split("-")
-
-	date_year = str(date_date[0])
-	date_month = monthsArr[int(date_date[1]) - 1]
-	date_day = str(int(date_date[2]))
-	date_weekday = daysArr[date_time.weekday()]
-
-	bM = "0"
-	eM = "10"
-	bH = hour
-	eH = hour
-
-	if minute >= 10:
-		bM = str(minute)[:1]
-		eM = int(str(minute)[1:])
-
-	if minute >= 0 and minute < 15: # 0 to 14
-		eMone = 0
-		eMtwo = 15
-	elif minute < 30: # 15 to 29
-		eMone = 15
-		eMtwo = 30
-	elif minute < 45: # 30 to 45
-		eMone = 30
-		eMtwo = 45
-	else: # 45 to above
-		eMone = 45
-		eMtwo = 0
-
-		eH = eH + 1 if eH < 23 else 0
-
-	bTime = str(bH) + ":" + str(eMone)
-	eTime = str(eH) + ":" + str(eMtwo)
+	hour = int(clientTime["hour"])
+	minute = int(clientTime["minute"])
 	timeDisplay = ""
 	valid = False
 
-	clientTime = {"day": date_weekday, "month": date_month, "date": date_day, "year": date_year, "hour": bH, "minute": eMone }
-	sql = "select count(*) as num from schedule where "
-	sql += "day = '" + date_weekday + "' and month = '" + date_month + "' and date = " + str(date_day) + " and year = " + str(date_year) + " and "
-	sql += "hour = " + str(bH) + " and minute = " + str(eMone) + " and "
+	sql = "select count(*) as num from schedule where time = " + str(unix) + " and "
 	sql += "workerId = " + str(workerid)
 	scheduled = query(sql, True).fetchone()["num"]
 
@@ -511,12 +474,29 @@ def book_walk_in():
 		scheduled = query(sql, True).fetchone()["num"]
 
 		if scheduled == 0:
-			valid = True
+			# check if worker is available at computing time
+			worker = query("select hours from owner where id = " + str(workerid), True).fetchone()
+			hours = json.loads(worker.hours)
 
-			hour = int(clientTime["hour"])
-			minute = int(clientTime["minute"])
-			timeDisplay = str(hour - 12 if hour > 12 else hour) + ":" + str("0" + str(minute) if minute < 10 else minute)
-			timeDisplay += "pm" if hour >= 12 else "am"
+			day = clientTime["day"]
+			hour = clientTime["hour"]
+			minute = clientTime["minute"]
+			calcTime = int(str(hour) + "" + str(minute))
+
+			if day[:3] in hours and hours[day[:3]]["working"] == True:
+				opentime = hours[day[:3]]["opentime"]
+				closetime = hours[day[:3]]["closetime"]
+
+				opentime = int(opentime["hour"] + "" + opentime["minute"])
+				closetime = int(closetime["hour"] + "" + closetime["minute"])
+
+				if calcTime >= opentime and calcTime <= closetime:
+					valid = True
+
+					hour = int(clientTime["hour"])
+					minute = int(clientTime["minute"])
+					timeDisplay = str(hour - 12 if hour > 12 else hour) + ":" + str("0" + str(minute) if minute < 10 else minute)
+					timeDisplay += "pm" if hour >= 12 else "am"
 
 	data = {
 		"userId": -1,"workerId": workerid,"locationId": locationid,"menuId": -1,"serviceId": serviceid if serviceid != None else -1,
@@ -760,6 +740,52 @@ def salon_change_appointment():
 		errormsg = "Location doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/push_appointments", methods=["POST"])
+def push_appointments():
+	months = {
+		"January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6, 
+		"July": 7, "August": 8, "September": 9, "October": 10, "November": 11, "December": 12
+	}
+	days = {"Sunday": 1, "Monday": 2, "Tuesday": 3, "Wednesday": 4, "Thursday": 5, "Friday": 6, "Saturday": 7}
+	content = request.get_json()
+	errormsg = ""
+	status = ""
+
+	currTime = content['currTime']
+	pushMilli = int(content['pushMilli'])
+	selectedIds = content['selectedIds']
+
+	pushBy = content['pushBy'] # push by days, hours, minutes
+
+	# if pushBy == "days":
+	# elif pushBy == "hours":
+	# elif pushBy == "minutes":
+
+
+	day = currTime["day"]
+	month = currTime["month"]
+	date = str(currTime["date"])
+	year = str(currTime["year"])
+
+	sql = "select * from schedule where "
+	sql += "id in " + "(" + json.dumps(selectedIds)[1:-1] + ")" + " and " if len(selectedIds) > 0 else ""
+	sql += "day = '" + day + "' and month = '" + month + "' and date = " + date + " and year = " + year
+
+	schedules = query(sql, True).fetchall()
+
+	print(schedules)
+
+	for info in schedules:
+		day = days[info["day"]]
+		month = months[info["month"]]
+		date = int(info["date"])
+		year = int(info["year"])
+
+		hour = int(info["hour"])
+		minute = int(info["minute"])
+
+	return { "msg": "succeed" }
 
 @app.route("/cancel_schedule", methods=["POST"])
 def cancel_schedule():

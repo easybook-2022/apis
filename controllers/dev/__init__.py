@@ -317,31 +317,32 @@ def open_app_in_message():
 
 	return { "message": message.sid }
 
-@app.route("/set_time")
-def set_time():
+@app.route("/add_individ_time")
+def add_individ_time():
 	schedules = query("select * from schedule", True).fetchall()
+	times = []
 
 	for info in schedules:
 		id = info["id"]
 
-		day = info["day"]
-		month = info["month"]
-		date = info["date"]
-		year = info["year"]
-		hour = info["hour"]
-		minute = info["minute"]
+		time = json.loads(info["time"])
+
+		day = time["day"]
+		month = time["month"]
+		date = time["date"]
+		year = time["year"]
+		hour = time["hour"]
+		minute = time["minute"]
+
+		times.append(time)
 
 		query("update schedule set day = '" + day + "', month = '" + month + "', date = " + str(date) + ", year = " + str(year) + ", hour = " + str(hour) + ", minute = " + str(minute) + " where id = " + str(id), False)
 
-	return { "msg": "all schedules updated" }
+	return { "msg": "all schedules updated", "times": times }
 
-@app.route("/get_data")
-def get_data():
-	schedules = query("select id, time, day, month, date, year, hour, minute from schedule", True).fetchall()
-	data = []
+@app.route("/password")
+def password():
+	password = generate_password_hash("888888")
 
-	for info in data:
-		query("update schedule set time = " + str(info["time"]) + " where id = " + str(info["id"]))
-
-	return {"msg": "success"}
+	return {"msg": password}
 

@@ -536,6 +536,73 @@ def get_all_stylists(id):
 
 	return { "msg": "get workers", "owners": owners, "numWorkers": numWorkers, "ids": ids }
 
+@app.route("/get_all_working_stylists", methods=["POST"])
+def get_all_working_stylists():
+	content = request.get_json()
+	errormsg = ""
+	status = ""
+
+	locationid = str(content['locationid'])
+	day = content['day']
+	hour = content['hour']
+	minute = content['minute']
+
+	calcTime = int(hour + "" + minute)
+
+	location = query("select owners from location where id = " + locationid, True).fetchone()
+
+	if location != None:
+		owners = "(" + location["owners"][1:-1] + ")"
+
+		workers = query("select id, username, profile, hours from owner where id in " + owners, True).fetchall()
+		stylists = []
+		ids = []
+		row = []
+		key = 0
+		numStylists = 0
+
+		for data in workers:
+			hours = json.loads(data["hours"])
+
+			if day in hours:
+				dayInfo = hours[day]
+
+				if dayInfo["working"] == True:
+					openTime = int(dayInfo["opentime"]["hour"] + "" + dayInfo["opentime"]["minute"])
+					closeTime = int(dayInfo["closetime"]["hour"] + "" + dayInfo["closetime"]["minute"])
+
+					if calcTime >= openTime and calcTime <= closeTime:
+						profile = json.loads(data["profile"])
+						row.append({
+							"key": "worker-" + str(key),
+							"id": data["id"],
+							"username": data["username"],
+							"profile": profile if profile["name"] != "" else {"width": 360, "height": 360}
+						})
+						key += 1
+						numStylists += 1
+
+						if len(row) >= 3:
+							stylists.append({ "key": str(len(stylists)), "row": row })
+							row = []
+
+						ids.append(data["id"])
+
+		if len(row) > 0:
+			leftover = 3 - len(row)
+
+			for k in range(leftover):
+				row.append({ "key": "worker-" + str(key) })
+				key += 1
+
+			stylists.append({ "key": str(len(stylists)), "row": row })
+
+		return { "stylists": stylists, "numStylists": numStylists, "ids": ids }
+	else:
+		errormsg = "Location doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
 @app.route("/get_workers_hour", methods=["POST"])
 def get_workers_hour():
 	content = request.get_json()
@@ -765,7 +832,7 @@ def get_all_workers_time(id):
 						})
 				else:
 					if hours[time]["takeShift"] != "":
-						coworker = query("select * from id = " + str(hours[time]["takeShift"]), True).fetchone()
+						coworker = query("select * from owner where id = " + str(hours[time]["takeShift"]), True).fetchone()
 						coworkerHours = json.loads(coworker["hours"])
 
 						if time not in workers:
@@ -1021,13 +1088,10 @@ def get_accounts(id):
 						worker = query("select * from owner where id = " + str(data[day[k][:3]]["takeShift"]), True).fetchone()
 
 						info["takeShift"] = { "id": worker["id"], "name": worker["username"] }
-
-						workerHours = json.loads(worker["hours"])
-						hoursInfo = workerHours[day[k][:3]]
 					else:
 						info["takeShift"] = ""
 
-						hoursInfo = data[day[k][:3]]
+					hoursInfo = data[day[k][:3]]
 
 					openhour = int(hoursInfo["opentime"]["hour"])
 					closehour = int(hoursInfo["closetime"]["hour"])

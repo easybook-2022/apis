@@ -22,7 +22,7 @@ server_url = "0.0.0.0"
 local_url = "10.0.0.60"
 apphost = server_url if test == False else local_url
 googleAdApi = "U9nEo26pxqI1o-fQNp2c4A"
-photoUrl = "http://10.0.0.60:5001/flask/static/"
+photoUrl = "http://" + local_url + ":5001/flask/static/"
 
 account_sid = "AC8c3cd78674e391f0834a086891304e52" if send_text == True else "ACc2195555d01f8077e6dcd48adca06d14"
 auth_token = "b7f9e3b46ac445302a4a0710e95f44c1" if send_text == True else "244371c21d9c8e735f0e08dd4c29249a"
