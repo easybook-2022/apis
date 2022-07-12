@@ -211,6 +211,7 @@ def get_appointment_info(id):
 			"locationId": int(locationId), 
 			"serviceId": int(serviceId) if serviceId > -1 else None, 
 			"time": { "day": day, "month": month, "date": date, "year": year, "hour": hour, "minute": minute }, 
+			"unix": int(schedule["time"]),
 			"note": schedule["note"],
 			"worker": worker,
 			"blocked": blockedSchedules
@@ -231,6 +232,31 @@ def get_appointment_info(id):
 		status = "nonexist"
 
 	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/get_rescheduling_appointments", methods=["POST"])
+def get_rescheduling_appointments():
+	content = request.get_json()
+
+	selectedIds = content['selectedIds']
+
+	schedules = query("select id, day, month, date, year, hour, minute, time from schedule where id in (" + json.dumps(selectedIds)[1:-1] + ")", True).fetchall()
+
+	for schedule in schedules:
+		day = schedule["day"]
+		month = schedule["month"]
+		date = str(schedule["date"])
+		year = str(schedule["year"])
+		hour = str(schedule["hour"])
+		minute = str(schedule["minute"])
+
+		time = day + " " + month + " " + date + " " + year + " " + hour + " " + minute
+
+		blockedSchedules = getBlockedSchedules(time)
+
+		schedule["blockedSchedules"] = blockedSchedules
+		schedule["time"] = int(schedule["time"])
+
+	return { "msg": "success", "schedules": schedules }
 
 @app.route("/make_appointment", methods=["POST"])
 def make_appointment():
@@ -255,17 +281,16 @@ def make_appointment():
 
 	if serviceid != -1:
 		service = query("select * from service where id = " + str(serviceid), True).fetchone()
-		schedule = query("select * from schedule where userId = " + str(userid) + " and serviceId = " + str(serviceid), True).fetchone()
 		servicename = service["name"]
 		menuid = service["menuId"]
 	else:
-		if scheduleid != None:
-			schedule = query("select * from schedule where id = " + str(scheduleid), True).fetchone()
-		else:
-			schedule = None
-		
 		servicename = serviceinfo
 		menuid = -1
+
+	if scheduleid != None:
+		schedule = query("select * from schedule where id = " + str(scheduleid), True).fetchone()
+	else:
+		schedule = None
 
 	worker = query("select * from owner where id = " + str(workerid), True).fetchone()
 
@@ -629,17 +654,16 @@ def salon_change_appointment():
 	if location != None:
 		if serviceid != -1:
 			service = query("select * from service where id = " + str(serviceid), True).fetchone()
-			schedule = query("select * from schedule where userId = " + str(clientid) + " and serviceId = " + str(serviceid), True).fetchone()
 			servicename = service["name"]
 			menuid = service["menuId"]
 		else:
-			if scheduleid != None:
-				schedule = query("select * from schedule where id = " + str(scheduleid), True).fetchone()
-			else:
-				schedule = None
-			
 			servicename = serviceinfo
 			menuid = -1
+
+		if scheduleid != None:
+			schedule = query("select * from schedule where id = " + str(scheduleid), True).fetchone()
+		else:
+			schedule = None
 
 		pushids = []
 
@@ -743,47 +767,36 @@ def salon_change_appointment():
 
 @app.route("/push_appointments", methods=["POST"])
 def push_appointments():
-	months = {
-		"January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6, 
-		"July": 7, "August": 8, "September": 9, "October": 10, "November": 11, "December": 12
-	}
-	days = {"Sunday": 1, "Monday": 2, "Tuesday": 3, "Wednesday": 4, "Thursday": 5, "Friday": 6, "Saturday": 7}
 	content = request.get_json()
 	errormsg = ""
 	status = ""
 
-	currTime = content['currTime']
-	pushMilli = int(content['pushMilli'])
-	selectedIds = content['selectedIds']
+	infos = content['schedules']
+	ids = []
 
-	pushBy = content['pushBy'] # push by days, hours, minutes
+	for info in infos:
+		ids.append(info)
 
-	# if pushBy == "days":
-	# elif pushBy == "hours":
-	# elif pushBy == "minutes":
-
-
-	day = currTime["day"]
-	month = currTime["month"]
-	date = str(currTime["date"])
-	year = str(currTime["year"])
-
-	sql = "select * from schedule where "
-	sql += "id in " + "(" + json.dumps(selectedIds)[1:-1] + ")" + " and " if len(selectedIds) > 0 else ""
-	sql += "day = '" + day + "' and month = '" + month + "' and date = " + date + " and year = " + year
-
+	sql = "select * from schedule where id in (" + json.dumps(ids)[1:-1] + ")"
 	schedules = query(sql, True).fetchall()
 
-	print(schedules)
-
 	for info in schedules:
-		day = days[info["day"]]
-		month = months[info["month"]]
-		date = int(info["date"])
-		year = int(info["year"])
+		newInfo = infos[str(info["id"])]
 
-		hour = int(info["hour"])
-		minute = int(info["minute"])
+		info["date"] = int(newInfo["date"])
+		info["day"] = newInfo["day"]
+		info["month"] = newInfo["month"]
+		info["year"] = int(newInfo["year"])
+		info["hour"] = int(newInfo["hour"])
+		info["minute"] = int(newInfo["minute"])
+		info["time"] = str(newInfo["unix"])
+
+		update_data = []
+		for key in info:
+			if key != "table":
+				update_data.append(key + " = '" + str(info[key]) + "'")
+
+		query("update schedule set " + ", ".join(update_data) + " where id = " + str(info["id"]))
 
 	return { "msg": "succeed" }
 
