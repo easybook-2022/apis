@@ -6,7 +6,7 @@ import datetime, time
 
 cors = CORS(app)
 
-def removeBlockedSchedules(time):
+def removeBlockedSchedules(time, workerId):
 	time = time.split(" ")
 
 	day = time[0]
@@ -35,7 +35,8 @@ def removeBlockedSchedules(time):
 		sql += "date = " + str(date) + " and "
 		sql += "year = " + str(year) + " and "
 		sql += "hour = " + str(hour) + " and "
-		sql += "minute = " + str(minute)
+		sql += "minute = " + str(minute) + " and "
+		sql += "workerId = " + str(workerId)
 
 		scheduled = query(sql, True).fetchone()
 
@@ -43,12 +44,13 @@ def removeBlockedSchedules(time):
 			if scheduled["status"] == "confirmed":
 				blockedEnd = True
 			else:
-				delete.append(scheduled["id"])
+				if scheduled["status"] == "blocked":
+					delete.append(scheduled["id"])
 
 	if len(delete) > 0:
 		query("delete from schedule where id in (" + json.dumps(delete)[1:-1] + ")", False)
 
-def getBlockedSchedules(time):
+def getBlockedSchedules(time, workerId):
 	time = time.split(" ")
 
 	day = time[0]
@@ -77,7 +79,8 @@ def getBlockedSchedules(time):
 		sql += "date = " + str(date) + " and "
 		sql += "year = " + str(year) + " and "
 		sql += "hour = " + str(hour) + " and "
-		sql += "minute = " + str(minute)
+		sql += "minute = " + str(minute) + " and "
+		sql += "workerId = " + str(workerId)
 
 		scheduled = query(sql, True).fetchone()
 
@@ -92,14 +95,15 @@ def getBlockedSchedules(time):
 			if scheduled["status"] == "confirmed":
 				blockedEnd = True
 			else:
-				del scheduled["day"]
-				del scheduled["month"]
-				del scheduled["date"]
-				del scheduled["year"]
-				del scheduled["hour"]
-				del scheduled["minute"]
+				if scheduled["status"] == "blocked":
+					del scheduled["day"]
+					del scheduled["month"]
+					del scheduled["date"]
+					del scheduled["year"]
+					del scheduled["hour"]
+					del scheduled["minute"]
 
-				delete.append(scheduled)
+					delete.append(scheduled)
 
 	return delete
 
@@ -169,7 +173,7 @@ def get_appointment_info(id):
 
 	if schedule != None:
 		time = schedule["day"] + " " + schedule["month"] + " " + str(schedule["date"]) + " " + str(schedule["year"]) + " " + str(schedule["hour"]) + " " + str(schedule["minute"])
-		blockedSchedules = getBlockedSchedules(time)
+		blockedSchedules = getBlockedSchedules(time, schedule["workerId"])
 		locationId = schedule["locationId"]
 		serviceId = schedule["serviceId"]
 		userId = schedule["userId"]
@@ -237,9 +241,20 @@ def get_appointment_info(id):
 def get_rescheduling_appointments():
 	content = request.get_json()
 
+	calDate = content['date']
 	selectedIds = content['selectedIds']
 
-	schedules = query("select id, day, month, date, year, hour, minute, time from schedule where id in (" + json.dumps(selectedIds)[1:-1] + ")", True).fetchall()
+	select_query = "select id, day, month, date, year, hour, minute, time, workerId from schedule"
+
+	if len(selectedIds) > 0:
+		schedules = query(select_query + " where id in (" + json.dumps(selectedIds)[1:-1] + ")", True).fetchall()
+	else:
+		day = calDate['day']
+		month = calDate['month']
+		date = str(calDate['date'])
+		year = str(calDate['year'])
+
+		schedules = query(select_query + " where day = '" + day + "' and month = '" + month + "' and date = " + date + " and year = " + year, True).fetchall()
 
 	for schedule in schedules:
 		day = schedule["day"]
@@ -251,7 +266,7 @@ def get_rescheduling_appointments():
 
 		time = day + " " + month + " " + date + " " + year + " " + hour + " " + minute
 
-		blockedSchedules = getBlockedSchedules(time)
+		blockedSchedules = getBlockedSchedules(time, schedule["workerId"])
 
 		schedule["blockedSchedules"] = blockedSchedules
 		schedule["time"] = int(schedule["time"])
@@ -667,9 +682,9 @@ def salon_change_appointment():
 
 		pushids = []
 
-		scheduled = query("select * from schedule where time = " + unix + " and workerId = " + str(workerid), True).fetchone()
+		scheduled = query("select * from schedule where time = " + unix + " and workerId = " + str(workerid) + " and not status = 'done'", True).fetchone()
 
-		if scheduled == None or (scheduled != None and "\"id\": " + str(scheduled["id"])) in json.dumps(blocked):
+		if (scheduled == None or (scheduled["status"] == "cancel" or scheduled["status"] == "cancel_booked")) or (scheduled != None and "\"id\": " + str(scheduled["id"])) in json.dumps(blocked):
 			info = { "msg": "appointment remade", "time": clientTime, "worker": { "id": workerid, "username": worker["username"] }}
 
 			if client != None:
@@ -717,7 +732,7 @@ def salon_change_appointment():
 					data = query(sql, True).fetchone()
 
 					if data != None:
-						if ("\"id\": " + str(data["id"])) not in json.dumps(blocked) and str(data["id"]) != str(schedule["id"]):
+						if ("\"id\":" + str(data["id"])) not in json.dumps(blocked).replace(" ", "") and str(data["id"]) != str(schedule["id"]):
 							status = "scheduleConflict"
 				else:
 					status = "scheduleConflict"
@@ -732,6 +747,7 @@ def salon_change_appointment():
 
 				for blockedInfo in blocked:
 					newTime = blockedInfo["newTime"]
+					newUnix = str(blockedInfo["newUnix"])
 					day = newTime["day"]
 					month = newTime["month"]
 					date = str(newTime["date"])
@@ -741,7 +757,7 @@ def salon_change_appointment():
 
 					sql = "update schedule set time = " + blockedInfo["newUnix"] + ", "
 					sql += "day = '" + newTime["day"] + "', month = '" + newTime["month"] + "', date = " + str(newTime["date"]) + ", year = " + str(newTime["year"]) + ", "
-					sql += "hour = " + str(newTime["hour"]) + ", minute = " + str(newTime["minute"]) + ", workerId = " + str(workerid) + " "
+					sql += "hour = " + str(newTime["hour"]) + ", minute = " + str(newTime["minute"]) + ", time = " + newUnix + ", workerId = " + str(workerid) + " "
 					sql += "where id = " + str(blockedInfo["id"])
 
 					query(sql)
@@ -778,6 +794,7 @@ def push_appointments():
 		ids.append(info)
 
 	sql = "select * from schedule where id in (" + json.dumps(ids)[1:-1] + ")"
+
 	schedules = query(sql, True).fetchall()
 
 	for info in schedules:
@@ -813,7 +830,7 @@ def cancel_schedule():
 
 	if appointment != None:
 		time = appointment["day"] + " " + appointment["month"] + " " + str(appointment["date"]) + " " + str(appointment["year"]) + " " + str(appointment["hour"]) + " " + str(appointment["minute"])
-		blockedSchedules = getBlockedSchedules(time)
+		blockedSchedules = getBlockedSchedules(time, appointment["workerId"])
 		user = query("select * from user where id = " + str(appointment["userId"]), True).fetchone()
 
 		if appointment["status"] == "confirmed":
@@ -887,7 +904,7 @@ def close_schedule(id):
 		query("delete from schedule where id = " + str(id))
 
 		time = appointment["day"] + " " + appointment["month"] + " " + str(appointment["date"]) + " " + str(appointment["year"]) + " " + str(appointment["hour"]) + " " + str(appointment["minute"])
-		removeBlockedSchedules(time)
+		removeBlockedSchedules(time, appointment["workerId"])
 
 		return { "msg": "request deleted", "receiver": receiver }
 
@@ -906,7 +923,7 @@ def done_service(id):
 	query("update schedule set status = 'done' where id = " + str(id))
 
 	time = schedule["day"] + " " + schedule["month"] + " " + str(schedule["date"]) + " " + str(schedule["year"]) + " " + str(schedule["hour"]) + " " + str(schedule["minute"])
-	removeBlockedSchedules(time)
+	removeBlockedSchedules(time, schedule["workerId"])
 	
 	return { "msg": "Schedule done", "receiver": "user" + str(booker) }
 
@@ -948,7 +965,7 @@ def cancel_request():
 	query("delete from schedule where id = " + str(scheduleid))
 
 	time = schedule["day"] + " " + schedule["month"] + " " + str(schedule["date"]) + " " + str(schedule["year"]) + " " + str(schedule["hour"]) + " " + str(schedule["minute"])
-	removeBlockedSchedules(time)
+	removeBlockedSchedules(time, schedule["workerId"])
 
 	serviceName = ""
 	if schedule["serviceId"] == -1:
