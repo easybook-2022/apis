@@ -19,7 +19,7 @@ user = 'geottuse'
 password = 'G3ottu53?'
 database = 'easygo'
 server_url = "0.0.0.0"
-local_url = "10.0.0.60"
+local_url = "192.168.2.107"
 apphost = server_url if test == False else local_url
 googleAdApi = "U9nEo26pxqI1o-fQNp2c4A"
 photoUrl = "http://" + local_url + ":5001/flask/static/"

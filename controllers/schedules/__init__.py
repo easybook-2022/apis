@@ -796,6 +796,8 @@ def push_appointments():
 	sql = "select * from schedule where id in (" + json.dumps(ids)[1:-1] + ")"
 
 	schedules = query(sql, True).fetchall()
+	receiver = []
+	rebooks = {}
 
 	for info in schedules:
 		newInfo = infos[str(info["id"])]
@@ -808,6 +810,12 @@ def push_appointments():
 		info["minute"] = int(newInfo["minute"])
 		info["time"] = str(newInfo["unix"])
 
+		if info["userId"] > -1:
+			receiver.append("user" + str(info["userId"]))
+
+		if info["status"] == "confirmed":
+			rebooks[str(info["id"])] = { "day": info["day"], "month": info["month"], "date": info["date"], "year": info["year"], "hour": info["hour"], "minute": info["minute"] }
+
 		update_data = []
 		for key in info:
 			if key != "table":
@@ -815,7 +823,7 @@ def push_appointments():
 
 		query("update schedule set " + ", ".join(update_data) + " where id = " + str(info["id"]))
 
-	return { "msg": "succeed" }
+	return { "msg": "succeed", "receiver": receiver, "rebooks": rebooks }
 
 @app.route("/cancel_schedule", methods=["POST"])
 def cancel_schedule():

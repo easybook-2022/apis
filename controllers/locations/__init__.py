@@ -42,7 +42,7 @@ def setup_location():
 	if location == None:
 		isWeb = request.form.get("web")
 
-		if isWeb != None:
+		if isWeb != None: # website version
 			logo = json.loads(request.form['logo'])
 
 			uri = logo['uri'].split(",")[1]
