@@ -22,29 +22,7 @@ def get_product_info(id):
 	status = ""
 
 	if product != None:
-		datas = json.loads(product["options"])
-		options = []
-
-		for k, data in enumerate(datas):
-			option = { "key": "option-" + str(k), "header": data['text'], "type": data['option'] }
-
-			if data['option'] == 'percentage':
-				option["selected"] = 0
-			elif data['option'] == 'amount':
-				option["selected"] = 0
-
-			options.append(option)
-
-		datas = json.loads(product["others"])
-		others = []
-
-		for k, data in enumerate(datas):
-			others.append({
-				"key": "other-" + str(k), 
-				"name": data['name'], 
-				"price": float(data['price']),
-				"selected": False
-			})
+		cost = 0.00
 
 		datas = json.loads(product["sizes"])
 		sizes = []
@@ -54,18 +32,22 @@ def get_product_info(id):
 				"key": "size-" + str(k),
 				"name": data["name"],
 				"price": float(data["price"]),
-				"selected": False
+				"selected": False if k > 0 else True
 			})
+
+		if len(datas) > 0:
+			cost = float(sizes[0]["price"])
+		else:
+			cost = float(product["price"])
 
 		image = json.loads(product["image"])
 		info = {
 			"name": product["name"],
 			"productImage": image if image["name"] != "" else {"width": 300, "height": 300},
-			"options": options,
-			"others": others,
 			"sizes": sizes,
 			"price": float(product["price"]) if product["price"] != "" else 0,
-			"cost": float(product["price"]) if product["price"] != "" else 0
+			"cost": cost,
+			"quantity": 1
 		}
 
 		return { "productInfo": info }
@@ -73,7 +55,7 @@ def get_product_info(id):
 		errormsg = "Product doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
-
+	
 @app.route("/cancel_cart_order", methods=["POST"])
 def cancel_cart_order():
 	content = request.get_json()
@@ -101,9 +83,7 @@ def add_product():
 	locationid = request.form['locationid']
 	menuid = request.form['menuid']
 	name = request.form['name']
-		
-	options = request.form['options']
-	others = request.form['others']
+
 	sizes = request.form['sizes']
 	price = request.form['price']
 
@@ -151,7 +131,7 @@ def add_product():
 		if errormsg == "":
 			data = {
 				"locationId": locationid, "menuId": menuid, "name": name, "image": imageData,
-				"options": options, "others": others, "sizes": sizes, "price": price
+				"sizes": sizes, "price": price
 			}
 			columns = []
 			insert_data = []
@@ -174,12 +154,10 @@ def update_product():
 	menuid = request.form['menuid']
 	productid = request.form['productid']
 	name = request.form['name']
-	options = request.form['options']
-	others = request.form['others']
 	sizes = request.form['sizes']
 	price = request.form['price']
 
-	product = query("select * from product where id = " + str(productid) + " and locationId = " + str(locationid) + " and menuId = " + str(menuid), True).fetchone()
+	product = query("select * from product where id = " + str(productid) + " and locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "'", True).fetchone()
 
 	errormsg = ""
 	status = ""
@@ -188,8 +166,6 @@ def update_product():
 	if product != None:
 		new_data["name"] = name
 		new_data["price"] = price
-		new_data["options"] = options
-		new_data["others"] = others
 		new_data["sizes"] = sizes
 
 		isWeb = request.form.get("web")

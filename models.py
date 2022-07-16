@@ -98,6 +98,25 @@ class Location(db.Model):
 	def __repr__(self):
 		return '<Location %r>' % self.name
 
+class DiningTable(db.Model):
+	id = db.Column(db.Integer, primary_key=True)
+	name = db.Column(db.String(20))
+	locationId = db.Column(db.Integer)
+	orders = db.Column(db.Text)
+	status = db.Column(db.String(10))
+
+	def __init__(
+		self,
+		name, locationId, orders, status
+	):
+		self.name = name
+		self.locationId = locationId
+		self.orders = orders
+		self.status = status
+
+	def __repr__(self):
+		return '<Table %r>' % self.name
+
 class Menu(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
@@ -184,18 +203,14 @@ class Product(db.Model):
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(20))
 	image = db.Column(db.String(70))
-	options = db.Column(db.Text)
-	others = db.Column(db.Text)
 	sizes = db.Column(db.String(150))
 	price = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, image, options, others, sizes, price):
+	def __init__(self, locationId, menuId, name, image, sizes, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
 		self.image = image
-		self.options = options
-		self.others = others
 		self.sizes = sizes
 		self.price = price
 

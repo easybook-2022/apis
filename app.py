@@ -9,6 +9,7 @@ from controllers.dev import app as dev_controller
 from controllers.users import app as users_controller
 from controllers.owners import app as owners_controller
 from controllers.locations import app as locations_controller
+from controllers.dining_tables import app as dining_tables_controller
 from controllers.menus import app as menus_controller
 from controllers.products import app as products_controller
 from controllers.carts import app as carts_controller
@@ -33,6 +34,7 @@ app.wsgi_app = DispatcherMiddleware(None, {
 	'/flask/users': users_controller,
 	'/flask/owners': owners_controller,
 	'/flask/locations': locations_controller,
+	'/flask/dining_tables': dining_tables_controller,
 	'/flask/menus': menus_controller,
 	'/flask/products': products_controller,
 	'/flask/carts': carts_controller,

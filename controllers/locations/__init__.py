@@ -6,13 +6,13 @@ from models import *
 
 cors = CORS(app)
 
-@app.route("/welcome_locations", methods=["GET"])
+@app.route("/welcome_locations")
 def welcome_locations():
-	datas = Location.query.all()
+	datas = query("select id from location limit 5", True).fetchall()
 	locations = []
 
 	for data in datas:
-		locations.append(data.id)
+		locations.append(data["id"])
 
 	return { "msg": "welcome to locations of easygo", "locations": locations }
 

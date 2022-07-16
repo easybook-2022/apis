@@ -109,6 +109,16 @@ def reset():
 	if delete == True:
 		query("ALTER table cart auto_increment = 1")
 
+	delete = False
+	tables = query("select * from dining_table", True).fetchall()
+	for table in tables:
+		delete = True
+
+		query("delete from dining_table where id = " + str(table['id']))
+
+	if delete == True:
+		query("ALTER table dining_table auto_increment = 1")
+
 	files = os.listdir("static")
 
 	for file in files:
