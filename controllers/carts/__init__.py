@@ -13,7 +13,7 @@ def welcome_carts():
 	for data in datas:
 		carts.append(data.id)
 
-	return { "msg": "welcome to carts of easygo", "carts": carts }
+	return { "msg": "welcome to carts of EasyBook", "carts": carts }
 
 @app.route("/get_num_items/<id>")
 def get_num_items(id):

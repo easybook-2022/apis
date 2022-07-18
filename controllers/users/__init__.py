@@ -13,7 +13,7 @@ def welcome_users():
 	for data in datas:
 		users.append(data.id)
 
-	return { "msg": "welcome to users of easygo", "users": users }
+	return { "msg": "welcome to users of EasyBook", "users": users }
 
 @app.route("/user_login", methods=["POST"])
 def user_login():
@@ -68,7 +68,7 @@ def user_verify(cellnumber):
 	if user == None:
 		if send_text == True:
 			message = client.messages.create(
-				body='EasyGO User Verify code: ' + str(verifycode),
+				body='EasyBook User Verify code: ' + str(verifycode),
 				messaging_service_sid=mss,
 				to='+1' + str(cellnumber)
 			)
@@ -337,8 +337,12 @@ def get_notifications(id):
 				worker = None
 
 			userInput = json.loads(data['userInput'])
-			serviceImage = json.loads(service["image"]) if service != None else {"name": ""}
+			
 			time = {"day": data["day"], "month": data["month"], "date": data["date"], "year": data["year"], "hour": data["hour"], "minute": data["minute"]}
+
+			locationLogo = json.loads(location["logo"])
+			serviceImage = json.loads(service["image"])
+
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
 				"type": "service",
@@ -349,7 +353,7 @@ def get_notifications(id):
 				"menuid": int(data['menuId']) if data['menuId'] != "" else "",
 				"serviceid": int(data['serviceId']) if data['serviceId'] != -1 else "",
 				"service": service["name"] if service != None else userInput['name'] if 'name' in userInput else "",
-				"locationimage": json.loads(location["logo"]),
+				"locationimage": locationLogo if locationLogo["name"] != "" else { "width": 300, "height": 300 },
 				"locationtype": location["type"],
 				"serviceimage": serviceImage if serviceImage["name"] != "" else {"width": 300, "height": 300},
 				"serviceprice": float(service["price"]) if service != None else float(userInput['price']) if 'price' in userInput else "",
@@ -378,7 +382,7 @@ def get_user_reset_code(phonenumber):
 
 	if send_text == True:
 		message = client.messages.create(
-			body="Your EasyGO reset code is " + code,
+			body="Your EasyBook reset code is " + code,
 			messaging_service_sid=mss,
 			to='+1' + str(user["cellnumber"])
 		)

@@ -13,7 +13,7 @@ def welcome_products():
 	for data in datas:
 		products.append(data.id)
 
-	return { "msg": "welcome to products of easygo", "products": products }
+	return { "msg": "welcome to products of EasyBook", "products": products }
 
 @app.route("/get_product_info/<id>")
 def get_product_info(id):

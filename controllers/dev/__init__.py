@@ -7,7 +7,7 @@ cors = CORS(app)
 
 @app.route("/welcome_dev")
 def welcome_dev():
-	return { "msg": "welcome to dev of easygo" }
+	return { "msg": "welcome to dev of EasyBook" }
 
 @app.route("/reset")
 def reset():

@@ -13,7 +13,7 @@ def welcome_services():
 	for data in datas:
 		services.append(data.id)
 
-	return { "msg": "welcome to services of easygo", "services": services }
+	return { "msg": "welcome to services of EasyBook", "services": services }
 
 @app.route("/get_service_info/<id>")
 def get_service_info(id):

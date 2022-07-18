@@ -61,11 +61,6 @@ class Owner(db.Model):
 class Location(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	name = db.Column(db.String(50))
-	addressOne = db.Column(db.String(50))
-	addressTwo = db.Column(db.String(50))
-	city = db.Column(db.String(50))
-	province = db.Column(db.String(50))
-	postalcode = db.Column(db.String(7))
 	phonenumber = db.Column(db.String(10), unique=True)
 	logo = db.Column(db.String(70))
 	longitude = db.Column(db.String(20))
@@ -77,15 +72,10 @@ class Location(db.Model):
 
 	def __init__(
 		self, 
-		name, addressOne, addressTwo, city, province, postalcode, phonenumber, logo, 
+		name, phonenumber, logo, 
 		longitude, latitude, owners, type, hours, info
 	):
 		self.name = name
-		self.addressOne = addressOne
-		self.addressTwo = addressTwo
-		self.city = city
-		self.province = province
-		self.postalcode = postalcode
 		self.phonenumber = phonenumber
 		self.logo = logo
 		self.longitude = longitude
@@ -100,6 +90,7 @@ class Location(db.Model):
 
 class DiningTable(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
+	tableId = db.Column(db.String(22), unique=True)
 	name = db.Column(db.String(20))
 	locationId = db.Column(db.Integer)
 	orders = db.Column(db.Text)
@@ -107,8 +98,9 @@ class DiningTable(db.Model):
 
 	def __init__(
 		self,
-		name, locationId, orders, status
+		tableId, name, locationId, orders, status
 	):
+		self.tableId = tableId
 		self.name = name
 		self.locationId = locationId
 		self.orders = orders

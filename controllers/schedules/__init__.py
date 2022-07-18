@@ -115,7 +115,7 @@ def welcome_schedules():
 	for data in datas:
 		schedules.append(data.id)
 
-	return { "msg": "welcome to schedules of easygo", "schedules": schedules }
+	return { "msg": "welcome to schedules of EasyBook", "schedules": schedules }
 
 @app.route("/get_requests", methods=["POST"])
 def get_requests():

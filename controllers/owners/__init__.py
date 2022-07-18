@@ -7,7 +7,7 @@ cors = CORS(app)
 
 @app.route("/welcome_owners")
 def welcome_owners():
-	return { "msg": "welcome to owners of easygo" }
+	return { "msg": "welcome to owners of EasyBook" }
 
 @app.route("/owner_login", methods=["POST"])
 def owner_login():
@@ -1166,7 +1166,7 @@ def get_owner_reset_code(cellnumber):
 
 		if send_text == True:
 			message = client.messages.create(
-				body="Your EasyGO reset code is " + code,
+				body="Your EasyBook reset code is " + code,
 				messaging_service_sid=mss,
 				to='+1' + str(owner["cellnumber"])
 			)

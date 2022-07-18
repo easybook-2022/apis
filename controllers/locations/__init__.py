@@ -14,17 +14,12 @@ def welcome_locations():
 	for data in datas:
 		locations.append(data["id"])
 
-	return { "msg": "welcome to locations of easygo", "locations": locations }
+	return { "msg": "welcome to locations of EasyBook", "locations": locations }
 
 @app.route("/setup_location", methods=["POST"])
 def setup_location():
 	storeName = request.form['storeName']
 	phonenumber = request.form['phonenumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
-	addressOne = request.form['addressOne']
-	addressTwo = request.form['addressTwo']
-	city = request.form['city']
-	province = request.form['province']
-	postalcode = request.form['postalcode']
 	hours = request.form['hours']
 	type = request.form['type']
 	longitude = request.form['longitude']
@@ -70,8 +65,7 @@ def setup_location():
 			locationInfo = json.dumps({"listed":False, "menuPhotos": [], "type": "owner"})
 
 			data = {
-				"name": storeName, "addressOne": addressOne, "addressTwo": addressTwo, "city": city,
-				"province": province, "postalcode": postalcode, "phonenumber": phonenumber, "logo": logoname,
+				"name": storeName, "phonenumber": phonenumber, "logo": logoname,
 				"longitude": longitude, "latitude": latitude, "owners": '["' + str(ownerid) + '"]', "type": type,
 				"hours": hours, "info": locationInfo
 			}
@@ -94,22 +88,70 @@ def setup_location():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/update_location", methods=["POST"])
-def update_location():
-	id = request.form['id']
-	storeName = request.form['storeName']
-	phonenumber = request.form['phonenumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
-	addressOne = request.form['addressOne']
-	addressTwo = request.form['addressTwo']
-	city = request.form['city']
-	province = request.form['province']
-	postalcode = request.form['postalcode']
-			
-	longitude = request.form['longitude']
-	latitude = request.form['latitude']
-
+@app.route("/update_information", methods=["POST"])
+def update_information():
+	content = request.get_json()
 	errormsg = ""
 	status = ""
+
+	id = content['id']
+	storeName = content['storeName']
+	phonenumber = content['phonenumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
+
+	location = query("select * from location where id = " + str(id), True).fetchone()
+
+	if location != None:
+		location["name"] = storeName
+		location["phonenumber"] = phonenumber
+
+		update_data = []
+		for key in location:
+			if key != "table":
+				update_data.append(key + " = '" + str(location[key]) + "'")
+
+		query("update location set " + ", ".join(update_data) + " where id = " + str(location["id"]))
+
+		return { "msg": "success", "id": location["id"] }
+	else:
+		errormsg = "Location doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/update_address", methods=["POST"])
+def update_address():
+	content = request.get_json()
+	errormsg = ""
+	status = ""
+
+	id = content['id']
+	longitude = content['longitude']
+	latitude = content['latitude']
+
+	location = query("select * from location where id = " + str(id), True).fetchone()
+
+	if location != None:
+		location["longitude"] = longitude
+		location["latitude"] = latitude
+
+		update_data = []
+		for key in location:
+			if key != "table":
+				update_data.append(key + " = '" + str(location[key]) + "'")
+
+		query("update location set " + ", ".join(update_data) + " where id = " + str(location["id"]))
+
+		return { "msg": "success", "id": location["id"] }
+	else:
+		errormsg = "Location doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/update_logo", methods=["POST"])
+def update_logo():
+	errormsg = ""
+	status = ""
+
+	id = request.form['id']
 
 	location = query("select * from location where id = " + str(id), True).fetchone()
 
@@ -150,22 +192,7 @@ def update_location():
 
 				location["logo"] = json.dumps({"name": imagename, "width": size["width"], "height": size["height"]})
 
-		location["name"] = storeName
-		location["addressOne"] = addressOne
-		location["addressTwo"] = addressTwo
-		location["city"] = city
-		location["province"] = province
-		location["postalcode"] = postalcode
-		location["phonenumber"] = phonenumber
-		location["longitude"] = longitude
-		location["latitude"] = latitude
-
-		update_data = []
-		for key in location:
-			if key != "table":
-				update_data.append(key + " = '" + str(location[key]) + "'")
-
-		query("update location set " + ", ".join(update_data) + " where id = " + str(location["id"]))
+		query("update location set logo = " + json.dumps(location["logo"]) + " where id = " + str(id))
 
 		return { "msg": "success", "id": location["id"] }
 	else:
@@ -211,7 +238,7 @@ def set_location_hours():
 	errormsg = ""
 	status = ""
 
-	query("update location set hours = '" + str(hours) + "' where id = " + str(locationid))
+	query("update location set hours = '" + hours + "' where id = " + str(locationid))
 
 	return { "msg": "success" }
 
@@ -327,11 +354,11 @@ def get_locations():
 				distance = str(round(distance, 1)) + " km"
 
 			hours = json.loads(data['hours'])
-
+			logo = json.loads(data['logo'])
 			locations[0]["locations"].append({
 				"key": "l-" + str(data['id']),
 				"id": data['id'],
-				"logo": json.loads(data['logo']),
+				"logo": logo if logo["name"] != "" else { "width": 300, "height": 300 },
 				"nav": "restaurantprofile",
 				"name": data['name'],
 				"distance": distance,
@@ -361,11 +388,11 @@ def get_locations():
 				distance = str(round(distance, 1)) + " km"
 
 			hours = json.loads(data['hours'])
-
+			logo = json.loads(data['logo'])
 			locations[1]["locations"].append({
 				"key": "l-" + str(data['id']),
 				"id": data['id'],
-				"logo": json.loads(data['logo']),
+				"logo": logo if logo["name"] != "" else { "width": 300, "height": 300 },
 				"nav": "salonprofile",
 				"name": data['name'],
 				"distance": distance,
@@ -395,11 +422,11 @@ def get_locations():
 				distance = str(round(distance, 1)) + " km"
 
 			hours = json.loads(data['hours'])
-
+			logo = json.loads(data['logo'])
 			locations[2]["locations"].append({
 				"key": "l-" + str(data['id']),
 				"id": data['id'],
-				"logo": json.loads(data['logo']),
+				"logo": logo if logo["name"] != "" else { "width": 300, "height": 300 },
 				"nav": "salonprofile",
 				"name": data['name'],
 				"distance": distance,
@@ -428,11 +455,11 @@ def get_locations():
 				distance = str(round(distance, 1)) + " km"
 
 			hours = json.loads(data['hours'])
-
+			logo = json.loads(data['logo'])
 			locations[3]["locations"].append({
 				"key": "l-" + str(data['id']),
 				"id": data['id'],
-				"logo": json.loads(data['logo']),
+				"logo": logo if logo["name"] != "" else { "width": 300, "height": 300 },
 				"nav": "storeprofile",
 				"name": data['name'],
 				"distance": distance,
@@ -507,13 +534,14 @@ def get_all_locations(id):
 	locations = []
 
 	for data in datas:
+		logo = json.loads(data["logo"])
+
 		locations.append({
 			"id": data["id"], 
 			"key": data["id"],
 			"name": data["name"],
-			"address": data["addressOne"] + ("" if data["addressTwo"] == "" else " " + data["addressTwo"]) + ", " + data["city"] + " " + data["province"] + ", " + data["postalcode"],
 			"type": data["type"],
-			"logo": json.loads(data["logo"])
+			"logo": logo if logo["name"] != "" else { "width": 300, "height": 300 }
 		})
 
 	return { "locations": locations }
@@ -609,23 +637,18 @@ def get_location_profile():
 
 		phonenumber = "(" + f3 + ") " + s3 + "-" + l4
 
+		logo = json.loads(location["logo"])
 		info = {
 			"id": location["id"],
 			"name": location["name"],
-			"addressOne": location["addressOne"],
-			"addressTwo": location["addressTwo"],
-			"city": location["city"],
-			"province": location["province"],
-			"postalcode": location["postalcode"],
 			"phonenumber": phonenumber,
 			"distance": distance,
-			"logo": json.loads(location["logo"]),
+			"logo": logo if logo["name"] != "" else {"width": 300, "height": 300},
 			"longitude": float(location["longitude"]),
 			"latitude": float(location["latitude"]),
 			"hours": hours,
 			"type": location["type"],
-			"receiveType": locationInfo["type"],
-			"fullAddress": location["addressOne"] + ", " + (location["addressOne"] if location["addressTwo"] != "" else "") + location["city"] + ", " + location["province"] + ", " + location["postalcode"]
+			"receiveType": locationInfo["type"]
 		}
 
 		return { "info": info }

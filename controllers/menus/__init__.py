@@ -13,7 +13,7 @@ def welcome_menus():
 	for data in datas:
 		menus.append(data["id"])
 
-	return { "msg": "welcome to menus of easygo", "menus": menus }
+	return { "msg": "welcome to menus of EasyBook", "menus": menus }
 
 @app.route("/get_menus/<id>")
 def get_menus(id):

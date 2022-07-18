@@ -14,7 +14,7 @@ def welcome_dining_tables():
 	for data in datas:
 		diningTables.append(data["id"])
 
-	return { "msg": "welcome to dining tables of easygo", "diningTables": diningTables }
+	return { "msg": "welcome to dining tables of EasyBook", "diningTables": diningTables }
 
 @app.route("/get_tables/<id>")
 def get_tables(id):
@@ -35,7 +35,7 @@ def get_tables(id):
 				if "done" not in order:
 					numOrders += 1
 
-			tables.append({ "key": str(data["id"]), "name": data["name"], "numOrders": numOrders })
+			tables.append({ "key": str(data["id"]), "tableid": data["tableId"], "name": data["name"], "numOrders": numOrders })
 
 		return { "tables": tables }
 	else:
@@ -49,10 +49,10 @@ def get_table(id):
 	errormsg = ""
 	status = ""
 
-	table = query("select name from dining_table where id = " + str(id), True).fetchone()
+	table = query("select locationId, name from dining_table where tableId = '" + str(id) + "'", True).fetchone()
 
 	if table != None:
-		return { "name": table["name"] }
+		return { "name": table["name"], "locationid": table["locationId"] }
 	else:
 		errormsg = "Table doesn't exist"
 
@@ -66,6 +66,7 @@ def add_table():
 
 	locationid = content['locationid']
 	tableName = content['table']
+	tableid = content['tableid']
 
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
 
@@ -74,7 +75,7 @@ def add_table():
 
 		if numExisttable == 0:
 			if errormsg == "":
-				data = { "locationId": locationid, "name": tableName, "orders": '[]', "status": "inactive" }
+				data = { "tableId": tableid, "locationId": locationid, "name": tableName, "orders": '[]', "status": "active" }
 				columns = []
 				insert_data = []
 
@@ -119,13 +120,11 @@ def order_meal():
 	key = content['key']
 	tableid = content['tableid']
 	productid = content['id']
-	options = content['options']
-	others = content['others']
 	sizes = content['sizes']
 	image = content['image']
 	quantity = int(content['quantity'])
 
-	table = query("select * from dining_table where id = " + str(tableid) + " and status = 'active'", True).fetchone()
+	table = query("select * from dining_table where tableId = '" + str(tableid) + "' and status = 'active'", True).fetchone()
 
 	if table != None:
 		location = query("select owners from location where id = " + str(table["locationId"]), True).fetchone()
@@ -139,8 +138,6 @@ def order_meal():
 		orders.insert(0, {
 			"key": key,
 			"productId": productid,
-			"options": options,
-			"others": others,
 			"sizes": sizes,
 			"image": image,
 			"quantity": quantity
@@ -232,6 +229,7 @@ def view_payment(id):
 		if len(datas) > 0:
 			for data in datas:
 				product = query("select * from product where id = " + str(data["productId"]), True).fetchone()
+				data["name"] = product["name"]
 				sizes = data["sizes"]
 
 				if len(sizes) > 0:

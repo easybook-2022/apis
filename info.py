@@ -11,13 +11,13 @@ from binascii import a2b_base64
 test = True
 
 local = test
-send_text = False
+send_text = test == False
 push_notif = test == False
 
 host = 'localhost'
 user = 'geottuse'
 password = 'G3ottu53?'
-database = 'easygo'
+database = 'easybook'
 server_url = "0.0.0.0"
 local_url = "10.0.0.60"
 apphost = server_url if test == False else local_url
@@ -35,7 +35,7 @@ client = Client(account_sid, auth_token)
 
 # sql_username = 'geottuse'
 # sql_password = 'G3ottu53?'
-# sql_database = 'easygo'
+# sql_database = 'easybook'
 
 # key = paramiko.RSAKey.from_private_key_file("./id_rsa.pem")
 
