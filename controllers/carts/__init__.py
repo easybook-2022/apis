@@ -34,19 +34,11 @@ def get_cart_items(id):
 	for data in datas:
 		product = query("select * from product where id = " + str(data["productId"]), True).fetchone()
 		quantity = int(data["quantity"])
-		options = json.loads(data["options"])
-		others = json.loads(data["others"])
 		sizes = json.loads(data["sizes"])
 		userInput = json.loads(data["userInput"])
 
 		if data["status"] == 'checkout':
 			active = False
-
-		for k, option in enumerate(options):
-			option['key'] = "option-" + str(k)
-
-		for k, other in enumerate(others):
-			other['key'] = "other-" + str(k)
 
 		for k, size in enumerate(sizes):
 			size['key'] = "size-" + str(k)
@@ -55,6 +47,14 @@ def get_cart_items(id):
 			userInput = json.loads(data["userInput"])
 
 		image = json.loads(product["image"]) if product != None else {"name": ""}
+
+		if len(sizes) > 0:
+			for size in sizes:
+				if size["selected"] == True:
+					cost = float(size["price"]) * quantity
+		else:
+			cost = float(product["price"]) * quantity
+
 		items.append({
 			"key": "cart-item-" + str(data["id"]),
 			"id": str(data["id"]),
@@ -62,8 +62,9 @@ def get_cart_items(id):
 			"productId": product["id"] if product != None else None, 
 			"note": data["note"], 
 			"image": image if image["name"] != "" else {"width": 300, "height": 300}, 
-			"options": options, "others": others, "sizes": sizes, "quantity": quantity,
-			"status": data["status"]
+			"sizes": sizes, "quantity": quantity,
+			"status": data["status"],
+			"cost": cost
 		})
 
 	return { "cartItems": items, "activeCheckout": active }
@@ -77,14 +78,10 @@ def add_item_to_cart():
 	productid = content['productid']
 	productinfo = content['productinfo']
 	quantity = content['quantity']
-	options = content['options']
-	others = content['others']
 	sizes = content['sizes']
 	note = content['note']
 	type = content['type']
 
-	options = json.dumps(options)
-	others = json.dumps(others)
 	sizes = json.dumps(sizes)
 
 	userInput = json.dumps({ "name": productinfo, "type": type })
@@ -92,7 +89,7 @@ def add_item_to_cart():
 	data = {
 		"locationId": locationid, "productId": productid,
 		"userInput": userInput, "quantity": quantity, "adder": userid,
-		"options": options, "others": others, "sizes": sizes, "note": note,
+		"sizes": sizes, "note": note,
 		"status": "unlisted", "orderNumber": "", "waitTime": ""
 	}
 	columns = []
@@ -212,13 +209,10 @@ def order_done():
 					product = query("select * from product where id = " + str(data['productId']), True).fetchone()
 
 					sizes = json.loads(data['sizes'])
-					others = json.loads(data['others'])
 					quantity = int(data['quantity'])
 					userInput = json.loads(data['userInput'])
 
 					quantity = int(data['quantity'])
-					options = data['options']
-					others = data['others']
 					sizes = json.dumps(sizes)
 					info = json.loads(user["info"])
 
@@ -270,14 +264,6 @@ def edit_cart_item(id):
 	userInput = json.loads(cartitem["userInput"])
 	cost = 0
 
-	options = json.loads(cartitem["options"])
-	for k, option in enumerate(options):
-		option["key"] = "option-" + str(k)
-
-	others = json.loads(cartitem["others"])
-	for k, other in enumerate(others):
-		other["key"] = "other-" + str(k)
-
 	sizes = json.loads(cartitem["sizes"])
 	for k, size in enumerate(sizes):
 		size["key"] = "size-" + str(k)
@@ -289,10 +275,6 @@ def edit_cart_item(id):
 					cost += quantity * float(size["price"])
 		else:
 			cost += quantity * float(product["price"])
-
-		for other in others:
-			if other["selected"] == True:
-				cost += float(other["price"])
 	else:
 		if "price" in userInput:
 			cost += quantity * float(userInput["price"])
@@ -301,10 +283,8 @@ def edit_cart_item(id):
 	info = {
 		"name": product["name"] if product != None else (userInput["name"] if "name" in userInput else ""),
 		"image": image if image["name"] != "" else {"width": 300, "height": 300},
-		"price": float(product["price"]) if product != None else (userInput["price"] if "price" in userInput else 0),
+		"price": float(product["price"]) if product != None and product["price"] else (userInput["price"] if "price" in userInput else 0),
 		"quantity": quantity,
-		"options": options,
-		"others": others,
 		"sizes": sizes,
 		"note": cartitem["note"],
 		"cost": cost if cost > 0 else None
@@ -318,8 +298,6 @@ def update_cart_item():
 
 	cartid = content['cartid']
 	quantity = content['quantity']
-	options = content['options']
-	others = content['others']
 	sizes = content['sizes']
 	note = content['note']
 
@@ -329,8 +307,6 @@ def update_cart_item():
 
 	new_data = {
 		"quantity": quantity,
-		"options": json.dumps(options),
-		"others": json.dumps(others),
 		"sizes": json.dumps(sizes),
 		"note": note
 	}
@@ -351,19 +327,18 @@ def see_orders(id):
 	for data in datas:
 		product = query("select * from product where id = " + str(data["productId"]), True).fetchone()
 		quantity = int(data["quantity"])
-		options = json.loads(data["options"])
-		others = json.loads(data["others"])
 		sizes = json.loads(data["sizes"])
 		userInput = json.loads(data["userInput"])
 
-		for k, option in enumerate(options):
-			option['key'] = "option-" + str(k)
-
-		for k, other in enumerate(others):
-			other['key'] = "other-" + str(k)
-
 		for k, size in enumerate(sizes):
 			size['key'] = "size-" + str(k)
+
+		if len(sizes) > 0:
+			for size in sizes:
+				if size["selected"] == True:
+					cost = float(size["price"]) * quantity
+		else:
+			cost = float(product["price"]) * quantity
 
 		image = json.loads(product["image"]) if product != None else {"name": ""}
 		orders.append({
@@ -372,10 +347,9 @@ def see_orders(id):
 			"name": product["name"] if product != None else userInput['name'],
 			"note": data["note"],
 			"image": image if image["name"] != "" else {"width": 300, "height": 300},
-			"options": options,
-			"others": others,
 			"sizes": sizes,
-			"quantity": quantity
+			"quantity": quantity,
+			"cost": cost,
 		})
 
 	return { "orders": orders }

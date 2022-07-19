@@ -328,7 +328,14 @@ def make_appointment():
 		if info["pushToken"] != "" and info["signin"] == True:
 			pushids.append({ "token": info["pushToken"], "signin": info["signin"] })
 
-	scheduled = query("select * from schedule where time = " + unix, True).fetchone()
+	sql = "select * from schedule where "
+	sql += "day = '" + clientTime["day"] + "' and "
+	sql += "month = '" + clientTime["month"] + "' and "
+	sql += "date = " + str(clientTime["date"]) + " and "
+	sql += "year = " + str(clientTime["year"]) + " and "
+	sql += "hour = " + str(clientTime["hour"]) + " and "
+	sql += "minute = " + str(clientTime["minute"])
+	scheduled = query(sql, True).fetchone()
 
 	if scheduled == None or "\"unix\":" + unix in json.dumps(blocked).replace(" ", ""):
 		if schedule != None: # existing schedule
@@ -344,7 +351,22 @@ def make_appointment():
 
 			# recreate blocked times
 			for info in blocked:
-				data = query("select id, time from schedule where time = " + info["newUnix"], True).fetchone()
+				time = info["time"]
+				day = time["day"]
+				month = time["month"]
+				date = time["date"]
+				year = time["year"]
+				hour = time["hour"]
+				minute = time["minute"]
+
+				sql = "select id, time from schedule where "
+				sql += "day = '" + str(day) + "' and "
+				sql += "month = '" + str(month) + "' and "
+				sql += "date = " + str(date) + " and "
+				sql += "year = " + str(year) + " and "
+				sql += "hour = " + str(hour) + " and "
+				sql += "minute = " + str(minute)
+				data = query(sql, True).fetchone()
 
 				if data != None:
 					if ("\"id\": " + str(data["id"])) not in json.dumps(blocked):
@@ -429,8 +451,6 @@ def make_appointment():
 	else:
 		status = scheduled["status"]
 
-	print(status)
-
 	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/book_walk_in", methods=["POST"])
@@ -464,7 +484,13 @@ def book_walk_in():
 	timeDisplay = ""
 	valid = False
 
-	sql = "select count(*) as num from schedule where time = " + str(unix) + " and "
+	sql = "select count(*) as num from schedule where "
+	sql += "day = '" + clientTime["day"] + "' and "
+	sql += "month = '" + clientTime["month"] + "' and "
+	sql += "date = " + str(clientTime["date"]) + " and "
+	sql += "year = " + str(clientTime["year"]) + " and "
+	sql += "hour = " + str(clientTime["hour"]) + " and "
+	sql += "minute = " + str(clientTime["minute"]) + " and "
 	sql += "workerId = " + str(workerid)
 	scheduled = query(sql, True).fetchone()["num"]
 
@@ -512,7 +538,14 @@ def book_walk_in():
 		hour = int(timeInfo[0])
 		minute = int(timeInfo[1])
 
-		sql = "select count(*) as num from schedule where time = " + str(unix) + " and workerId = " + str(workerid)
+		sql = "select count(*) as num from schedule where "
+		sql += "day = '" + clientTime["day"] + "' and "
+		sql += "month = '" + clientTime["month"] + "' and "
+		sql += "date = " + str(clientTime["date"]) + " and "
+		sql += "year = " + str(clientTime["year"]) + " and "
+		sql += "hour = " + str(clientTime["hour"]) + " and "
+		sql += "minute = " + str(clientTime["minute"])
+		sql += " and workerId = " + str(workerid)
 		scheduled = query(sql, True).fetchone()["num"]
 
 		if scheduled == 0:
@@ -616,7 +649,14 @@ def block_time():
 	jsonDate = content['jsonDate']
 	time = str(content['time'])
 
-	blocked = query("select count(*) as num from schedule where workerId = " + str(workerid) + " and status = 'blocked' and time = " + time, True).fetchone()["num"]
+	sql = "select count(*) as num from schedule where workerId = " + str(workerid) + " and status = 'blocked' and "
+	sql += "day = '" + jsonDate["day"] + "' and "
+	sql += "month = '" + jsonDate["month"] + "' and "
+	sql += "date = " + str(jsonDate["date"]) + " and "
+	sql += "year = " + str(jsonDate["year"]) + " and "
+	sql += "hour = " + str(jsonDate["hour"]) + " and "
+	sql += "minute = " + str(jsonDate["minute"])
+	blocked = query(sql, True).fetchone()["num"]
 
 	if blocked == 0:
 		location = query("select id, type from location where owners like '%\"" + str(workerid) + "\"%'", True).fetchone()
@@ -640,7 +680,15 @@ def block_time():
 		else:
 			errormsg = "Location doesn't exist"
 	else:
-		query("delete from schedule where workerId = " + str(workerid) + " and status = 'blocked' and time = " + time)
+		sql = "delete from schedule where workerId = " + str(workerid) + " and status = 'blocked' and "
+		sql += "day = '" + jsonDate["day"] + "' and "
+		sql += "month = '" + jsonDate["month"] + "' and "
+		sql += "date = " + str(jsonDate["date"]) + " and "
+		sql += "year = " + str(jsonDate["year"]) + " and "
+		sql += "hour = " + str(jsonDate["hour"]) + " and "
+		sql += "minute = " + str(jsonDate["minute"])
+
+		query(sql)
 
 		return { "msg": "success", "action": "remove" }
 
@@ -684,7 +732,15 @@ def salon_change_appointment():
 
 		pushids = []
 
-		scheduled = query("select * from schedule where time = " + unix + " and workerId = " + str(workerid) + " and not status = 'done'", True).fetchone()
+		sql = "select * from schedule where "
+		sql += "day = '" + clientTime["day"] + "' and "
+		sql += "month = '" + clientTime["month"] + "' and "
+		sql += "date = " + str(clientTime["date"]) + " and "
+		sql += "year = " + str(clientTime["year"]) + " and "
+		sql += "hour = " + str(clientTime["hour"]) + " and "
+		sql += "minute = " + str(clientTime["minute"]) + " and "
+		sql += "workerId = " + str(workerid) + " and not status = 'done'"
+		scheduled = query(sql, True).fetchone()
 
 		if (scheduled == None or (scheduled["status"] == "cancel" or scheduled["status"] == "cancel_booked")) or (scheduled != None and "\"id\": " + str(scheduled["id"])) in json.dumps(blocked):
 			info = { "msg": "appointment remade", "time": clientTime, "worker": { "id": workerid, "username": worker["username"] }}
@@ -1017,7 +1073,7 @@ def get_appointments():
 	if receiveType == "stylist":
 		sql += " and workerId = " + str(ownerid)
 		
-	sql += " order by time limit 10"
+	sql += " order by concat(date, hour, minute) limit 10"
 
 	datas = query(sql, True)
 	appointments = []
@@ -1094,17 +1150,9 @@ def get_orders():
 	for data in datas:
 		product = query("select * from product where id = " + str(data['productId']), True).fetchone()
 		quantity = int(data['quantity'])
-		options = json.loads(data['options'])
-		others = json.loads(data['others'])
 		sizes = json.loads(data['sizes'])
 		userInput = json.loads(data['userInput'])
 		cost = 0
-
-		for k, option in enumerate(options):
-			option['key'] = "option-" + str(k)
-
-		for k, other in enumerate(others):
-			other['key'] = "other-" + str(k)
 
 		for k, size in enumerate(sizes):
 			size['key'] = "size-" + str(k)
@@ -1113,13 +1161,9 @@ def get_orders():
 			if product["price"] == "":
 				for size in sizes:
 					if size["selected"] == True:
-						cost += float(size["price"])
+						cost = float(size["price"]) * quantity
 			else:
-				cost += float(product["price"])
-
-			for other in others:
-				if other["selected"] == True:
-					cost += float(other["price"])
+				cost = float(product["price"]) * quantity
 
 		image = json.loads(product["image"]) if product != None else {"name": ""}
 		orders.append({
@@ -1128,8 +1172,8 @@ def get_orders():
 			"name": product["name"] if product != None else userInput['name'],
 			"note": data['note'],
 			"image": image if image["name"] != "" else {"width": 300, "height": 300},
-			"options": options, "others": others, "sizes": sizes, "quantity": quantity,
-			"cost": (cost * quantity) if cost > 0 else None
+			"sizes": sizes, "quantity": quantity,
+			"cost": cost
 		})
 
 		if data['status'] == "checkout":

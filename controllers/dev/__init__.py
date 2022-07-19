@@ -356,3 +356,11 @@ def password():
 
 	return {"msg": password}
 
+@app.route("/get_schedules_order")
+def get_schedules_order():
+	sql = "select concat(date, hour, minute) as sum, time, day, month, date, year, hour, minute from schedule order by "
+	sql += "concat(date, hour, minute)"
+
+	schedules = query(sql, True).fetchall()
+
+	return { "schedules": schedules }

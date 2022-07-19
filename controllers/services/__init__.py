@@ -107,7 +107,7 @@ def update_service():
 	errormsg = ""
 	status = ""
 
-	service = query("select * from service where id = " + str(serviceid) + " and locationId = " + str(locationid) + " and menuId = " + str(menuid), True).fetchone()
+	service = query("select * from service where id = " + str(serviceid) + " and locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "'", True).fetchone()
 
 	service["name"] = name
 	service["price"] = price
