@@ -44,7 +44,7 @@ def removeBlockedSchedules(time, workerId):
 			if scheduled["status"] == "confirmed":
 				blockedEnd = True
 			else:
-				if scheduled["status"] == "blocked":
+				if scheduled["status"] == "cancel_blocked" or scheduled["status"] == "blocked":
 					delete.append(scheduled["id"])
 
 	if len(delete) > 0:
@@ -95,7 +95,7 @@ def getBlockedSchedules(time, workerId):
 			if scheduled["status"] == "confirmed":
 				blockedEnd = True
 			else:
-				if scheduled["status"] == "blocked":
+				if scheduled["status"] == "cancel_blocked" or scheduled["status"] == "blocked":
 					del scheduled["day"]
 					del scheduled["month"]
 					del scheduled["date"]
@@ -428,6 +428,8 @@ def make_appointment():
 			return { "msg": "appointment added", "receiver": receiver, "speak": speak }
 	else:
 		status = scheduled["status"]
+
+	print(status)
 
 	return { "errormsg": errormsg, "status": status }, 400
 
