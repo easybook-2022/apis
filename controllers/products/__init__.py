@@ -7,11 +7,11 @@ cors = CORS(app)
 
 @app.route("/welcome_products", methods=["GET"])
 def welcome_products():
-	datas = Product.query.all()
+	datas = query("select * from product", True).fetchall()
 	products = []
 
 	for data in datas:
-		products.append(data.id)
+		products.append(data["id"])
 
 	return { "msg": "welcome to products of EasyBook", "products": products }
 

@@ -514,16 +514,18 @@ def get_more_locations():
 			distance = str(round(distance, 1)) + " km"
 
 		hours = json.loads(data['hours'])
-
+		logo = json.loads(data['logo'])
+		nav = ((type == "restaurant" and "restaurant") or ((type == "nail" or type == "hair") and "salon") or (type == "store" and "store")) + "profile"
 		locations.append({
 			"key": "l-" + str(data['id']),
 			"id": data['id'],
-			"logo": json.loads(data['logo']),
-			"nav": ("restaurant" if type == "restaurant" else "salon") + "profile",
+			"logo": logo if logo["name"] != "" else { "width": 300, "height": 300 },
+			"nav": nav,
 			"name": data['name'],
 			"distance": distance,
 			"opentime": hours[day]["opentime"],
-			"closetime": hours[day]["closetime"]
+			"closetime": hours[day]["closetime"],
+			"service": type
 		})
 
 	return { "newlocations": locations, "index": len(datas), "max": maxdatas }

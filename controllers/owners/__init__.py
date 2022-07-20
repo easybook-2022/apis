@@ -852,56 +852,6 @@ def get_all_workers_time(id):
 
 	return { "workers": workers }
 
-@app.route("/search_workers", methods=["POST"])
-def search_workers():
-	content = request.get_json()
-
-	scheduleid = content['scheduleid']
-	username = content['username']
-
-	schedule = query("select * from schedule where id = " + str(scheduleid), True).fetchone()
-	location = query("select * from location where id = " + str(schedule.locationId), True).fetchone()
-
-	errormsg = ""
-	status = ""
-
-	if schedule != None:
-		workers = "(" + location["owners"][1:-1] + ")"
-		datas = query("select * from owner where username like '%" + username + "%' and id in " + workers, True).fetchall()
-		owners = []
-		row = []
-		key = 0
-
-		for data in datas:
-			profile = json.loads(data["profile"])
-			row.append({
-				"key": "worker-" + str(key),
-				"id": data['id'],
-				"username": data['username'],
-				"profile": profile if profile["name"] != "" else {"width": 360, "height": 360},
-				"selected": False
-			})
-			key += 1
-
-			if len(row) == 3:
-				owners.append({ "key": str(len(owners)), "row": row })
-				row = []
-
-		if len(row) > 0 and len(row) < 3:
-			leftover = 3 - len(row)
-
-			for k in range(leftover):
-				row.append({ "key": "worker-" + str(key) })
-				key += 1
-
-			owners.append({ "key": str(len(owners)), "row": row })
-
-		return { "msg": "get searched workers", "owners": owners }
-	else:
-		errormsg = "Schedule doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
 @app.route("/get_workers_time/<id>") # salon profile
 def get_workers_time(id):
 	location = query("select * from location where id = " + str(id), True).fetchone()
@@ -1046,9 +996,7 @@ def get_owner_info(id):
 	if owner != None:
 		ownerInfo = json.loads(owner["info"])
 
-		info = { "id": id, "isOwner": ownerInfo["owner"], "useVoice": ownerInfo["voice"] }
-
-		return info
+		return { "id": id, "isOwner": ownerInfo["owner"], "useVoice": ownerInfo["voice"] }
 	else:
 		errormsg = "Owner doesn't exist"
 

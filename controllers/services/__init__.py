@@ -7,11 +7,11 @@ cors = CORS(app)
 
 @app.route("/welcome_services", methods=["GET"])
 def welcome_services():
-	datas = Location.query.all()
+	datas = query("select * from service", True).fetchall()
 	services = []
 
 	for data in datas:
-		services.append(data.id)
+		services.append(data["id"])
 
 	return { "msg": "welcome to services of EasyBook", "services": services }
 
