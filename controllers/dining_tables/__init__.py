@@ -73,22 +73,23 @@ def add_table():
 	if location != None:
 		numExisttable = query("select count(*) as num from dining_table where lower(replace(name, ' ', '')) = '" + tableName + "'", True).fetchone()["num"]
 
-		if numExisttable == 0:
-			if errormsg == "":
-				data = { "tableId": tableid, "locationId": locationid, "name": tableName, "orders": '[]', "status": "active" }
-				columns = []
-				insert_data = []
+		while numExisttable > 0:
+			tableName = getId()
 
-				for key in data:
-					columns.append(key)
-					insert_data.append("'" + str(data[key]) + "'")
+			numExisttable = query("select count(*) as num from dining_table where lower(replace(name, ' ', '')) = '" + tableName + "'", True).fetchone()["num"]
 
-				id = query("insert into dining_table (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
+		if errormsg == "":
+			data = { "tableId": tableid, "locationId": locationid, "name": tableName, "orders": '[]', "status": "active" }
+			columns = []
+			insert_data = []
 
-				return { "msg": "succeed" }
-		else:
-			errormsg = "Table already exist"
-			status = "exist"
+			for key in data:
+				columns.append(key)
+				insert_data.append("'" + str(data[key]) + "'")
+
+			id = query("insert into dining_table (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
+
+			return { "msg": "succeed" }
 	else:
 		errormsg = "Location doesn't exist"
 
@@ -175,7 +176,7 @@ def get_table_orders(id):
 
 						for size in sizes:
 							if size["selected"] == True:
-								data["cost"] = float(size["price"])
+								data["cost"] = int(data["quantity"]) * float(size["price"])
 
 					orders.append(data)
 
@@ -236,7 +237,7 @@ def view_payment(id):
 					for size in sizes:
 						if size["selected"] == True:
 							subTotalCost += int(data["quantity"]) * float(size["price"])
-							data["cost"] = float(size["price"])
+							data["cost"] = int(data["quantity"]) * float(size["price"])
 				else:
 					subTotalCost += int(data["quantity"]) * float(product["price"])
 					data["cost"] = int(data["quantity"]) * float(product["price"])

@@ -237,6 +237,17 @@ def get_appointment_info(id):
 
 	return { "errormsg": errormsg, "status": status }, 400
 
+@app.route("/get_exist_booking", methods=["POST"])
+def get_exist_booking():
+	content = request.get_json()
+
+	userid = content['userid']
+	serviceid = content['serviceid']
+
+	scheduled = query("select id from schedule where userId = " + str(userid) + " and serviceId = " + str(serviceid), True).fetchone()
+
+	return { "scheduleid": int(scheduled["id"]) if scheduled != None else -1 }
+
 @app.route("/get_rescheduling_appointments", methods=["POST"])
 def get_rescheduling_appointments():
 	content = request.get_json()
@@ -334,7 +345,8 @@ def make_appointment():
 	sql += "date = " + str(clientTime["date"]) + " and "
 	sql += "year = " + str(clientTime["year"]) + " and "
 	sql += "hour = " + str(clientTime["hour"]) + " and "
-	sql += "minute = " + str(clientTime["minute"])
+	sql += "minute = " + str(clientTime["minute"]) + " and "
+	sql += "workerId = " + str(workerid)
 	scheduled = query(sql, True).fetchone()
 
 	if scheduled == None or "\"unix\":" + unix in json.dumps(blocked).replace(" ", ""):
@@ -1064,14 +1076,22 @@ def get_appointments():
 	ownerid = content['ownerid']
 	locationid = content['locationid']
 
+	owner = query("select info from owner where id = " + str(ownerid), True).fetchone()
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
+
+	ownerInfo = json.loads(owner["info"])
+	isOwner = ownerInfo["owner"]
+
 	locationInfo = json.loads(location["info"])
 	receiveType = locationInfo["type"]
 
 	sql = "select * from schedule where locationId = " + str(locationid) + " and status = 'confirmed'"
+	selfView = False
 
-	if receiveType == "stylist":
-		sql += " and workerId = " + str(ownerid)
+	if isOwner == False:
+		if receiveType == "owner":
+			sql += " and workerId = " + str(ownerid)
+			selfView = True
 		
 	sql += " order by concat(date, hour, minute) limit 10"
 
@@ -1099,7 +1119,7 @@ def get_appointments():
 			"id": str(data['id']),
 			"username": user["username"] if user != None else userInput["name"] if "name" in userInput else "",
 			"client": client,
-			"worker": worker,
+			"worker": worker if selfView == False else None,
 			"time": time,
 			"serviceid": service["id"] if service != None else "",
 			"name": service["name"] if service != None else userInput['name'] if "name" in userInput else "",

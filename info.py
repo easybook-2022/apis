@@ -76,13 +76,20 @@ def query(sql, output = False):
 	if output == True:
 		return cursorobj
 
-def getRanStr():
-	strid = ""
+def getId():
+	letters = [
+    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", 
+    "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"
+	]
+	char = ""
 
-	for k in range(6):
-		strid += str(randint(0, 9))
-
-	return strid
+	for k in range(randint(10, 20)):
+		if randint(0, 9) % 2 == 0:
+			char += str(randint(0, 9))
+		else:
+			char += (letters[randint(0, 25)]).upper()
+	        
+	return char
 
 def pushInfo(to, title, body, data):
 	return PushMessage(to=to, title=title, body=body, data=data)
