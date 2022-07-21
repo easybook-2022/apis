@@ -24,7 +24,9 @@ def get_tables(id):
 	location = query("select * from location where id = " + str(id), True).fetchone()
 
 	if location != None:
-		datas = query("select * from dining_table where locationId = " + str(id), True).fetchall()
+		sql = "select * from dining_table where locationId = " + str(id) + " order by "
+		sql += "(length(orders) - length(replace(orders, 'productId', ''))) desc"
+		datas = query(sql, True).fetchall()
 		tables = []
 
 		for data in datas:
@@ -71,15 +73,21 @@ def add_table():
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
 
 	if location != None:
-		numExisttable = query("select count(*) as num from dining_table where lower(replace(name, ' ', '')) = '" + tableName + "'", True).fetchone()["num"]
+		table = query("select * from dining_table where name = '" + tableName + "'", True).fetchone()
 
-		while numExisttable > 0:
-			tableName = getId()
+		if table == None:
+			tableIdExist = query("select count(*) as num from dining_table where tableId = '" + tableid + "'", True).fetchone()["num"]
 
-			numExisttable = query("select count(*) as num from dining_table where lower(replace(name, ' ', '')) = '" + tableName + "'", True).fetchone()["num"]
+			while tableIdExist > 0:
+				tableid = getId()
+
+				tableIdExist = query("select count(*) as num from dining_table where tableId = '" + tableid + "'", True).fetchone()["num"]
+		else:
+			status = "exist"
+			errormsg = "Table already exist"
 
 		if errormsg == "":
-			data = { "tableId": tableid, "locationId": locationid, "name": tableName, "orders": '[]', "status": "active" }
+			data = { "tableId": tableid, "locationId": locationid, "name": tableName, "orders": '[]' }
 			columns = []
 			insert_data = []
 
@@ -93,7 +101,7 @@ def add_table():
 	else:
 		errormsg = "Location doesn't exist"
 
-	return { "errormsg": errormsg, "status": status }
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/remove_table/<id>")
 def remove_table(id):
@@ -125,7 +133,7 @@ def order_meal():
 	image = content['image']
 	quantity = int(content['quantity'])
 
-	table = query("select * from dining_table where tableId = '" + str(tableid) + "' and status = 'active'", True).fetchone()
+	table = query("select * from dining_table where tableId = '" + str(tableid) + "'", True).fetchone()
 
 	if table != None:
 		location = query("select owners from location where id = " + str(table["locationId"]), True).fetchone()
@@ -144,20 +152,22 @@ def order_meal():
 			"quantity": quantity
 		})
 
-		query("update dining_table set orders = '" + json.dumps(orders) + "', status = 'active' where id = " + str(table["id"]))
+		query("update dining_table set orders = '" + json.dumps(orders) + "' where id = " + str(table["id"]))
 
 		return { "msg": "succeed", "receiver": receiver }
 	else:
 		errormsg = "Table doesn't exist"
 
-	return { "errormsg": errormsg, "status": status }
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/get_table_orders/<id>")
 def get_table_orders(id):
 	errormsg = ""
 	status = ""
 
-	table = query("select orders from dining_table where id = " + str(id), True).fetchone()
+	sql = "select orders from dining_table where id = " + str(id) + " order by "
+	sql += "(length(orders) - length(replace(orders, 'productId', ''))) desc"
+	table = query(sql, True).fetchone()
 
 	if table != None:
 		datas = json.loads(table["orders"])
@@ -170,13 +180,13 @@ def get_table_orders(id):
 					data["name"] = product["name"]
 
 					if product["price"] != '':
-						data["cost"] = int(data["quantity"]) * float(product["price"])
+						data["cost"] = round(int(data["quantity"]) * float(product["price"]), 2)
 					else:
 						sizes = data["sizes"]
 
 						for size in sizes:
 							if size["selected"] == True:
-								data["cost"] = int(data["quantity"]) * float(size["price"])
+								data["cost"] = round(int(data["quantity"]) * float(size["price"]), 2)
 
 					orders.append(data)
 
@@ -237,10 +247,10 @@ def view_payment(id):
 					for size in sizes:
 						if size["selected"] == True:
 							subTotalCost += int(data["quantity"]) * float(size["price"])
-							data["cost"] = int(data["quantity"]) * float(size["price"])
+							data["cost"] = round(int(data["quantity"]) * float(size["price"]), 2)
 				else:
 					subTotalCost += int(data["quantity"]) * float(product["price"])
-					data["cost"] = int(data["quantity"]) * float(product["price"])
+					data["cost"] = round(int(data["quantity"]) * float(product["price"]), 2)
 
 				orders.append(data)
 
@@ -267,7 +277,7 @@ def finish_dining(id):
 	table = query("select orders from dining_table where id = " + str(id), True).fetchone()
 
 	if table != None:
-		query("update dining_table set orders = '[]', status = 'inactive' where id = " + str(id))
+		query("update dining_table set orders = '[]' where id = " + str(id))
 
 		return { "msg": "succeed" }
 	else:

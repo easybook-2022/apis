@@ -310,7 +310,7 @@ def add_owner():
 				"hours": hours,
 				"info": json.dumps({"pushToken": "", "owner": False, "signin": False, "voice": False})
 			}
-
+			
 			insert_data = []
 			columns = []
 			for key in data:

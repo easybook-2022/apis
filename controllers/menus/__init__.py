@@ -32,7 +32,8 @@ def get_menus(id):
 				image = json.loads(data["image"])
 				items.append({
 					"key": "menu-" + str(index), "id": data["id"], "name": data["name"], 
-					"image": image if image["name"] != "" else {"width": 300, "height": 300}, "list": [], "listType": "list"
+					"image": image if image["name"] != "" else {"width": 300, "height": 300}, "list": [], "listType": "list",
+					"show": True
 				})
 				otherList = getOtherMenu(locationId, data["id"])
 

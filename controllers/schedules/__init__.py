@@ -429,7 +429,7 @@ def make_appointment():
 		else: # new schedule
 			info = json.dumps({})
 			userInput = json.dumps({ "name": serviceinfo, "type": "service" })
-
+			
 			data = {
 				"userId": userid,"workerId": workerid,"locationId": locationid,"menuId": menuid,"serviceId": serviceid,
 				"userInput": userInput, "day": clientTime["day"], "month": clientTime["month"], "date": clientTime["date"], 

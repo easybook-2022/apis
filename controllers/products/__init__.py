@@ -86,7 +86,7 @@ def add_product():
 
 	sizes = request.form['sizes']
 	price = request.form['price']
-
+	
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
 	info = json.loads(location["info"])
 	info["listed"] = True

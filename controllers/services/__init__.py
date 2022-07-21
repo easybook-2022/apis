@@ -49,7 +49,7 @@ def add_service():
 	if numServices == 0:
 		isWeb = request.form.get("web")
 		imageData = json.dumps({"name": "", "width": 0, "height": 0})
-
+		
 		if isWeb != None:
 			image = json.loads(request.form['image'])
 			imagename = image["name"]

@@ -94,17 +94,15 @@ class DiningTable(db.Model):
 	name = db.Column(db.String(20))
 	locationId = db.Column(db.Integer)
 	orders = db.Column(db.Text)
-	status = db.Column(db.String(10))
 
 	def __init__(
 		self,
-		tableId, name, locationId, orders, status
+		tableId, name, locationId, orders
 	):
 		self.tableId = tableId
 		self.name = name
 		self.locationId = locationId
 		self.orders = orders
-		self.status = status
 
 	def __repr__(self):
 		return '<Table %r>' % self.name

@@ -350,17 +350,12 @@ def add_individ_time():
 
 	return { "msg": "all schedules updated", "times": times }
 
-@app.route("/password")
-def password():
-	password = generate_password_hash("888888")
+@app.route("/add_to_incomplete_table")
+def add_to_incomplete_table():
+	tables = query("select * from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = 'dining_table' and TABLE_SCHEMA = 'easybook'", True).fetchall()
+	datas = []
 
-	return {"msg": password}
+	for info in tables:
+		datas.append(info["COLUMN_NAME"])
 
-@app.route("/get_schedules_order")
-def get_schedules_order():
-	sql = "select concat(date, hour, minute) as sum, time, day, month, date, year, hour, minute from schedule order by "
-	sql += "concat(date, hour, minute)"
-
-	schedules = query(sql, True).fetchall()
-
-	return { "schedules": schedules }
+	return { "msg": datas }
