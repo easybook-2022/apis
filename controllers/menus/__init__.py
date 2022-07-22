@@ -26,6 +26,27 @@ def get_menus(id):
 		items = []
 
 		if len(menuDatas) > 0:
+			if len(productDatas) > 0:
+				for index, data in enumerate(productDatas):
+					sizes = json.loads(data["sizes"])
+					
+					image = json.loads(data["image"])
+					items.append({
+						"key": "product-" + str(data["id"]), "id": data["id"], "name": data["name"], 
+						"price": float(data["price"]) if data["price"] != '' else None, "sizes": sizes,
+						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "product",
+						"show": True
+					})
+			elif len(serviceDatas) > 0:
+				for index, data in enumerate(serviceDatas):
+					image = json.loads(data["image"])
+					items.append({
+						"key": "service-" + str(data["id"]), "id": data["id"], 
+						"name": data["name"], "price": float(data["price"]), 
+						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "service",
+						"show": True
+					})
+
 			for index, data in enumerate(menuDatas):
 				parentMenuid = data["id"]
 				
@@ -79,15 +100,17 @@ def get_menus(id):
 					items.append({
 						"key": "product-" + str(data["id"]), "id": data["id"], "name": data["name"], 
 						"price": float(data["price"]) if data["price"] != '' else None, "sizes": sizes,
-						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "product"
+						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "product",
+						"show": True
 					})
-			else:
+			elif len(serviceDatas) > 0:
 				for index, data in enumerate(serviceDatas):
 					image = json.loads(data["image"])
 					items.append({
 						"key": "service-" + str(data["id"]), "id": data["id"], 
 						"name": data["name"], "price": float(data["price"]), 
-						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "service"
+						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "service",
+						"show": True
 					})
 
 		return items

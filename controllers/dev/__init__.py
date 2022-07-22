@@ -290,33 +290,6 @@ def read_other_db():
 
 	return results["cellnumber"]
 
-@app.route("/get_id_after_insert")
-def get_id_after_insert():
-	data = {
-		"cellnumber": "2323423",
-		"password": "fdfd",
-		"username": "dfd",
-		"profile": "",
-		"hours": "",
-		"info": ""
-	}
-
-	insert_data = []
-	columns = []
-	for key in data:
-		columns.append(key)
-		insert_data.append("'" + str(data[key]) + "'")
-
-	id = query("insert into owner (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
-
-	return { "id": id }
-
-@app.route("/get_num")
-def get_num():
-	num = query("select count(*) as num from owner group by id", True).fetchone()["num"]
-
-	return { "num": num }
-
 @app.route("/open_app_in_message")
 def open_app_in_message():
 	message = client.messages.create(
@@ -327,35 +300,29 @@ def open_app_in_message():
 
 	return { "message": message.sid }
 
-@app.route("/add_individ_time")
-def add_individ_time():
-	schedules = query("select * from schedule", True).fetchall()
-	times = []
-
-	for info in schedules:
-		id = info["id"]
-
-		time = json.loads(info["time"])
-
-		day = time["day"]
-		month = time["month"]
-		date = time["date"]
-		year = time["year"]
-		hour = time["hour"]
-		minute = time["minute"]
-
-		times.append(time)
-
-		query("update schedule set day = '" + day + "', month = '" + month + "', date = " + str(date) + ", year = " + str(year) + ", hour = " + str(hour) + ", minute = " + str(minute) + " where id = " + str(id), False)
-
-	return { "msg": "all schedules updated", "times": times }
-
 @app.route("/add_to_incomplete_table")
 def add_to_incomplete_table():
-	tables = query("select * from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = 'dining_table' and TABLE_SCHEMA = 'easybook'", True).fetchall()
+	tables = query("select * from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = 'dining_table'", True).fetchall()
 	datas = []
 
 	for info in tables:
 		datas.append(info["COLUMN_NAME"])
 
 	return { "msg": datas }
+
+@app.route("/insert_into_table")
+def insert_into_table():
+	data = {
+		"cellnumber": "2342342345"
+	}
+
+	insert_data = []
+	columns = []
+	for key in data:
+		columns.append(key)
+		insert_data.append("'" + str(data[key]) + "'")
+
+	id = query("insert into user (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
+
+	return { "id": id }
+

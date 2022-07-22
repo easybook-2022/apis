@@ -24,8 +24,30 @@ def get_tables(id):
 	location = query("select * from location where id = " + str(id), True).fetchone()
 
 	if location != None:
-		sql = "select * from dining_table where locationId = " + str(id) + " order by "
+		sql = "select * from dining_table where locationId = " + str(id)
+		datas = query(sql, True).fetchall()
+		tables = []
+
+		for data in datas:
+			tables.append({ "key": str(data["id"]), "tableid": data["tableId"], "name": data["name"] })
+
+		return { "tables": tables }
+	else:
+		errormsg = "Location doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/get_ordering_tables/<id>")
+def get_ordering_tables(id):
+	errormsg = ""
+	status = ""
+
+	location = query("select * from location where id = " + str(id), True).fetchone()
+
+	if location != None:
+		sql = "select * from dining_table where locationId = " + str(id) + " and not orders = '[]' order by "
 		sql += "(length(orders) - length(replace(orders, 'productId', ''))) desc"
+
 		datas = query(sql, True).fetchall()
 		tables = []
 

@@ -117,12 +117,5 @@ def writeToFile(uri, name):
 	fd.write(binary_data)
 	fd.close()
 
-def readOtherDB(sql, one):
-	scursorobj.execute(sql)
-
-	if one == True:
-		results = scursorobj.fetchall()[0]
-	else:
-		results = scursorobj.fetchall()
-
-	return { "data": results }
+def insert_into_table(table, datas):
+	return { "msg": "" }

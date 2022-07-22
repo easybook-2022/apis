@@ -72,6 +72,19 @@ def setup_location():
 			columns = []
 			insert_data = []
 
+
+
+
+
+
+			#id = insert_into_table('location', data)
+
+
+
+
+
+
+
 			for key in data:
 				columns.append(key)
 				insert_data.append("'" + str(data[key]) + "'")
