@@ -28,33 +28,61 @@ def get_menus(id):
 		if len(menuDatas) > 0:
 			if len(productDatas) > 0:
 				for index, data in enumerate(productDatas):
-					sizes = json.loads(data["sizes"])
+					options = json.loads(data["options"])
+					sizes = options["sizes"]
+					quantities = options["quantities"]
+					percents = options["percents"]
+
+					for index, size in enumerate(sizes):
+						size["key"] = "size-" + str(index)
+
+					for index, quantity in enumerate(quantities):
+						quantity["key"] = "quantity-" + str(index)
+
+					for index, percent in enumerate(percents):
+						percent["key"] = "percent-" + str(index)
 					
 					image = json.loads(data["image"])
+
+					if data['price'] != '':
+						price = float(data["price"])
+
+						if len(str(price).split(".")[1]) < 2:
+							price = str(price) + "0"
+					else:
+						price = None
+
 					items.append({
-						"key": "product-" + str(data["id"]), "id": data["id"], "name": data["name"], 
-						"price": float(data["price"]) if data["price"] != '' else None, "sizes": sizes,
+						"key": "product-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "name": data["name"], "description": data["description"], 
+						"price": price, "sizes": sizes, "quantities": quantities, "percents": percents, 
 						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "product",
-						"show": True
+						"show": False
 					})
 			elif len(serviceDatas) > 0:
 				for index, data in enumerate(serviceDatas):
 					image = json.loads(data["image"])
+
+					if data['price'] != '':
+						price = float(data["price"])
+
+						if len(str(price).split(".")[1]) < 2:
+							price = str(price) + "0"
+					else:
+						price = None
+
 					items.append({
-						"key": "service-" + str(data["id"]), "id": data["id"], 
-						"name": data["name"], "price": float(data["price"]), 
+						"key": "service-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], 
+						"name": data["name"], "price": price, 
 						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "service",
-						"show": True
+						"show": False
 					})
 
-			for index, data in enumerate(menuDatas):
-				parentMenuid = data["id"]
-				
+			for index, data in enumerate(menuDatas):				
 				image = json.loads(data["image"])
 				items.append({
-					"key": "menu-" + str(index), "id": data["id"], "name": data["name"], 
+					"key": "menu-" + str(index), "parentId": parentMenuid, "id": data["id"], "name": data["name"], 
 					"image": image if image["name"] != "" else {"width": 300, "height": 300}, "list": [], "listType": "list",
-					"show": True
+					"show": False
 				})
 				otherList = getOtherMenu(locationId, data["id"])
 
@@ -69,11 +97,19 @@ def get_menus(id):
 
 						for data in datas:
 							sizes = json.loads(data["sizes"])
-
 							image = json.loads(data["image"])
+
+							if data["price"] != "":
+								price = float(data["price"])
+
+								if len(str(price).split(".")[1]) < 2:
+									price = str(price) + "0"
+							else:
+								price = None
+
 							innerItems.append({
-								"key": "product-" + str(data["id"]), "id": data["id"], "name": data["name"], 
-								"price": float(data["price"]) if data["price"] != '' else None, "sizes": sizes,
+								"key": "product-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "name": data["name"], "description": data["description"], 
+								"price": price, "sizes": sizes,
 								"image": image if image["name"] != "" else {"width": 300, "height": 300}, 
 								"listType": "product"
 							})
@@ -82,10 +118,19 @@ def get_menus(id):
 
 						for data in datas:
 							image = json.loads(data["image"])
+
+							if data["price"] != "":
+								price = float(data["price"])
+
+								if len(str(price).split(".")[1]) < 2:
+									price = str(price) + "0"
+							else:
+								price = None
+
 							innerItems.append({
-								"key": "service-" + str(data["id"]), "id": data["id"], 
+								"key": "service-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], 
 								"name": data["name"], "info": data["info"], 
-								"price": float(data["price"]), 
+								"price": price, 
 								"image": image if image["name"] != "" else {"width": 300, "height": 300}, 
 								"listType": "service"
 							})
@@ -94,23 +139,53 @@ def get_menus(id):
 		else:
 			if len(productDatas) > 0:
 				for index, data in enumerate(productDatas):
-					sizes = json.loads(data["sizes"])
+					options = json.loads(data["options"])
+					sizes = options["sizes"]
+					quantities = options["quantities"]
+					percents = options["percents"]
+
+					for index, size in enumerate(sizes):
+						size["key"] = "size-" + str(index)
+
+					for index, quantity in enumerate(quantities):
+						quantity["key"] = "quantity-" + str(index)
+
+					for index, percent in enumerate(percents):
+						percent["key"] = "percent-" + str(index)
 					
 					image = json.loads(data["image"])
+
+					if data["price"] != "":
+						price = float(data["price"])
+
+						if len(str(price).split(".")[1]) < 2:
+							price = str(price) + "0"
+					else:
+						price = None
+
 					items.append({
-						"key": "product-" + str(data["id"]), "id": data["id"], "name": data["name"], 
-						"price": float(data["price"]) if data["price"] != '' else None, "sizes": sizes,
+						"key": "product-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "name": data["name"], "description": data["description"], 
+						"price": price, "sizes": sizes, "quantities": quantities, "percents": percents, 
 						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "product",
-						"show": True
+						"show": False
 					})
 			elif len(serviceDatas) > 0:
 				for index, data in enumerate(serviceDatas):
 					image = json.loads(data["image"])
+
+					if data["price"] != "":
+						price = float(data["price"])
+
+						if len(str(price).split(".")[1]) < 2:
+							price = str(price) + "0"
+					else:
+						price = None
+
 					items.append({
-						"key": "service-" + str(data["id"]), "id": data["id"], 
-						"name": data["name"], "price": float(data["price"]), 
+						"key": "service-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], 
+						"name": data["name"], "price": price, 
 						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "service",
-						"show": True
+						"show": False
 					})
 
 		return items

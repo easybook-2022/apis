@@ -58,7 +58,7 @@ def user_login():
 
 @app.route("/user_verify/<cellnumber>")
 def user_verify(cellnumber):
-	verifycode = getRanStr()
+	verifycode = getId()
 
 	cellnumber = cellnumber.replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 	user = query("select * from user where cellnumber = '" + str(cellnumber) + "'", True).fetchone()
@@ -378,7 +378,7 @@ def get_user_reset_code(phonenumber):
 	errormsg = ""
 	status = ""
 
-	code = getRanStr()
+	code = getId()
 
 	if send_text == True:
 		message = client.messages.create(

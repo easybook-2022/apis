@@ -103,7 +103,7 @@ def owner_logout(id):
 
 @app.route("/owner_verify/<cellnumber>")
 def owner_verify(cellnumber):
-	verifycode = getRanStr()
+	verifycode = getId()
 	
 	cellnumber = cellnumber.replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 	owner = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True).fetchone()
@@ -1110,7 +1110,7 @@ def get_owner_reset_code(cellnumber):
 	status = ""
 
 	if owner != None:
-		code = getRanStr()
+		code = getId()
 
 		if send_text == True:
 			message = client.messages.create(

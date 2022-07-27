@@ -152,6 +152,8 @@ def order_meal():
 	tableid = content['tableid']
 	productid = content['id']
 	sizes = content['sizes']
+	quantities = content['quantities']
+	percents = content['percents']
 	image = content['image']
 	quantity = int(content['quantity'])
 
@@ -170,6 +172,8 @@ def order_meal():
 			"key": key,
 			"productId": productid,
 			"sizes": sizes,
+			"quantities": quantities,
+			"percents": percents,
 			"image": image,
 			"quantity": quantity
 		})
@@ -187,7 +191,7 @@ def get_table_orders(id):
 	errormsg = ""
 	status = ""
 
-	sql = "select orders from dining_table where id = " + str(id) + " order by "
+	sql = "select name, tableId, orders from dining_table where id = " + str(id) + " order by "
 	sql += "(length(orders) - length(replace(orders, 'productId', ''))) desc"
 	table = query(sql, True).fetchone()
 
@@ -198,21 +202,77 @@ def get_table_orders(id):
 		if len(datas) > 0:
 			for data in datas:
 				if "done" not in data:
+					sizes = data["sizes"]
+					quantities = data["quantities"]
+					percents = data["percents"]
+
 					product = query("select * from product where id = " + str(data["productId"]), True).fetchone()
+					productOptions = json.loads(product["options"])
+					productSizes = productOptions["sizes"]
+					productQuantities = productOptions["quantities"]
+					productPercents = productOptions["percents"]
+
+					sizesInfo = {}
+					for info in productSizes:
+						if info["name"] in sizes:
+							sizesInfo[info["name"]] = float(info["price"])
+
+					quantitiesInfo = {}
+					for info in productQuantities:
+						if info["input"] in quantities:
+							quantitiesInfo[info["input"]] = float(info["price"])
+
+					percentsInfo = {}
+					for info in productPercents:
+						if info["input"] in percents:
+							percentsInfo[info["input"]] = float(info["price"])
+
 					data["name"] = product["name"]
+					cost = 0.00
 
 					if product["price"] != '':
-						data["cost"] = round(int(data["quantity"]) * float(product["price"]), 2)
+						cost = round(int(data["quantity"]) * float(product["price"]), 2)
 					else:
-						sizes = data["sizes"]
+						if len(data["sizes"]) > 0:
+							sizes = data["sizes"]
 
-						for size in sizes:
-							if size["selected"] == True:
-								data["cost"] = round(int(data["quantity"]) * float(size["price"]), 2)
+							for size in sizes:
+								cost = round(int(data["quantity"]) * sizesInfo[size], 2)
+						else:
+							quantities = data["quantities"]
 
+							for quantity in quantities:
+								cost = round(int(data["quantity"]) * quantitiesInfo[quantity], 2)
+
+					percents = data["percents"]
+
+					for percent in percents:
+						cost += round(int(data["quantity"]) * percentsInfo[percent], 2)
+
+					if len(str(cost).split(".")[1]) < 2:
+						cost = str(cost) + "0"
+
+					data["cost"] = cost
+
+					sizes = []
+					quantities = []
+					percents = []
+
+					for index, info in enumerate(sizesInfo):
+						sizes.append({ "key": "size-" + str(index), "name": info, "price": sizesInfo[info] })
+
+					for index, info in enumerate(quantitiesInfo):
+						quantities.append({ "key": "quantity-" + str(index), "input": info, "price": quantitiesInfo[info] })
+
+					for index, info in enumerate(percentsInfo):
+						percents.append({ "key": "percent-" + str(index), "input": info, "price": percentsInfo[info] })
+
+					data["sizes"] = sizes
+					data["quantities"] = quantities
+					data["percents"] = percents
 					orders.append(data)
 
-			return { "orders": orders }
+			return { "name": table["name"], "tableId": table["tableId"], "orders": orders }
 		else:
 			status = "noOrders"
 	else:
@@ -261,18 +321,72 @@ def view_payment(id):
 
 		if len(datas) > 0:
 			for data in datas:
-				product = query("select * from product where id = " + str(data["productId"]), True).fetchone()
-				data["name"] = product["name"]
 				sizes = data["sizes"]
+				quantities = data["quantities"]
+				percents = data["percents"]
 
-				if len(sizes) > 0:
-					for size in sizes:
-						if size["selected"] == True:
-							subTotalCost += int(data["quantity"]) * float(size["price"])
-							data["cost"] = round(int(data["quantity"]) * float(size["price"]), 2)
-				else:
+				product = query("select * from product where id = " + str(data["productId"]), True).fetchone()
+				productOptions = json.loads(product["options"])
+				productSizes = productOptions["sizes"]
+				productQuantities = productOptions["quantities"]
+				productPercents = productOptions["percents"]
+
+				sizesInfo = {}
+				for info in productSizes:
+					if info["name"] in sizes:
+						sizesInfo[info["name"]] = float(info["price"])
+
+				quantitiesInfo = {}
+				for info in productQuantities:
+					if info["input"] in quantities:
+						quantitiesInfo[info["input"]] = float(info["price"])
+
+				percentsInfo = {}
+				for info in productPercents:
+					if info["input"] in percents:
+						percentsInfo[info["input"]] = float(info["price"])
+
+				data["name"] = product["name"]
+				cost = 0.00
+
+				if product["price"] != "":
 					subTotalCost += int(data["quantity"]) * float(product["price"])
-					data["cost"] = round(int(data["quantity"]) * float(product["price"]), 2)
+					cost = round(int(data["quantity"]) * float(product["price"]), 2)
+				else:
+					if len(sizes) > 0:
+						for size in sizes:
+							subTotalCost += int(data["quantity"]) * sizesInfo[size]
+							cost = round(int(data["quantity"]) * sizesInfo[size], 2)
+					else:
+						for quantity in quantities:
+							subTotalCost += int(data["quantity"]) * float(quantitiesInfo[quantity])
+							cost = round(int(data["quantity"]) * float(quantitiesInfo[quantity]), 2)
+
+				for percent in percents:
+					subTotalCost += int(data["quantity"]) * float(percentsInfo[percent["input"]])
+					cost += round(int(data["quantity"]) * float(percentsInfo[percent["input"]]), 2)
+
+				if len(str(cost).split(".")[1]) < 2:
+					cost = str(cost) + "0"
+
+				data["cost"] = cost
+
+				sizes = []
+				quantities = []
+				percents = []
+
+				for index, info in enumerate(sizesInfo):
+					sizes.append({ "key": "size-" + str(index), "name": info, "price": sizesInfo[info] })
+
+				for index, info in enumerate(quantitiesInfo):
+					quantities.append({ "key": "quantity-" + str(index), "input": info, "price": quantitiesInfo[info] })
+
+				for index, info in enumerate(percentsInfo):
+					percents.append({ "key": "percent-" + str(index), "input": info, "price": percentsInfo[info] })
+
+				data["sizes"] = sizes
+				data["quantities"] = quantities
+				data["percents"] = percents
 
 				orders.append(data)
 
@@ -281,9 +395,16 @@ def view_payment(id):
 					status = "unfinishedOrders"
 
 			if errormsg == "":
-				totalCost = (subTotalCost * 0.13) + subTotalCost
+				totalCost = round((subTotalCost * 0.13) + subTotalCost, 2)
+				subTotalCost = round(subTotalCost, 2)
 
-				return { "orders": orders, "subTotalCost": round(subTotalCost, 2), "totalCost": round(totalCost, 2) }
+				if len(str(subTotalCost).split(".")[1]) < 2:
+					subTotalCost = str(subTotalCost) + "0"
+
+				if len(str(totalCost).split(".")[1]) < 2:
+					totalCost = str(totalCost) + "0"
+
+				return { "orders": orders, "subTotalCost": subTotalCost, "totalCost": totalCost }
 		else:
 			status = "noOrders"
 	else:

@@ -111,7 +111,7 @@ class Menu(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
 	parentMenuId = db.Column(db.Text)
-	name = db.Column(db.String(20))
+	name = db.Column(db.String(200))
 	image = db.Column(db.String(70))
 
 	def __init__(self, locationId, parentMenuId, name, image):
@@ -127,14 +127,16 @@ class Service(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
-	name = db.Column(db.String(20))
+	name = db.Column(db.String(200))
+	description = db.Column(db.String(200))
 	image = db.Column(db.String(70))
 	price = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, image, price):
+	def __init__(self, locationId, menuId, name, description, image, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
+		self.description = description
 		self.image = image
 		self.price = price
 
@@ -191,17 +193,19 @@ class Product(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
-	name = db.Column(db.String(20))
+	name = db.Column(db.String(200))
+	description = db.Column(db.String(200))
 	image = db.Column(db.String(70))
-	sizes = db.Column(db.String(150))
+	options = db.Column(db.Text)
 	price = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, image, sizes, price):
+	def __init__(self, locationId, menuId, name, description, image, options, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name
+		self.description = description
 		self.image = image
-		self.sizes = sizes
+		self.options = options
 		self.price = price
 
 	def __repr__(self):

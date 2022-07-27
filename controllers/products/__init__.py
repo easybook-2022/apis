@@ -24,28 +24,71 @@ def get_product_info(id):
 	if product != None:
 		cost = 0.00
 
-		datas = json.loads(product["sizes"])
+		options = json.loads(product["options"])
+
+		datas = options["sizes"]
 		sizes = []
 
 		for k, data in enumerate(datas):
+			price = float(data["price"])
+
 			sizes.append({
 				"key": "size-" + str(k),
 				"name": data["name"],
-				"price": float(data["price"]),
-				"selected": False if k > 0 else True
+				"price": price,
+				"selected": False
 			})
 
-		if len(datas) > 0:
-			cost = float(sizes[0]["price"])
-		else:
-			cost = float(product["price"])
+		datas = options["quantities"]
+		quantities = []
+
+		for k, data in enumerate(datas):
+			price = float(data["price"])
+
+			if len(str(price).split(".")[1]) < 2:
+				price = str(price) + "0"
+
+			quantities.append({
+				"key": "quantity-" + str(k),
+				"input": data["input"],
+				"price": price,
+				"selected": False
+			})
+
+		datas = options["percents"]
+		percents = []
+
+		for k, data in enumerate(datas):
+			price = float(data["price"])
+
+			if len(str(price).split(".")[1]) < 2:
+				price = str(price) + "0"
+
+			percents.append({
+				"key": "percent-" + str(k),
+				"input": data["input"],
+				"price": price,
+				"selected": False
+			})
+
+		if product["price"] != "":
+			cost = float(product["price"])			
 
 		image = json.loads(product["image"])
+
+		if product["price"] != "":
+			price = float(product["price"])
+
+			if len(str(price).split(".")[1]) < 2:
+				price = str(price) + "0"
+		else:
+			price = ""
+
 		info = {
 			"name": product["name"],
 			"productImage": image if image["name"] != "" else {"width": 300, "height": 300},
-			"sizes": sizes,
-			"price": float(product["price"]) if product["price"] != "" else 0,
+			"sizes": sizes, "quantities": quantities, "percents": percents,
+			"price": price,
 			"cost": cost,
 			"quantity": 1
 		}
@@ -84,7 +127,7 @@ def add_product():
 	menuid = request.form['menuid']
 	name = request.form['name']
 
-	sizes = request.form['sizes']
+	options = request.form['options']
 	price = request.form['price']
 	
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
@@ -99,8 +142,6 @@ def add_product():
 	numProducts = query("select count(*) as num from product where locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "' and name = '" + name + "'", True).fetchone()["num"]
 
 	if numProducts == 0:
-		price = price if len(sizes) > 0 else ""
-
 		isWeb = request.form.get("web")
 		imageData = json.dumps({"name": "", "width": 0, "height": 0})
 
@@ -131,7 +172,7 @@ def add_product():
 		if errormsg == "":
 			data = {
 				"locationId": locationid, "menuId": menuid, "name": name, "image": imageData,
-				"sizes": sizes, "price": price
+				"options": options, "price": price
 			}
 			columns = []
 			insert_data = []
@@ -154,7 +195,7 @@ def update_product():
 	menuid = request.form['menuid']
 	productid = request.form['productid']
 	name = request.form['name']
-	sizes = request.form['sizes']
+	options = request.form['options']
 	price = request.form['price']
 
 	product = query("select * from product where id = " + str(productid) + " and locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "'", True).fetchone()
@@ -166,7 +207,7 @@ def update_product():
 	if product != None:
 		new_data["name"] = name
 		new_data["price"] = price
-		new_data["sizes"] = sizes
+		new_data["options"] = options
 
 		isWeb = request.form.get("web")
 
