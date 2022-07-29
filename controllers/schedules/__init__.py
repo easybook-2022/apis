@@ -244,7 +244,7 @@ def get_exist_booking():
 	userid = content['userid']
 	serviceid = content['serviceid']
 
-	scheduled = query("select id from schedule where userId = " + str(userid) + " and serviceId = " + str(serviceid), True).fetchone()
+	scheduled = query("select id from schedule where userId = " + str(userid) + " and serviceId = " + str(serviceid) + " and not status = 'done'", True).fetchone()
 
 	return { "scheduleid": int(scheduled["id"]) if scheduled != None else -1 }
 
@@ -1139,7 +1139,7 @@ def get_cart_orderers(id):
 		adder = query("select * from user where id = " + str(data['adder']), True).fetchone()
 		numOrders = query("select count(*) as num from cart where adder = " + str(data['adder']) + " and locationId = " + str(id) + " and (status = 'checkout' or status = 'inprogress') and orderNumber = '" + data["orderNumber"] + "'", True).fetchone()["num"]
 
-		cartitem = query("select * from cart where orderNumber = " + str(data['orderNumber']), True).fetchone()
+		cartitem = query("select * from cart where orderNumber = '" + str(data['orderNumber']) + "'", True).fetchone()
 		userInput = json.loads(cartitem["userInput"])
 
 		cartOrderers.append({
@@ -1168,22 +1168,58 @@ def get_orders():
 	waitTime = datas[0]["waitTime"] if len(datas) > 0 else ""
 
 	for data in datas:
+		options = json.loads(data["options"])
+		sizes = options["sizes"]
+		quantities = options["quantities"]
+		percents = options["percents"]
+
 		product = query("select * from product where id = " + str(data['productId']), True).fetchone()
+		productOptions = json.loads(product["options"])
+		productSizes = productOptions["sizes"]
+		productQuantities = productOptions["quantities"]
+		productPercents = productOptions["percents"]
+
+		sizesInfo = {}
+		for info in productSizes:
+			if info["name"] in sizes:
+				sizesInfo[info["name"]] = float(info["price"])
+
+		quantitiesInfo = {}
+		for info in productQuantities:
+			if info["input"] in quantities:
+				quantitiesInfo[info["input"]] = float(info["price"])
+
+		percentsInfo = {}
+		for info in productPercents:
+			if info["input"] in percents:
+				percentsInfo[info["input"]] = float(info["price"])
+
 		quantity = int(data['quantity'])
-		sizes = json.loads(data['sizes'])
 		userInput = json.loads(data['userInput'])
 		cost = 0
-
-		for k, size in enumerate(sizes):
-			size['key'] = "size-" + str(k)
 
 		if product != None:
 			if product["price"] == "":
 				for size in sizes:
-					if size["selected"] == True:
-						cost = float(size["price"]) * quantity
+					cost += quantity * float(sizesInfo[size])
+
+				for quantity in quantities:
+					cost += quantity * float(quantitiesInfo[quantity])
 			else:
 				cost = float(product["price"]) * quantity
+
+		cartItemSizes = []
+		cartItemQuantities = []
+		cartItemPercents = []
+
+		for index, info in enumerate(sizesInfo):
+			cartItemSizes.append({ "key": "size-" + str(index), "name": info, "price": sizesInfo[info], "selected": info in sizes })
+
+		for index, info in enumerate(quantitiesInfo):
+			cartItemQuantities.append({ "key": "quantity-" + str(index), "input": info, "price": quantitiesInfo[info], "selected": info in quantities })
+
+		for index, info in enumerate(percentsInfo):
+			cartItemPercents.append({ "key": "percent-" + str(index), "input": info, "price": percentsInfo[info], "selected": info in percents })
 
 		image = json.loads(product["image"]) if product != None else {"name": ""}
 		orders.append({
@@ -1192,7 +1228,7 @@ def get_orders():
 			"name": product["name"] if product != None else userInput['name'],
 			"note": data['note'],
 			"image": image if image["name"] != "" else {"width": 300, "height": 300},
-			"sizes": sizes, "quantity": quantity,
+			"sizes": cartItemSizes, "quantities": cartItemQuantities, "percents": cartItemPercents, "quantity": quantity,
 			"cost": cost
 		})
 

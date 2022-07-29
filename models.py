@@ -112,12 +112,14 @@ class Menu(db.Model):
 	locationId = db.Column(db.Integer)
 	parentMenuId = db.Column(db.Text)
 	name = db.Column(db.String(200))
+	description = db.Column(db.String(200))
 	image = db.Column(db.String(70))
 
-	def __init__(self, locationId, parentMenuId, name, image):
+	def __init__(self, locationId, parentMenuId, name, description, image):
 		self.locationId = locationId
 		self.parentMenuId = parentMenuId
 		self.name = name
+		self.description = description
 		self.image = image
 
 	def __repr__(self):
@@ -128,7 +130,7 @@ class Service(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(200))
-	description = db.Column(db.String(200))
+	description = db.Column(db.String(300))
 	image = db.Column(db.String(70))
 	price = db.Column(db.String(10))
 
@@ -194,7 +196,7 @@ class Product(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.Text)
 	name = db.Column(db.String(200))
-	description = db.Column(db.String(200))
+	description = db.Column(db.String(300))
 	image = db.Column(db.String(70))
 	options = db.Column(db.Text)
 	price = db.Column(db.String(10))
@@ -219,22 +221,18 @@ class Cart(db.Model):
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	options = db.Column(db.Text)
-	others = db.Column(db.Text)
-	sizes = db.Column(db.String(225))
 	note = db.Column(db.String(100))
 	status = db.Column(db.String(10))
-	orderNumber = db.Column(db.String(10))
+	orderNumber = db.Column(db.String(20))
 	waitTime = db.Column(db.String(50))
 
-	def __init__(self, locationId, productId, userInput, quantity, adder, options, others, sizes, note, status, orderNumber, waitTime):
+	def __init__(self, locationId, productId, userInput, quantity, adder, options, note, status, orderNumber, waitTime):
 		self.locationId = locationId
 		self.productId = productId
 		self.userInput = userInput
 		self.quantity = quantity
 		self.adder = adder
 		self.options = options
-		self.others = others
-		self.sizes = sizes
 		self.note = note
 		self.status = status
 		self.orderNumber = orderNumber

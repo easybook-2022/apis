@@ -50,7 +50,7 @@ def get_menus(id):
 						if len(str(price).split(".")[1]) < 2:
 							price = str(price) + "0"
 					else:
-						price = None
+						price = ""
 
 					items.append({
 						"key": "product-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "name": data["name"], "description": data["description"], 
@@ -68,11 +68,11 @@ def get_menus(id):
 						if len(str(price).split(".")[1]) < 2:
 							price = str(price) + "0"
 					else:
-						price = None
+						price = ""
 
 					items.append({
-						"key": "service-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], 
-						"name": data["name"], "price": price, 
+						"key": "service-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "name": data["name"], "description": data["description"], 
+						"price": price, 
 						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "service",
 						"show": False
 					})
@@ -105,7 +105,7 @@ def get_menus(id):
 								if len(str(price).split(".")[1]) < 2:
 									price = str(price) + "0"
 							else:
-								price = None
+								price = ""
 
 							innerItems.append({
 								"key": "product-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "name": data["name"], "description": data["description"], 
@@ -125,7 +125,7 @@ def get_menus(id):
 								if len(str(price).split(".")[1]) < 2:
 									price = str(price) + "0"
 							else:
-								price = None
+								price = ""
 
 							innerItems.append({
 								"key": "service-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], 
@@ -161,7 +161,7 @@ def get_menus(id):
 						if len(str(price).split(".")[1]) < 2:
 							price = str(price) + "0"
 					else:
-						price = None
+						price = ""
 
 					items.append({
 						"key": "product-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "name": data["name"], "description": data["description"], 
@@ -179,11 +179,11 @@ def get_menus(id):
 						if len(str(price).split(".")[1]) < 2:
 							price = str(price) + "0"
 					else:
-						price = None
+						price = ""
 
 					items.append({
-						"key": "service-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], 
-						"name": data["name"], "price": price, 
+						"key": "service-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "name": data["name"], "description": data["description"], 
+						"price": price, 
 						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "service",
 						"show": False
 					})
@@ -194,33 +194,38 @@ def get_menus(id):
 	errormsg = ""
 	status = ""
 
-	list = getOtherMenu(id, "") # list
-	menuPhotos = []
-	info = json.loads(location["info"])
+	if location != None:
+		list = getOtherMenu(id, "") # list
+		menuPhotos = []
+		info = json.loads(location["info"])
 
-	if len(info["menuPhotos"]) > 0:
-		photos = info["menuPhotos"]
-		row = []
-		rownum = 0
-		
-		for photo in photos:
-			row.append({ "key": "row-" + str(rownum), "photo": { "name": photo["image"], "width": photo["width"], "height": photo["height"] } })
-			rownum += 1
-
-			if len(row) == 3:
-				menuPhotos.append({ "key": "menu-" + str(len(menuPhotos)), "row": row })
-				row = []
-
-		if len(row) > 0:
-			leftover = 3 - len(row)
-
-			for k in range(leftover):
-				row.append({ "key": "row-" + str(rownum) })
+		if len(info["menuPhotos"]) > 0:
+			photos = info["menuPhotos"]
+			row = []
+			rownum = 0
+			
+			for photo in photos:
+				row.append({ "key": "row-" + str(rownum), "photo": { "name": photo["image"], "width": photo["width"], "height": photo["height"] } })
 				rownum += 1
 
-			menuPhotos.append({ "key": "menu-" + str(len(menuPhotos)), "row": row })
+				if len(row) == 3:
+					menuPhotos.append({ "key": "menu-" + str(len(menuPhotos)), "row": row })
+					row = []
 
-	return { "list": list, "photos": menuPhotos }
+			if len(row) > 0:
+				leftover = 3 - len(row)
+
+				for k in range(leftover):
+					row.append({ "key": "row-" + str(rownum) })
+					rownum += 1
+
+				menuPhotos.append({ "key": "menu-" + str(len(menuPhotos)), "row": row })
+
+		return { "list": list, "photos": menuPhotos }
+	else:
+		errormsg = "Location doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/remove_menu/<id>")
 def remove_menu(id):

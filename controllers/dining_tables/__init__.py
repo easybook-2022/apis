@@ -63,7 +63,7 @@ def get_ordering_tables(id):
 
 		return { "tables": tables }
 	else:
-		errormsg = ""
+		errormsg = "Location doesn't exist"
 		status = ""
 
 	return { "errormsg": errormsg, "status": status }, 400
@@ -156,6 +156,7 @@ def order_meal():
 	percents = content['percents']
 	image = content['image']
 	quantity = int(content['quantity'])
+	note = content['note']
 
 	table = query("select * from dining_table where tableId = '" + str(tableid) + "'", True).fetchone()
 
@@ -175,7 +176,8 @@ def order_meal():
 			"quantities": quantities,
 			"percents": percents,
 			"image": image,
-			"quantity": quantity
+			"quantity": quantity,
+			"note": note
 		})
 
 		query("update dining_table set orders = '" + json.dumps(orders) + "' where id = " + str(table["id"]))
@@ -312,7 +314,7 @@ def view_payment(id):
 	errormsg = ""
 	status = ""
 
-	table = query("select orders from dining_table where id = " + str(id), True).fetchone()
+	table = query("select name, orders from dining_table where id = " + str(id), True).fetchone()
 
 	if table != None:
 		datas = json.loads(table["orders"])
@@ -404,7 +406,7 @@ def view_payment(id):
 				if len(str(totalCost).split(".")[1]) < 2:
 					totalCost = str(totalCost) + "0"
 
-				return { "orders": orders, "subTotalCost": subTotalCost, "totalCost": totalCost }
+				return { "orders": orders, "name": table["name"], "subTotalCost": subTotalCost, "totalCost": totalCost }
 		else:
 			status = "noOrders"
 	else:

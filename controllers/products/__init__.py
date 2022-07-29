@@ -32,6 +32,9 @@ def get_product_info(id):
 		for k, data in enumerate(datas):
 			price = float(data["price"])
 
+			if len(str(price).split(".")[1]) < 2:
+				price = str(price) + "0"
+
 			sizes.append({
 				"key": "size-" + str(k),
 				"name": data["name"],

@@ -350,44 +350,51 @@ def move():
 
 @app.route("/insert_real_into_table")
 def insert_real_into_table():
-	query("delete from product where id > 11")
-	query("delete from menu where id > 4")
+	# query("delete from product where id > 11")
+	# query("delete from menu where id > 4")
 
-	query("alter table product auto_increment = 12")
-	query("alter table menu auto_increment = 5")
+	# query("alter table product auto_increment = 12")
+	# query("alter table menu auto_increment = 5")
+
+	# query("delete from service")
+	# query("delete from menu")
+
+	# query("alter table service auto_increment = 1")
+	# query("alter table menu auto_increment = 1")
+
 	list = [
 		{
 			"menuName": "Mon Khai Vi - Appetizers",
 			"meals": [
 				{ "name": "BÒ TÁI CHANH", "price": "15.95", "description": "Beef Ceviche in Lime Juice Selag" },
-				{ "name": "CHẢ GIÒ TÔM THỊT (2–4 CUỐN)", "description": "Deep Fried Spring Rolls. \"Pork and Shrimp\" (2-4 rolls)", "quantities": [{ "name": "2 Rolls", "price": "7.95" }, { "name": "4 Rolls", "price": "11.95" }] },
-				{ "name": "GÒI CUỐN TÔM THỊT (2-4 CUỐN)", "description": "Fresh Rolls with Shrimp and Pork (2-4 rolls)", "quantities": [{ "name": "2 Rolls", "price": "7.95" }, { "name": "4 Rolls", "price": "11.95" }] },
-				{ "name": "GỒI CUỐN BỐN MÙA", "description": "Fresh Rolls with Avocado, Grilled Beef - Chicken - Shrimp (2-4 rolls)", "quantities": [{ "name": "4 Rolls", "price": "14.95" }] },
-				{ "name": "GÒI CUỐN GÀ NƯỚNG (2-4 CUỐN)", "description": "Fresh Rolls with Grilled Chicken (2-4 rolls)", "quantities": [{ "name": "2 Rolls", "price": "7.95" }, { "name": "4 Rolls", "price": "11.95" }] },
-				{ "name": "GÓI CUỐN NEM NƯỚNG (2-4 CUỐN)", "description": "Fresh Rolls with Pork Meatballs (2-4 rolls)", "quantities": [{ "name": "2 Rolls", "price": "7.95" }, { "name": "4 Rolls", "price": "11.95" }] },
-				{ "name": "GÓI CUỐN BÒ NƯỚNG (2-4 CUỐN)", "description": "Fresh Rolls with Grilled Beef (2-4 rolls)", "quantities": [{ "name": "2 Rolls", "price": "7.95" }, { "name": "4 Rolls", "price": "11.95" }] },
-				{ "name": "GỎI CUỐN THỊT NƯỚNG (24 CUỐN)", "description": "Fresh Rolls with Grilled Pork (2-4 rolls)", "quantities": [{ "name": "2 Rolls", "price": "7.95" }, { "name": "4 Rolls", "price": "11.95" }] },
-				{ "name": "GỒI CUỐN ĐẬU HỦ (2-4 CUỐN)", "description": "Fresh Rolls with Tofu (2-4 rolls)", "quantities": [{ "name": "2 Rolls", "price": "7.95" }, { "name": "4 Rolls", "price": "11.95" }] },
-				{ "name": "GỎI NGÓ SEN TÔM THỊT", "description": "Lotus Root with Pork and Shrimp Salad (Spicy and Peanut)", "quantities": [{ "name": "4 Rolls", "price": "12.95" }] },
-				{ "name": "GỎI XOÀI TÔM THÁI LAN", "description": "Thai Shrimp Mango Salad (Spicy and Peanut)", "quantities": [{ "name": "4 Rolls", "price": "11.90" }] },
-				{ "name": "CÁNH GÀ CHIẾN (BƠ NƯỚC MẮM, I LOVE PHỞ SAUSE, RANG MUỐI)", "description": "Deep Fired Chicken Wings with Butter or Fish Sause, I LOVE PHO Sause, Roasted Salt", "quantities": [{ "name": "4 Rolls", "price": "12.90" }] },
-				{ "name": "GỎI GÀ", "description": "Chicken Salad (Spicy and Peanut)", "quantities": [{ "name": "4 Rolls", "price": "12.90" }] },
-				{ "name": "GỞI VỊT", "description": "Duck Salad (Spicy and Peanu", "quantities": [{ "name": "4 Rolls", "price": "13.90" }] },
-				{ "name": "CHẢ MỰC CHIẾN", "description": "Deep Fried Squid Cake", "quantities": [{ "name": "4 Rolls", "price": "16.90" }] },
-				{ "name": "MỰC KHOANH VÀ KHOAI TÂY TÂM BỘT CHIÊN GIÒN", "description": "Calamari with Wedge Fried Pototes", "quantities": [{ "name": "4 Rolls", "price": "14.90" }] },
-				{ "name": "TÔM VÀ KHOAI TÂY TÂM BỘT CHIÊN GIÒN", "description": "Shrimp Popcom with Wedges Fried Potatoes", "quantities": [{ "name": "4 Rolls", "price": "16.90" }] },
-				{ "name": "ĐẬU HỦ CHIẾN", "description": "Deep Fried Tofu", "quantities": [{ "name": "4 Rolls", "price": "11.90" }] }
+				{ "name": "CHẢ GIÒ TÔM THỊT (2–4 CUỐN)", "description": "Deep Fried Spring Rolls. \"Pork and Shrimp\" (2-4 rolls)", "quantities": [{ "input": "2 Rolls", "price": "7.95" }, { "input": "4 Rolls", "price": "11.95" }] },
+				{ "name": "GÒI CUỐN TÔM THỊT (2-4 CUỐN)", "description": "Fresh Rolls with Shrimp and Pork (2-4 rolls)", "quantities": [{ "input": "2 Rolls", "price": "7.95" }, { "input": "4 Rolls", "price": "11.95" }] },
+				{ "name": "GỒI CUỐN BỐN MÙA", "description": "Fresh Rolls with Avocado, Grilled Beef - Chicken - Shrimp (2-4 rolls)", "quantities": [{ "input": "4 Rolls", "price": "14.95" }] },
+				{ "name": "GÒI CUỐN GÀ NƯỚNG (2-4 CUỐN)", "description": "Fresh Rolls with Grilled Chicken (2-4 rolls)", "quantities": [{ "input": "2 Rolls", "price": "7.95" }, { "input": "4 Rolls", "price": "11.95" }] },
+				{ "name": "GÓI CUỐN NEM NƯỚNG (2-4 CUỐN)", "description": "Fresh Rolls with Pork Meatballs (2-4 rolls)", "quantities": [{ "input": "2 Rolls", "price": "7.95" }, { "input": "4 Rolls", "price": "11.95" }] },
+				{ "name": "GÓI CUỐN BÒ NƯỚNG (2-4 CUỐN)", "description": "Fresh Rolls with Grilled Beef (2-4 rolls)", "quantities": [{ "input": "2 Rolls", "price": "7.95" }, { "input": "4 Rolls", "price": "11.95" }] },
+				{ "name": "GỎI CUỐN THỊT NƯỚNG (24 CUỐN)", "description": "Fresh Rolls with Grilled Pork (2-4 rolls)", "quantities": [{ "input": "2 Rolls", "price": "7.95" }, { "input": "4 Rolls", "price": "11.95" }] },
+				{ "name": "GỒI CUỐN ĐẬU HỦ (2-4 CUỐN)", "description": "Fresh Rolls with Tofu (2-4 rolls)", "quantities": [{ "input": "2 Rolls", "price": "7.95" }, { "input": "4 Rolls", "price": "11.95" }] },
+				{ "name": "GỎI NGÓ SEN TÔM THỊT", "description": "Lotus Root with Pork and Shrimp Salad (Spicy and Peanut)", "quantities": [{ "input": "4 Rolls", "price": "12.95" }] },
+				{ "name": "GỎI XOÀI TÔM THÁI LAN", "description": "Thai Shrimp Mango Salad (Spicy and Peanut)", "quantities": [{ "input": "4 Rolls", "price": "11.90" }] },
+				{ "name": "CÁNH GÀ CHIẾN (BƠ NƯỚC MẮM, I LOVE PHỞ SAUSE, RANG MUỐI)", "description": "Deep Fired Chicken Wings with Butter or Fish Sause, I LOVE PHO Sause, Roasted Salt", "quantities": [{ "input": "4 Rolls", "price": "12.90" }] },
+				{ "name": "GỎI GÀ", "description": "Chicken Salad (Spicy and Peanut)", "quantities": [{ "input": "4 Rolls", "price": "12.90" }] },
+				{ "name": "GỞI VỊT", "description": "Duck Salad (Spicy and Peanu", "quantities": [{ "input": "4 Rolls", "price": "13.90" }] },
+				{ "name": "CHẢ MỰC CHIẾN", "description": "Deep Fried Squid Cake", "quantities": [{ "input": "4 Rolls", "price": "16.90" }] },
+				{ "name": "MỰC KHOANH VÀ KHOAI TÂY TÂM BỘT CHIÊN GIÒN", "description": "Calamari with Wedge Fried Pototes", "quantities": [{ "input": "4 Rolls", "price": "14.90" }] },
+				{ "name": "TÔM VÀ KHOAI TÂY TÂM BỘT CHIÊN GIÒN", "description": "Shrimp Popcom with Wedges Fried Potatoes", "quantities": [{ "input": "4 Rolls", "price": "16.90" }] },
+				{ "name": "ĐẬU HỦ CHIẾN", "description": "Deep Fried Tofu", "quantities": [{ "input": "4 Rolls", "price": "11.90" }] }
 			]
 		},
 		{
 			"menuName": "Banh Cuon - Rice Rolls",
 			"meals": [
-				{ "name": "BÁNH CUỐN CHẢ LỤA, BÁNH CÔNG", "description": "Steamed Rice Rolls with Vietnamese Ham, Shrimp Cake", "quantities": [{ "name": "4 Rolls", "price": "13.50" }] },
-				{ "name": "BÁNH CUỐN CHÀ LỤA", "description": "Steamed Rice Rolls with Vietnamese Pork Ham", "quantities": [{ "name": "4 Rolls", "price": "11.90" }] },
-				{ "name": "BÁNH CUỐN NÓNG", "description": "Steamed Ground Pork Rice Rolls", "quantities": [{ "name": "4 Rolls", "price": "11.90" }] },
-				{ "name": "BÁNH ƯỚT CHẢ LỤA, BÁNH CÔNG", "description": "Steamed Plain Rice Roll with Vietnamese Pork Ham & Shrimp Cake", "quantities": [{ "name": "4 Rolls", "price": "13.50" }] },
-				{ "name": "BÁNH ƯỚT CHẢ LỤA", "description": "Steamed Plain Rice Roll with Vietnamese Pork Ham", "quantities": [{ "name": "4 Rolls", "price": "11.90" }] },
-				{ "name": "BÁNH ƯỚT NÓNG", "description": "Steamed Plain Rice Rolls", "quantities": [{ "name": "4 Rolls", "price": "11.90" }] }
+				{ "name": "BÁNH CUỐN CHẢ LỤA, BÁNH CÔNG", "description": "Steamed Rice Rolls with Vietnamese Ham, Shrimp Cake", "quantities": [{ "input": "4 Rolls", "price": "13.50" }] },
+				{ "name": "BÁNH CUỐN CHÀ LỤA", "description": "Steamed Rice Rolls with Vietnamese Pork Ham", "quantities": [{ "input": "4 Rolls", "price": "11.90" }] },
+				{ "name": "BÁNH CUỐN NÓNG", "description": "Steamed Ground Pork Rice Rolls", "quantities": [{ "input": "4 Rolls", "price": "11.90" }] },
+				{ "name": "BÁNH ƯỚT CHẢ LỤA, BÁNH CÔNG", "description": "Steamed Plain Rice Roll with Vietnamese Pork Ham & Shrimp Cake", "quantities": [{ "input": "4 Rolls", "price": "13.50" }] },
+				{ "name": "BÁNH ƯỚT CHẢ LỤA", "description": "Steamed Plain Rice Roll with Vietnamese Pork Ham", "quantities": [{ "input": "4 Rolls", "price": "11.90" }] },
+				{ "name": "BÁNH ƯỚT NÓNG", "description": "Steamed Plain Rice Rolls", "quantities": [{ "input": "4 Rolls", "price": "11.90" }] }
 			]
 		},
 		{
@@ -749,13 +756,21 @@ def insert_real_into_table():
 		}
 	]
 
+
 	def iterateList(list, pIndex, pId):
 		for index, info in enumerate(list):
+			description = ''
+
+			if "description" in info:
+				description = info["description"].replace("'", "\\'")
+
 			sql = "insert into menu "
-			sql += "(locationId, parentMenuId, name, image) "
-			sql += "values ("
+			sql += "(locationId, parentMenuId, name, description, image)"
+			sql += " values "
+			sql += "("
 			sql += "1, '" + str(pId) + "', "
 			sql += "'" + info["menuName"] + "', "
+			sql += "'" + description + "', "
 			sql += "'{\"name\":\"\", \"width\": 300, \"height\": 300}'"
 			sql += ")"
 			id = query(sql, True).lastrowid
@@ -763,32 +778,55 @@ def insert_real_into_table():
 			if "menus" in info:
 				iterateList(info["menus"], index, id)
 			
-			if "meals" in info:
-				for meal in info["meals"]:
+			if "meals" in info or "services" in info:
+				if "meals" in info:
+					infoList = "meals"
+				else:
+					infoList = "services"
+
+				for eachInfo in info[infoList]:
 					options = {"sizes":[],"quantities":[],"percents":[]}
+					description = ''
 					price = ''
 
-					if "sizes" in meal:
-						options["sizes"] = meal["sizes"]
+					if "sizes" in eachInfo:
+						options["sizes"] = eachInfo["sizes"]
 
-					if "quantities" in meal:
-						options["quantities"] = meal["quantities"]
+					if "quantities" in eachInfo:
+						options["quantities"] = eachInfo["quantities"]
 
-					if "price" in meal:
-						price = str(meal["price"])
+					if "price" in eachInfo:
+						price = str(eachInfo["price"])
 
-					sql = "insert into product "
-					sql += "(locationId, menuId, name, description, image, options, price)"
-					sql += " values "
-					sql += "("
-					sql += "1, "
-					sql += "'" + str(id) + "', "
-					sql += "'" + meal["name"].replace("'", "\\'") + "', "
-					sql += "'" + meal["description"].replace("'", "\\'") + "', "
-					sql += "'{\"name\":\"\", \"width\": 300, \"height\": 300}', "
-					sql += "'" + json.dumps(options) + "', "
-					sql += "'" + price + "'"
-					sql += ")"
+					if "description" in eachInfo:
+						description = eachInfo["description"].replace("'", "\\'")
+
+					if "meals" in info:
+						sql = "insert into product "
+						sql += "(locationId, menuId, name, description, image, options, price)"
+						sql += " values "
+						sql += "("
+						sql += "1, "
+						sql += "'" + str(id) + "', "
+						sql += "'" + eachInfo["name"].replace("'", "\\'") + "', "
+						sql += "'" + description + "', "
+						sql += "'{\"name\":\"\", \"width\": 300, \"height\": 300}', "
+						sql += "'" + json.dumps(options) + "', "
+						sql += "'" + price + "'"
+						sql += ")"
+					else:
+						sql = "insert into service "
+						sql += "(locationId, menuId, name, description, image, price)"
+						sql += " values "
+						sql += "("
+						sql += "1, "
+						sql += "'" + str(id) + "', "
+						sql += "'" + eachInfo["name"].replace("'", "\\'") + "', "
+						sql += "'" + description + "', "
+						sql += "'{\"name\":\"\", \"width\": 300, \"height\": 300}', "
+						sql += "'" + price + "'"
+						sql += ")"
+
 					query(sql)
 
 	iterateList(list, 0, "")
