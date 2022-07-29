@@ -1200,11 +1200,11 @@ def get_orders():
 
 		if product != None:
 			if product["price"] == "":
-				for size in sizes:
-					cost += quantity * float(sizesInfo[size])
+				for info in sizes:
+					cost += quantity * float(sizesInfo[info])
 
-				for quantity in quantities:
-					cost += quantity * float(quantitiesInfo[quantity])
+				for info in quantities:
+					cost += quantity * float(quantitiesInfo[info])
 			else:
 				cost = float(product["price"]) * quantity
 

@@ -71,11 +71,11 @@ def get_cart_items(id):
 		image = json.loads(product["image"]) if product != None else {"name": ""}
 
 		if len(sizes) > 0 or len(quantities) > 0:
-			for size in sizes:
-				cost += float(sizesInfo[size]) * quantity
+			for info in sizes:
+				cost += float(sizesInfo[info]) * quantity
 
-			for quantity in quantities:
-				cost += float(quantitiesInfo[quantity]) * quantity
+			for info in quantities:
+				cost += float(quantitiesInfo[info]) * quantity
 		else:
 			cost = float(product["price"]) * quantity
 
@@ -311,11 +311,11 @@ def edit_cart_item(id):
 
 		if product != None:
 			if product["price"] == "":
-				for size in sizes:
-					cost += quantity * float(sizesInfo[size])
+				for info in sizes:
+					cost += quantity * float(sizesInfo[info])
 
-				for quantity in quantities:
-					cost += quantity * float(quantitiesInfo[quantity])
+				for info in quantities:
+					cost += quantity * float(quantitiesInfo[info])
 			else:
 				cost += quantity * float(product["price"])
 		else:
@@ -422,11 +422,11 @@ def see_orders(id):
 		cost = 0.00
 
 		if product["price"] == "":
-			for size in sizes:
-				cost += quantity * float(sizesInfo[size])
+			for info in sizes:
+				cost += quantity * float(sizesInfo[info])
 
-			for quantity in quantities:
-				cost += quantity * float(quantitiesInfo[quantity])
+			for info in quantities:
+				cost += quantity * float(quantitiesInfo[info])
 		else:
 			cost = quantity * float(product["price"])
 

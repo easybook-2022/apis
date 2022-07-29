@@ -28,16 +28,6 @@ class User(db.Model):
 	def __repr__(self):
 		return '<User %r>' % self.cellnumber
 
-	@property
-	def serialize(self):
-		return {
-			"id": self.id, 
-			"cellnumber": self.cellnumber,
-			"password": self.password,
-			"username": self.username,
-			"info": self.info
-		}
-
 class Owner(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	cellnumber = db.Column(db.String(15), unique=True)
@@ -110,7 +100,7 @@ class DiningTable(db.Model):
 class Menu(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
-	parentMenuId = db.Column(db.Text)
+	parentMenuId = db.Column(db.String(10))
 	name = db.Column(db.String(200))
 	description = db.Column(db.String(200))
 	image = db.Column(db.String(70))
@@ -128,7 +118,7 @@ class Menu(db.Model):
 class Service(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
-	menuId = db.Column(db.Text)
+	menuId = db.Column(db.String(10))
 	name = db.Column(db.String(200))
 	description = db.Column(db.String(300))
 	image = db.Column(db.String(70))
@@ -150,7 +140,7 @@ class Schedule(db.Model):
 	userId = db.Column(db.Integer)
 	workerId = db.Column(db.Integer)
 	locationId = db.Column(db.Integer)
-	menuId = db.Column(db.Text)
+	menuId = db.Column(db.String(10))
 	serviceId = db.Column(db.Integer)
 	userInput = db.Column(db.String(70))
 	time = db.Column(db.String(15))
@@ -194,7 +184,7 @@ class Schedule(db.Model):
 class Product(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
-	menuId = db.Column(db.Text)
+	menuId = db.Column(db.String(10))
 	name = db.Column(db.String(200))
 	description = db.Column(db.String(300))
 	image = db.Column(db.String(70))
