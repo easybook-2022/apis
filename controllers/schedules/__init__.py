@@ -363,7 +363,7 @@ def make_appointment():
 
 			# recreate blocked times
 			for info in blocked:
-				time = info["time"]
+				time = info["newTime"]
 				day = time["day"]
 				month = time["month"]
 				date = time["date"]
@@ -371,17 +371,19 @@ def make_appointment():
 				hour = time["hour"]
 				minute = time["minute"]
 
-				sql = "select id, time from schedule where "
+				sql = "select id, day, month, date, year, hour, minute from schedule where "
 				sql += "day = '" + str(day) + "' and "
 				sql += "month = '" + str(month) + "' and "
 				sql += "date = " + str(date) + " and "
 				sql += "year = " + str(year) + " and "
 				sql += "hour = " + str(hour) + " and "
-				sql += "minute = " + str(minute)
+				sql += "minute = " + str(minute) + " and "
+				sql += "workerId = " + str(workerid) + " and "
+				sql += "(status = 'w_confirmed' or status = 'confirmed')"
 				data = query(sql, True).fetchone()
 
-				if data != None:
-					if ("\"id\": " + str(data["id"])) not in json.dumps(blocked):
+				if data != None: # new block hit confirmed schedule
+					if str(data["id"]) != str(scheduleid):
 						status = "scheduleConflict"
 
 			if status == "":
@@ -404,7 +406,7 @@ def make_appointment():
 					sql = "update schedule set status = 'blocked', "
 					sql += "time = " + info["newUnix"] + ", "
 					sql += "day = '" + day + "', month = '" + month + "', date = " + date + ", year = " + year + ", "
-					sql += "hour = " + hour + ", minute = " + minute + " "
+					sql += "hour = " + hour + ", minute = " + minute + ", workerId = " + str(workerid) + " "
 					sql += "where id = " + str(info["id"])
 
 					query(sql)
