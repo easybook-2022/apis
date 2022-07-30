@@ -41,7 +41,7 @@ def removeBlockedSchedules(time, workerId):
 		scheduled = query(sql, True).fetchone()
 
 		if scheduled != None:
-			if scheduled["status"] == "confirmed":
+			if scheduled["status"] == "confirmed" or scheduled["status"] == "w_confirmed":
 				blockedEnd = True
 			else:
 				if scheduled["status"] == "cancel_blocked" or scheduled["status"] == "blocked":
@@ -215,7 +215,7 @@ def get_appointment_info(id):
 			"locationId": int(locationId), 
 			"serviceId": int(serviceId) if serviceId > -1 else None, 
 			"time": { "day": day, "month": month, "date": date, "year": year, "hour": hour, "minute": minute }, 
-			"unix": int(schedule["time"]),
+			#"unix": int(schedule["time"]),
 			"note": schedule["note"],
 			"worker": worker,
 			"blocked": blockedSchedules
@@ -346,7 +346,7 @@ def make_appointment():
 	sql += "year = " + str(clientTime["year"]) + " and "
 	sql += "hour = " + str(clientTime["hour"]) + " and "
 	sql += "minute = " + str(clientTime["minute"]) + " and "
-	sql += "workerId = " + str(workerid)
+	sql += "workerId = " + str(workerid) + " and not status = 'done'"
 	scheduled = query(sql, True).fetchone()
 
 	if scheduled == None or "\"unix\":" + unix in json.dumps(blocked).replace(" ", ""):
@@ -463,6 +463,8 @@ def make_appointment():
 	else:
 		status = scheduled["status"]
 
+	print(status)
+
 	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/book_walk_in", methods=["POST"])
@@ -510,7 +512,11 @@ def book_walk_in():
 		valid = True
 		timeDisplay = "right now"
 
-	while valid == False:
+	date_time = datetime.datetime(year, month, day, hour, minute)
+	k = 0
+
+	while valid == False and k < 10:
+		k += 1
 		bTimeInfo = bTime.split(":")
 		eTimeInfo = eTime.split(":")
 
@@ -537,18 +543,17 @@ def book_walk_in():
 		eTime = str(eTimeInfo[0]) + ":" + ("0" + str(eTimeInfo[1]) if eTimeInfo[1] < 10 else str(eTimeInfo[1]))
 
 		if eTime == "0:00":
-			new_date = date_time + datetime.timedelta(days=1)
-			date_time = new_date
+			date_time = date_time + datetime.timedelta(days=1)
 			date_time_info = str(date_time).split(" ")
 			date_date = date_time_info[0].split("-")
-			date_year = str(date_date[0])
-			date_month = monthsArr[int(date_date[1]) - 1]
-			date_day = str(int(date_date[2]))
-			date_weekday = daysArr[date_time.weekday()]
+			clientTime["year"] = str(date_date[0])
+			clientTime["month"] = monthsArr[int(date_date[1]) - 1]
+			clientTime["date"] = str(int(date_date[2]))
+			clientTime["day"] = daysArr[date_time.weekday()]
 
 		timeInfo = bTime.split(":")
-		hour = int(timeInfo[0])
-		minute = int(timeInfo[1])
+		clientTime["hour"] = int(timeInfo[0])
+		clientTime["minute"] = int(timeInfo[1])
 
 		sql = "select count(*) as num from schedule where "
 		sql += "day = '" + clientTime["day"] + "' and "
@@ -556,26 +561,37 @@ def book_walk_in():
 		sql += "date = " + str(clientTime["date"]) + " and "
 		sql += "year = " + str(clientTime["year"]) + " and "
 		sql += "hour = " + str(clientTime["hour"]) + " and "
-		sql += "minute = " + str(clientTime["minute"])
-		sql += " and workerId = " + str(workerid)
+		sql += "minute = " + str(clientTime["minute"]) + " and "
+		sql += "workerId = " + str(workerid)
+
 		scheduled = query(sql, True).fetchone()["num"]
 
 		if scheduled == 0:
 			# check if worker is available at computing time
 			worker = query("select hours from owner where id = " + str(workerid), True).fetchone()
-			hours = json.loads(worker.hours)
+			hours = json.loads(worker["hours"])
 
 			day = clientTime["day"]
 			hour = clientTime["hour"]
 			minute = clientTime["minute"]
-			calcTime = int(str(hour) + "" + str(minute))
+			calcTime = int(
+				("0" + str(hour) if str(hour) == "0" else str(hour))
+				+ "" + 
+				("0" + str(minute) if str(minute) == "0" else str(minute))
+			)
 
 			if day[:3] in hours and hours[day[:3]]["working"] == True:
 				opentime = hours[day[:3]]["opentime"]
 				closetime = hours[day[:3]]["closetime"]
 
-				opentime = int(opentime["hour"] + "" + opentime["minute"])
-				closetime = int(closetime["hour"] + "" + closetime["minute"])
+				openHour = "0" + opentime["hour"] if opentime["hour"] == "0" else opentime["hour"]
+				openMinute = "0" + opentime["minute"] if opentime["minute"] == "0" else opentime["minute"]
+
+				closeHour = "0" + closetime["hour"] if closetime["hour"] == "0" else closetime["hour"]
+				closeMinute = "0" + closetime["minute"] if closetime["minute"] == "0" else closetime["minute"]
+
+				opentime = int(openHour + "" + openMinute)
+				closetime = int(closeHour + "" + closeMinute)
 
 				if calcTime >= opentime and calcTime <= closetime:
 					valid = True
@@ -588,7 +604,7 @@ def book_walk_in():
 	data = {
 		"userId": -1,"workerId": workerid,"locationId": locationid,"menuId": -1,"serviceId": serviceid if serviceid != None else -1,
 		"userInput": json.dumps(client),"day": clientTime["day"], "month": clientTime["month"], "date": clientTime["date"], "year": clientTime["year"], 
-		"hour": clientTime["hour"], "minute": clientTime["minute"], "time": str(unix), "status": "confirmed","cancelReason": "","locationType": type,
+		"hour": clientTime["hour"], "minute": clientTime["minute"], "time": str(unix), "status": "w_confirmed","cancelReason": "","locationType": type,
 		"customers": 1,"note": note,"orders": "[]","info": "{}"
 	}
 
@@ -600,7 +616,20 @@ def book_walk_in():
 
 	query("insert into schedule (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")")
 
-	return { "msg": "success", "timeDisplay": timeDisplay }
+	location = query("select owners from location where id = " + str(locationid), True).fetchone()
+	owners = "(" + location["owners"][1:-1] + ")"
+
+	sql = "select id, info from owner where id in " + owners
+
+	owners = query(sql, True)
+	receiver = []
+
+	for owner in owners:
+		info = json.loads(owner["info"])
+
+		receiver.append("owner" + str(owner["id"]))
+
+	return { "msg": "success", "timeDisplay": timeDisplay, "receiver": receiver }
 
 @app.route("/remove_booking", methods=["POST"])
 def remove_booking():
@@ -998,7 +1027,7 @@ def done_service(id):
 
 	booker = schedule["userId"]
 
-	query("update schedule set status = 'done' where id = " + str(id))
+	query("delete from schedule where id = " + str(id))
 
 	time = schedule["day"] + " " + schedule["month"] + " " + str(schedule["date"]) + " " + str(schedule["year"]) + " " + str(schedule["hour"]) + " " + str(schedule["minute"])
 	removeBlockedSchedules(time, schedule["workerId"])
