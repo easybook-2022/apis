@@ -622,7 +622,7 @@ def get_workers_hour():
 			owners = {}
 
 			for data in datas:
-				scheduledDatas = query("select id, status, day, month, date, year, hour, minute from schedule where workerId = " + str(data["id"]) + " and (status = 'confirmed' or status = 'blocked')", True).fetchall()
+				scheduledDatas = query("select id, status, day, month, date, year, hour, minute from schedule where workerId = " + str(data["id"]) + " and ((status = 'confirmed' or status = 'w_confirmed') or status = 'blocked')", True).fetchall()
 				scheduled = {}
 
 				for scheduledData in scheduledDatas:
@@ -665,7 +665,7 @@ def get_workers_hour():
 			data = query("select * from owner where id = " + str(ownerid), True).fetchone()
 
 			if data != None:
-				scheduledDatas = query("select id, day, month, date, year, hour, minute from schedule where workerId = " + str(ownerid) + " and (status = 'confirmed' or status = 'blocked')", True).fetchall()
+				scheduledDatas = query("select id, day, month, date, year, hour, minute from schedule where workerId = " + str(ownerid) + " and ((status = 'confirmed' or status = 'w_confirmed') or status = 'blocked')", True).fetchall()
 				scheduled = {}
 
 				for scheduledData in scheduledDatas:

@@ -465,8 +465,6 @@ def make_appointment():
 	else:
 		status = scheduled["status"]
 
-	print(status)
-
 	return { "errormsg": errormsg, "status": status }, 400
 
 @app.route("/book_walk_in", methods=["POST"])
@@ -1154,7 +1152,8 @@ def get_appointments():
 			"time": time,
 			"serviceid": service["id"] if service != None else "",
 			"name": service["name"] if service != None else userInput['name'] if "name" in userInput else "",
-			"image": image if image["name"] != "" else {"width": 300, "height": 300}
+			"image": image if image["name"] != "" else {"width": 300, "height": 300},
+			"type": data["status"]
 		})
 
 	return { "appointments": appointments, "numappointments": len(appointments) }
