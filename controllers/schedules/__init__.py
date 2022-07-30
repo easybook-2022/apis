@@ -244,7 +244,7 @@ def get_exist_booking():
 	userid = content['userid']
 	serviceid = content['serviceid']
 
-	scheduled = query("select id from schedule where userId = " + str(userid) + " and serviceId = " + str(serviceid) + " and not status = 'done'", True).fetchone()
+	scheduled = query("select id from schedule where userId = " + str(userid) + " and serviceId = " + str(serviceid), True).fetchone()
 
 	return { "scheduleid": int(scheduled["id"]) if scheduled != None else -1 }
 
@@ -346,7 +346,7 @@ def make_appointment():
 	sql += "year = " + str(clientTime["year"]) + " and "
 	sql += "hour = " + str(clientTime["hour"]) + " and "
 	sql += "minute = " + str(clientTime["minute"]) + " and "
-	sql += "workerId = " + str(workerid) + " and not status = 'done'"
+	sql += "workerId = " + str(workerid)
 	scheduled = query(sql, True).fetchone()
 
 	if scheduled == None or "\"unix\":" + unix in json.dumps(blocked).replace(" ", ""):
@@ -780,7 +780,7 @@ def salon_change_appointment():
 		sql += "year = " + str(clientTime["year"]) + " and "
 		sql += "hour = " + str(clientTime["hour"]) + " and "
 		sql += "minute = " + str(clientTime["minute"]) + " and "
-		sql += "workerId = " + str(workerid) + " and not status = 'done'"
+		sql += "workerId = " + str(workerid)
 		scheduled = query(sql, True).fetchone()
 
 		if (scheduled == None or (scheduled["status"] == "cancel" or scheduled["status"] == "cancel_booked")) or (scheduled != None and "\"id\": " + str(scheduled["id"])) in json.dumps(blocked):
@@ -1114,7 +1114,7 @@ def get_appointments():
 	locationInfo = json.loads(location["info"])
 	receiveType = locationInfo["type"]
 
-	sql = "select * from schedule where locationId = " + str(locationid) + " and status = 'confirmed'"
+	sql = "select * from schedule where locationId = " + str(locationid) + " and (status = 'confirmed' or status = 'w_confirmed')"
 	selfView = False
 
 	if isOwner == False:
