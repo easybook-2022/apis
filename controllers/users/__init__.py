@@ -338,7 +338,7 @@ def get_notifications(id):
 
 			userInput = json.loads(data['userInput'])
 			
-			time = {"day": data["day"], "month": data["month"], "date": data["date"], "year": data["year"], "hour": data["hour"], "minute": data["minute"]}
+			time = {"day": daysArr[data["day"]], "month": monthsArr[data["month"]], "date": data["date"], "year": data["year"], "hour": data["hour"], "minute": data["minute"]}
 
 			locationLogo = json.loads(location["logo"])
 			serviceImage = json.loads(service["image"])

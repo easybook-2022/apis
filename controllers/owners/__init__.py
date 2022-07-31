@@ -622,12 +622,12 @@ def get_workers_hour():
 			owners = {}
 
 			for data in datas:
-				scheduledDatas = query("select id, status, day, month, date, year, hour, minute from schedule where workerId = " + str(data["id"]) + " and ((status = 'confirmed' or status = 'w_confirmed') or status = 'blocked')", True).fetchall()
+				scheduledDatas = query("select id, status, day, month, date, year, hour, minute from schedule where workerId = " + str(data["id"]) + " and (status = 'confirmed' or status = 'w_confirmed' or status = 'cancel' or status = 'blocked')", True).fetchall()
 				scheduled = {}
 
 				for scheduledData in scheduledDatas:
-					time = json.dumps({ "day": scheduledData["day"], "month": scheduledData["month"], "date": scheduledData["date"], "year": scheduledData["year"], "hour": scheduledData["hour"], "minute": scheduledData["minute"] })
-					scheduled[time + "-" + (scheduledData["status"][:1])] = scheduledData["id"]
+					time = json.dumps({ "day": daysArr[int(scheduledData["day"])], "month": monthsArr[int(scheduledData["month"])], "date": scheduledData["date"], "year": scheduledData["year"], "hour": scheduledData["hour"], "minute": scheduledData["minute"] })
+					scheduled[time + "-" + (scheduledData["status"][:2])] = scheduledData["id"]
 
 				hours = json.loads(data['hours'])
 				profile = json.loads(data["profile"])
@@ -665,11 +665,11 @@ def get_workers_hour():
 			data = query("select * from owner where id = " + str(ownerid), True).fetchone()
 
 			if data != None:
-				scheduledDatas = query("select id, day, month, date, year, hour, minute from schedule where workerId = " + str(ownerid) + " and ((status = 'confirmed' or status = 'w_confirmed') or status = 'blocked')", True).fetchall()
+				scheduledDatas = query("select id, day, month, date, year, hour, minute from schedule where workerId = " + str(ownerid) + " and (status = 'confirmed' or status = 'w_confirmed' or status = 'cancel' or status = 'blocked')", True).fetchall()
 				scheduled = {}
 
 				for scheduledData in scheduledDatas:
-					time = json.dumps({ "day": scheduledData["day"], "month": scheduledData["month"], "date": scheduledData["date"], "year": scheduledData["year"], "hour": scheduledData["hour"], "minute": scheduledData["minute"] })
+					time = json.dumps({ "day": daysArr[int(scheduledData["day"])], "month": monthsArr[int(scheduledData["month"])], "date": scheduledData["date"], "year": scheduledData["year"], "hour": scheduledData["hour"], "minute": scheduledData["minute"] })
 					scheduled[time + "-" + (scheduledData["status"][:1])] = scheduledData["id"]
 
 				hours = json.loads(data['hours'])

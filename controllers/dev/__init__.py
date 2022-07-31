@@ -832,3 +832,18 @@ def insert_real_into_table():
 	iterateList(list, 0, "")
 
 	return { "msg": "succeed" }
+
+@app.route("/set_index")
+def set_index():
+	schedules = query("select * from schedule", True)
+
+	for info in schedules:
+		id = str(info["id"])
+		day = days[info["day"]]
+		month = months[info["month"]]
+
+		query("update schedule set day = '" + day + "', month = '" + month + "' where id = " + id)
+
+	return { "msg": "success" }
+
+
