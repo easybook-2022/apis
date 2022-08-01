@@ -234,7 +234,7 @@ def get_appointment_info(id):
 			"locationId": int(locationId), 
 			"serviceId": int(serviceId) if serviceId > -1 else None, 
 			"time": { "day": day, "month": month, "date": date, "year": year, "hour": hour, "minute": minute }, 
-			"unix": int(schedule["time"]),
+			#"unix": int(schedule["time"]),
 			"note": schedule["note"],
 			"worker": worker,
 			"blocked": blockedSchedules
@@ -274,7 +274,7 @@ def get_rescheduling_appointments():
 	calDate = content['date']
 	selectedIds = content['selectedIds']
 
-	select_query = "select id, day, month, date, year, hour, minute, time, workerId from schedule"
+	select_query = "select id, day, month, date, year, hour, minute, workerId from schedule"
 
 	if len(selectedIds) > 0:
 		schedules = query(select_query + " where id in (" + json.dumps(selectedIds)[1:-1] + ")", True).fetchall()
@@ -302,7 +302,7 @@ def get_rescheduling_appointments():
 
 		schedule["day"] = daysArr[schedule["day"]]
 		schedule["month"] = monthsArr[schedule["month"]]
-		schedule["time"] = int(schedule["time"])
+		#schedule["time"] = int(schedule["time"])
 
 	return { "msg": "success", "schedules": schedules }
 
@@ -322,7 +322,6 @@ def make_appointment():
 	note = content['note']
 	timeDisplay = content['timeDisplay']
 	blocked = content['blocked']
-	unix = str(content['unix'])
 
 	user = query("select * from user where id = " + str(userid), True).fetchone()
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
@@ -371,7 +370,7 @@ def make_appointment():
 	sql += "workerId = " + str(workerid)
 	scheduled = query(sql, True).fetchone()
 
-	if scheduled == None or "\"unix\":" + unix in json.dumps(blocked).replace(" ", ""):
+	if scheduled == None or json.dumps(clientTime).replace(" ", "") in json.dumps(blocked).replace(" ", ""):
 		if schedule != None: # existing schedule
 			schedule["day"] = daysObj[clientTime["day"]]
 			schedule["month"] = monthsObj[clientTime["month"]]
@@ -426,7 +425,6 @@ def make_appointment():
 					minute = str(newTime["minute"])
 
 					sql = "update schedule set status = 'blocked', "
-					sql += "time = " + info["newUnix"] + ", "
 					sql += "day = " + str(day) + ", month = " + str(month) + ", date = " + date + ", year = " + year + ", "
 					sql += "hour = " + hour + ", minute = " + minute + ", workerId = " + str(workerid) + " "
 					sql += "where id = " + str(info["id"])
@@ -457,8 +455,8 @@ def make_appointment():
 			data = {
 				"userId": userid,"workerId": workerid,"locationId": locationid,"menuId": menuid,"serviceId": serviceid,
 				"userInput": userInput, "day": daysObj[clientTime["day"]], "month": monthsObj[clientTime["month"]], "date": clientTime["date"], 
-				"year": clientTime["year"], "hour": clientTime["hour"], "minute": clientTime["minute"], "time": unix,"status": 
-				"confirmed","cancelReason": "","locationType": location["type"],
+				"year": clientTime["year"], "hour": clientTime["hour"], "minute": clientTime["minute"], 
+				"status": "confirmed","cancelReason": "","locationType": location["type"],
 				"customers": 1,"note": note,"orders": "[]","info": info
 			}
 			columns = []
@@ -502,7 +500,7 @@ def book_walk_in():
 	type = content['type']
 	client = content['client']
 	serviceid = content['serviceid'] if 'serviceid' in content else -1
-	unix = int(content["unix"])
+	#unix = int(content["unix"])
 
 	# get now or the next available time for client
 	# check if current time is valid
@@ -545,8 +543,6 @@ def book_walk_in():
 
 		bTimeInfo[1] += 15
 		eTimeInfo[1] += 15
-
-		unix += 900000
 
 		if bTimeInfo[1] == 60:
 			bTimeInfo[0] = bTimeInfo[0] + 1 if bTimeInfo[0] < 23 else 0
@@ -621,7 +617,8 @@ def book_walk_in():
 	data = {
 		"userId": -1,"workerId": workerid,"locationId": locationid,"menuId": -1,"serviceId": serviceid if serviceid != None else -1,
 		"userInput": json.dumps(client),"day": clientTime["day"], "month": clientTime["month"], "date": clientTime["date"], "year": clientTime["year"], 
-		"hour": clientTime["hour"], "minute": clientTime["minute"], "time": str(unix), "status": "w_confirmed","cancelReason": "","locationType": type,
+		"hour": clientTime["hour"], "minute": clientTime["minute"],  
+		"status": "w_confirmed","cancelReason": "","locationType": type,
 		"customers": 1,"note": note,"orders": "[]","info": "{}"
 	}
 
@@ -705,7 +702,7 @@ def block_time():
 
 	workerid = content['workerid']
 	jsonDate = content['jsonDate']
-	time = str(content['time'])
+	#time = str(content['time'])
 
 	sql = "select count(*) as num from schedule where workerId = " + str(workerid) + " and status = 'blocked' and "
 	sql += "day = " + str(daysObj[jsonDate["day"]]) + " and "
@@ -723,7 +720,7 @@ def block_time():
 			data = {
 				"userId": -1,"workerId": workerid, "locationId": location["id"], "menuId": -1, "serviceId": -1,
 				"userInput": json.dumps({}), "day": daysObj[jsonDate["day"]], "month": monthsObj[jsonDate["month"]], "date": jsonDate["date"], "year": jsonDate["year"], 
-				"hour": jsonDate["hour"], "minute": jsonDate["minute"], "time": time, "status": "blocked", "cancelReason": "", "locationType": location["type"],
+				"hour": jsonDate["hour"], "minute": jsonDate["minute"], "status": "blocked", "cancelReason": "", "locationType": location["type"],
 				"customers": 0, "note": "", "orders": "[]", "info": "{}"
 			}
 			columns = []
@@ -768,7 +765,6 @@ def salon_change_appointment():
 	note = content['note']
 	timeDisplay = content['timeDisplay']
 	blocked = content['blocked']
-	unix = str(content['unix'])
 
 	client = query("select * from user where id = " + str(clientid), True).fetchone()
 	worker = query("select username, hours from owner where id = " + str(workerid), True).fetchone()
@@ -810,7 +806,6 @@ def salon_change_appointment():
 
 				info["receiver"] = receiver
 
-			schedule["time"] = unix
 			schedule["day"] = daysObj[clientTime["day"]]
 			schedule["month"] = monthsObj[clientTime["month"]]
 			schedule["date"] = clientTime["date"]
@@ -863,7 +858,6 @@ def salon_change_appointment():
 
 				for blockedInfo in blocked:
 					newTime = blockedInfo["newTime"]
-					newUnix = str(blockedInfo["newUnix"])
 					day = daysObj[newTime["day"]]
 					month = monthsObj[newTime["month"]]
 					date = str(newTime["date"])
@@ -871,9 +865,10 @@ def salon_change_appointment():
 					hour = str(newTime["hour"])
 					minute = str(newTime["minute"])
 
-					sql = "update schedule set time = " + newUnix + ", "
+					sql = "update schedule set "
 					sql += "day = " + str(day) + ", month = " + str(month) + ", date = " + date + ", year = " + year + ", "
-					sql += "hour = " + hour + ", minute = " + minute + ", time = " + newUnix + ", workerId = " + str(workerid) + " "
+					sql += "hour = " + hour + ", minute = " + minute + ", "
+					sql += "workerId = " + str(workerid) + " "
 					sql += "where id = " + str(blockedInfo["id"])
 
 					query(sql)
@@ -924,7 +919,7 @@ def push_appointments():
 		info["year"] = int(newInfo["year"])
 		info["hour"] = int(newInfo["hour"])
 		info["minute"] = int(newInfo["minute"])
-		info["time"] = str(newInfo["unix"])
+		#info["time"] = str(newInfo["unix"])
 
 		if info["userId"] > -1:
 			receiver.append("user" + str(info["userId"]))

@@ -143,7 +143,6 @@ class Schedule(db.Model):
 	menuId = db.Column(db.String(10))
 	serviceId = db.Column(db.Integer)
 	userInput = db.Column(db.String(70))
-	time = db.Column(db.String(15))
 	day = db.Column(db.Integer)
 	month = db.Column(db.Integer)
 	date = db.Column(db.Integer)
@@ -158,14 +157,13 @@ class Schedule(db.Model):
 	orders = db.Column(db.Text)
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, time, day, month, date, year, hour, minute, status, cancelReason, locationType, customers, note, orders, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, day, month, date, year, hour, minute, status, cancelReason, locationType, customers, note, orders, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
 		self.menuId = menuId
 		self.serviceId = serviceId
 		self.userInput = userInput
-		self.time = time
 		self.day = day
 		self.month = month
 		self.date = date

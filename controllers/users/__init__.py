@@ -312,7 +312,7 @@ def get_notifications(id):
 
 		# get schedules
 		sql = "select * from schedule where "
-		sql += "(userId = " + str(id) + " and (status = 'cancel' or status = 'confirmed')) order by time"
+		sql += "(userId = " + str(id) + " and (status = 'cancel' or status = 'confirmed')) order by concat(year, month, date, hour, minute)"
 		datas = query(sql, True).fetchall()
 
 		for data in datas:

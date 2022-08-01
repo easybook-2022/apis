@@ -131,6 +131,7 @@ def get_ordering_tables(id):
 						order["quantities"] = quantities
 						order["percents"] = percents
 						order["tableName"] = data["name"]
+						order["tableId"] = data["tableId"]
 
 						tables.append(order)
 
@@ -169,15 +170,15 @@ def add_table():
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
 
 	if location != None:
-		table = query("select * from dining_table where name = '" + tableName + "'", True).fetchone()
+		table = query("select * from dining_table where name = '" + tableName + "' and locationId = " + str(locationid), True).fetchone()
 
 		if table == None:
-			tableIdExist = query("select count(*) as num from dining_table where tableId = '" + tableid + "'", True).fetchone()["num"]
+			tableIdExist = query("select count(*) as num from dining_table where tableId = '" + tableid + "' and locationId = " + str(locationid), True).fetchone()["num"]
 
 			while tableIdExist > 0:
 				tableid = getId()
 
-				tableIdExist = query("select count(*) as num from dining_table where tableId = '" + tableid + "'", True).fetchone()["num"]
+				tableIdExist = query("select count(*) as num from dining_table where tableId = '" + tableid + "' and locationId = " + str(locationid), True).fetchone()["num"]
 		else:
 			status = "exist"
 			errormsg = "Table already exist"
@@ -271,7 +272,7 @@ def finish_order():
 	orderid = content['orderid']
 	tableid = content['id']
 
-	table = query("select orders from dining_table where name = " + str(tableid), True).fetchone()
+	table = query("select orders from dining_table where tableId = '" + str(tableid) + "'", True).fetchone()
 
 	if table != None:
 		orders = json.loads(table["orders"])
@@ -280,7 +281,7 @@ def finish_order():
 			if order["key"] == orderid:
 				order["done"] = True
 
-		query("update dining_table set orders = '" + json.dumps(orders) + "' where id = " + str(tableid))
+		query("update dining_table set orders = '" + json.dumps(orders) + "' where tableId = '" + str(tableid) + "'")
 
 		return { "msg": "succeed" }
 	else:
