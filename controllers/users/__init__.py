@@ -83,14 +83,13 @@ def user_verify(cellnumber):
 def user_register():
 	content = request.get_json()
 
-	username = content['username']
 	cellnumber = content['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 	password = content['password']
 	confirmPassword = content['confirmPassword']
 	errormsg = ""
 	status = ""
 
-	if username != "" and cellnumber != '' and password != '' and confirmPassword != '':
+	if cellnumber != '' and password != '' and confirmPassword != '':
 		if len(password) >= 6:
 			if password == confirmPassword:
 				user = query("select * from user where cellnumber = '" + str(cellnumber) + "'", True).fetchone()
@@ -103,7 +102,6 @@ def user_register():
 					data = {
 						"cellnumber": cellnumber,
 						"password": password,
-						"username": username,
 						"info": userInfo
 					}
 					insert_data = []
@@ -122,9 +120,7 @@ def user_register():
 		else:
 			errormsg = "Password needs to be atleast 6 characters long"
 	else:
-		if username == '':
-			errormsg = "Please enter your name"
-		elif cellnumber == '':
+		if cellnumber == '':
 			errormsg = "Cell number is blank"
 		elif password == '':
 			errormsg = "Password is blank"

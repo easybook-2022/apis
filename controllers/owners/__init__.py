@@ -103,7 +103,10 @@ def owner_logout(id):
 
 @app.route("/owner_verify/<cellnumber>")
 def owner_verify(cellnumber):
-	verifycode = getId()
+	verifycode = ""
+
+	for k in range(6):
+		verifycode += str(randint(0, 9))
 	
 	cellnumber = cellnumber.replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 	owner = query("select * from owner where cellnumber = '" + str(cellnumber) + "'", True).fetchone()
