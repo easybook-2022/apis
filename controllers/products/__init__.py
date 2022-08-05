@@ -195,68 +195,72 @@ def add_product():
 @app.route("/update_product", methods=["POST"])
 def update_product():
 	locationid = request.form['locationid']
+	type = request.form['type']
 	menuid = request.form['menuid']
 	productid = request.form['productid']
-	name = request.form['name']
-	options = request.form['options']
-	price = request.form['price']
 
 	product = query("select * from product where id = " + str(productid) + " and locationId = " + str(locationid) + " and menuId = '" + str(menuid) + "'", True).fetchone()
-
+	
+	new_data = {}
 	errormsg = ""
 	status = ""
-	new_data = {}
 
 	if product != None:
-		new_data["name"] = name
-		new_data["price"] = price
-		new_data["options"] = options
+		if type == "name":
+			new_data["name"] = request.form['name']
+		elif type == "photo":
+			isWeb = request.form.get("web")
 
-		isWeb = request.form.get("web")
+			oldimage = json.loads(product["image"])
 
-		oldimage = json.loads(product["image"])
+			if isWeb != None:
+				image = json.loads(request.form['image'])
+				imagename = image['name']
 
-		if isWeb != None:
-			image = json.loads(request.form['image'])
-			imagename = image['name']
+				if imagename != '' and "data" in image['uri']:
+					uri = image['uri'].split(",")[1]
+					size = image['size']
 
-			if imagename != '' and "data" in image['uri']:
-				uri = image['uri'].split(",")[1]
-				size = image['size']
-
-				if oldimage["name"] != "" and os.path.exists("static/" + oldimage["name"]):
-					os.remove("static/" + oldimage["name"])
-
-				writeToFile(uri, imagename)
-
-				new_data["image"] = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
-		else:
-			imagepath = request.files.get('image', False)
-			imageexist = False if imagepath == False else True
-
-			if imageexist == True:
-				image = request.files['image']
-				imagename = image.filename
-
-				size = json.loads(request.form['size'])
-
-				if oldimage["name"] != imagename:
 					if oldimage["name"] != "" and os.path.exists("static/" + oldimage["name"]):
 						os.remove("static/" + oldimage["name"])
 
-					image.save(os.path.join('static', imagename))
+					writeToFile(uri, imagename)
+
 					new_data["image"] = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
+			else:
+				imagepath = request.files.get('image', False)
+				imageremove = request.form.get('removeImage', False)
+				imageexist = False if imagepath == False else True
 
-		if errormsg == "":
-			update_data = []
-			for key in new_data:
-				update_data.append(key + " = '" + new_data[key] + "'")
+				if imageexist == True:
+					image = request.files['image']
+					imagename = image.filename
 
-			query("update product set " + ", ".join(update_data) + " where id = " + str(product["id"]))
+					size = json.loads(request.form['size'])
 
-			return { "msg": "product updated", "id": product["id"] }
+					if oldimage["name"] != imagename:
+						if oldimage["name"] != "" and os.path.exists("static/" + oldimage["name"]):
+							os.remove("static/" + oldimage["name"])
+
+						image.save(os.path.join('static', imagename))
+						new_data["image"] = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
+				elif imageremove == "true":
+					new_data["image"] = json.dumps({"name": "", "width": 300, "height": 300})
+		elif type == "price":
+			new_data["price"] = request.form['price']
+		elif type == "options":
+			new_data["options"] = request.form['options']
 	else:
 		errormsg = "Product doesn't exist"
+
+	if errormsg == "":
+		update_data = []
+		for key in new_data:
+			update_data.append(key + " = '" + new_data[key] + "'")
+
+		query("update product set " + ", ".join(update_data) + " where id = " + str(product["id"]))
+
+		return { "msg": "product updated", "id": product["id"] }
 
 	return { "errormsg": errormsg, "status": status }, 400
 

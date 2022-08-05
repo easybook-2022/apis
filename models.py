@@ -84,18 +84,37 @@ class DiningTable(db.Model):
 	name = db.Column(db.String(20))
 	locationId = db.Column(db.Integer)
 	orders = db.Column(db.Text)
+	status = db.Column(db.String(7))
 
 	def __init__(
 		self,
-		tableId, name, locationId, orders
+		tableId, name, locationId, orders, status
 	):
 		self.tableId = tableId
 		self.name = name
 		self.locationId = locationId
 		self.orders = orders
+		self.status = status
 
 	def __repr__(self):
 		return '<Table %r>' % self.name
+
+class DiningRecord(db.Model):
+	id = db.Column(db.Integer, primary_key=True)
+	tableId = db.Column(db.String(22))
+	orders = db.Column(db.Text)
+	time = db.Column(db.String(95), unique=True)
+
+	def __init__(
+		self,
+		tableId, orders, time
+	):
+		self.tableId = tableId
+		self.orders = orders
+		self.time = time
+
+	def __repr__(self):
+		return '<DiningPaymentRecords %r>' % self.name
 
 class Menu(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -183,13 +202,14 @@ class Product(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.String(10))
+	number = db.Column(db.String(10))
 	name = db.Column(db.String(200))
 	description = db.Column(db.String(300))
 	image = db.Column(db.String(70))
 	options = db.Column(db.Text)
 	price = db.Column(db.String(10))
 
-	def __init__(self, locationId, menuId, name, description, image, options, price):
+	def __init__(self, locationId, menuId, number, name, description, image, options, price):
 		self.locationId = locationId
 		self.menuId = menuId
 		self.name = name

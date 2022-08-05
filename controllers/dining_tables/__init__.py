@@ -83,10 +83,15 @@ def get_ordering_tables(id):
 
 		for data in datas:
 			orders = json.loads(data["orders"])
+			tableOrders = []
 
 			if len(orders) > 0:
+				numDone = 0
+
 				for order in orders:
-					if "done" not in order:
+					if "finish" not in order:
+						numDone = numDone + 1 if "done" in order else numDone
+
 						sizes = order["sizes"]
 						quantities = order["quantities"]
 						percents = order["percents"]
@@ -112,7 +117,7 @@ def get_ordering_tables(id):
 							if info["input"] in percents:
 								percentsInfo[info["input"]] = float(info["price"])
 
-						order["name"] = product["name"]
+						order["name"] = product["number"] if product["number"] != "" else product["name"]
 
 						sizes = []
 						quantities = []
@@ -132,8 +137,12 @@ def get_ordering_tables(id):
 						order["percents"] = percents
 						order["tableName"] = data["name"]
 						order["tableId"] = data["tableId"]
+						order["finish"] = True if "done" in order else False
 
-						tables.append(order)
+						tableOrders.append(order)
+
+				if numDone < len(orders) and len(tableOrders) > 0:
+					tables.append({ "id": data["name"], "orders": tableOrders }) 
 
 		return { "tables": tables }
 	else:
@@ -146,12 +155,21 @@ def get_qr_code(id):
 	errormsg = ""
 	status = ""
 
-	table = query("select locationId, name from dining_table where tableId = '" + str(id) + "'", True).fetchone()
+	table = query("select locationId, name, orders, status from dining_table where tableId = '" + id + "'", True).fetchone()
 
 	if table != None:
 		location = query("select name from location where id = " + str(table["locationId"]), True).fetchone()
 
-		return { "name": table["name"], "locationid": table["locationId"], "locationName": location["name"] }
+		if table["status"] == "finish":
+			query("update dining_table set status = 'active' where tableId = '" + id + "'")
+
+		orders = json.loads(table["orders"])
+		numOrders = 0
+
+		for order in orders:
+			numOrders += 1
+				
+		return { "name": table["name"], "locationid": table["locationId"], "locationName": location["name"], "status": table["status"], "numOrders": numOrders }
 	else:
 		errormsg = "Table doesn't exist"
 
@@ -184,7 +202,7 @@ def add_table():
 			errormsg = "Table already exist"
 
 		if errormsg == "":
-			data = { "tableId": tableid, "locationId": locationid, "name": tableName, "orders": '[]' }
+			data = { "tableId": tableid, "locationId": locationid, "name": tableName, "orders": '[]', "status": "finish" }
 			columns = []
 			insert_data = []
 
@@ -223,17 +241,10 @@ def order_meal():
 	errormsg = ""
 	status = ""
 
-	key = content['key']
+	newOrders = json.loads(content['orders'])
 	tableid = content['tableid']
-	productid = content['id']
-	sizes = content['sizes']
-	quantities = content['quantities']
-	percents = content['percents']
-	image = content['image']
-	quantity = int(content['quantity'])
-	note = content['note']
 
-	table = query("select * from dining_table where tableId = '" + str(tableid) + "'", True).fetchone()
+	table = query("select * from dining_table where tableId = '" + tableid + "'", True).fetchone()
 
 	if table != None:
 		location = query("select owners from location where id = " + str(table["locationId"]), True).fetchone()
@@ -244,18 +255,19 @@ def order_meal():
 		for owner in owners:
 			receiver.append("owner" + str(owner))
 
-		orders.insert(0, {
-			"key": key,
-			"productId": productid,
-			"sizes": sizes,
-			"quantities": quantities,
-			"percents": percents,
-			"image": image,
-			"quantity": quantity,
-			"note": note
-		})
+		for newOrder in newOrders:
+			orders.insert(0, {
+				"key": newOrder["key"],
+				"productId": newOrder["productId"],
+				"sizes": newOrder["sizes"],
+				"quantities": newOrder["quantities"],
+				"percents": newOrder["percents"],
+				"image": newOrder["image"],
+				"quantity": newOrder["quantity"],
+				"note": newOrder["note"]
+			})
 
-		query("update dining_table set orders = '" + json.dumps(orders) + "' where id = " + str(table["id"]))
+		query("update dining_table set orders = '" + json.dumps(orders) + "' where tableId = '" + tableid + "'")
 
 		return { "msg": "succeed", "receiver": receiver }
 	else:
@@ -276,10 +288,17 @@ def finish_order():
 
 	if table != None:
 		orders = json.loads(table["orders"])
+		numDone = 0
 
 		for order in orders:
 			if order["key"] == orderid:
 				order["done"] = True
+
+			numDone = numDone + 1 if "done" in order else numDone
+
+		if numDone == len(orders):
+			for order in orders:
+				order["finish"] = True
 
 		query("update dining_table set orders = '" + json.dumps(orders) + "' where tableId = '" + str(tableid) + "'")
 
@@ -329,7 +348,7 @@ def view_payment(id):
 					if info["input"] in percents:
 						percentsInfo[info["input"]] = float(info["price"])
 
-				data["name"] = product["name"]
+				data["name"] = product["number"] if product["number"] != "" else product["name"]
 				cost = 0.00
 
 				if product["price"] != "":
@@ -352,8 +371,6 @@ def view_payment(id):
 				if len(str(cost).split(".")[1]) < 2:
 					cost = str(cost) + "0"
 
-				data["cost"] = cost
-
 				sizes = []
 				quantities = []
 				percents = []
@@ -367,6 +384,7 @@ def view_payment(id):
 				for index, info in enumerate(percentsInfo):
 					percents.append({ "key": "percent-" + str(index), "input": info, "price": percentsInfo[info] })
 
+				data["cost"] = cost
 				data["sizes"] = sizes
 				data["quantities"] = quantities
 				data["percents"] = percents
@@ -395,15 +413,112 @@ def view_payment(id):
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/finish_dining/<id>")
-def finish_dining(id):
+@app.route("/view_table_orders/<tableId>")
+def view_table_orders(tableId):
 	errormsg = ""
 	status = ""
 
-	table = query("select orders from dining_table where id = " + str(id), True).fetchone()
+	table = query("select name, orders from dining_table where tableId = '" + tableId + "'", True).fetchone()
 
 	if table != None:
-		query("update dining_table set orders = '[]' where id = " + str(id))
+		datas = json.loads(table["orders"])
+		orders = []
+
+		for data in datas:
+			sizes = data["sizes"]
+			quantities = data["quantities"]
+			percents = data["percents"]
+
+			product = query("select * from product where id = " + str(data["productId"]), True).fetchone()
+			productOptions = json.loads(product["options"])
+			productSizes = productOptions["sizes"]
+			productQuantities = productOptions["quantities"]
+			productPercents = productOptions["percents"]
+
+			sizesInfo = {}
+			for info in productSizes:
+				if info["name"] in sizes:
+					sizesInfo[info["name"]] = float(info["price"])
+
+			quantitiesInfo = {}
+			for info in productQuantities:
+				if info["input"] in quantities:
+					quantitiesInfo[info["input"]] = float(info["price"])
+
+			percentsInfo = {}
+			for info in productPercents:
+				if info["input"] in percents:
+					percentsInfo[info["input"]] = float(info["price"])
+
+			data["name"] = product["name"]
+			cost = 0.00
+
+			if product["price"] != "":
+				cost = round(int(data["quantity"]) * float(product["price"]), 2)
+			else:
+				if len(sizes) > 0:
+					for size in sizes:
+						cost = round(int(data["quantity"]) * sizesInfo[size], 2)
+				else:
+					for quantity in quantities:
+						cost = round(int(data["quantity"]) * float(quantitiesInfo[quantity]), 2)
+
+			for percent in percents:
+				cost += round(int(data["quantity"]) * float(percentsInfo[percent["input"]]), 2)
+
+			if len(str(cost).split(".")[1]) < 2:
+				cost = str(cost) + "0"
+
+			data["cost"] = cost
+
+			sizes = []
+			quantities = []
+			percents = []
+
+			for index, info in enumerate(sizesInfo):
+				sizes.append({ "key": "size-" + str(index), "name": info, "price": sizesInfo[info] })
+
+			for index, info in enumerate(quantitiesInfo):
+				quantities.append({ "key": "quantity-" + str(index), "input": info, "price": quantitiesInfo[info] })
+
+			for index, info in enumerate(percentsInfo):
+				percents.append({ "key": "percent-" + str(index), "input": info, "price": percentsInfo[info] })
+
+			data["sizes"] = sizes
+			data["quantities"] = quantities
+			data["percents"] = percents
+			data["price"] = product["price"]
+
+			orders.append(data)
+
+		return { "orders": orders, "name": table["name"] }
+	else:
+		errormsg = "Table doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/finish_dining", methods=["POST"])
+def finish_dining():
+	content = request.get_json()
+	errormsg = ""
+	status = ""
+
+	id = content['id']
+	time = json.dumps(content['time'])
+
+	table = query("select tableId, orders from dining_table where id = " + str(id), True).fetchone()
+
+	if table != None:
+		data = {"tableId": table["tableId"], "orders": table["orders"], "time": time }
+		columns = []
+		insert_data = []
+
+		for key in data:
+			columns.append(key)
+			insert_data.append("'" + str(data[key]) + "'")
+
+		query("insert into dining_record (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")")
+		query("update dining_table set orders = '[]', status = 'finish' where id = " + str(id))
 
 		return { "msg": "succeed" }
 	else:

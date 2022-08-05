@@ -53,7 +53,7 @@ def get_menus(id):
 						price = ""
 
 					items.append({
-						"key": "product-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "name": data["name"], "description": data["description"], 
+						"key": "product-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "number": data["number"], "name": data["name"], "description": data["description"], 
 						"price": price, "sizes": sizes, "quantities": quantities, "percents": percents, 
 						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "product",
 						"show": False
@@ -108,7 +108,7 @@ def get_menus(id):
 								price = ""
 
 							innerItems.append({
-								"key": "product-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "name": data["name"], "description": data["description"], 
+								"key": "product-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "number": data["number"], "name": data["name"], "description": data["description"], 
 								"price": price, "sizes": sizes,
 								"image": image if image["name"] != "" else {"width": 300, "height": 300}, 
 								"listType": "product"
@@ -164,7 +164,7 @@ def get_menus(id):
 						price = ""
 
 					items.append({
-						"key": "product-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "name": data["name"], "description": data["description"], 
+						"key": "product-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "number": data["number"], "name": data["name"], "description": data["description"], 
 						"price": price, "sizes": sizes, "quantities": quantities, "percents": percents, 
 						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "product",
 						"show": False

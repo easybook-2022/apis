@@ -475,6 +475,60 @@ def set_owner_hours():
 
 	return { "errormsg": errormsg, "status": status }
 
+@app.route("/update_login_info", methods=["POST"])
+def update_login_info():
+	content = request.get_json()
+	errormsg = ""
+	status = ""
+
+	ownerid = content['ownerid']
+	owner = query("select password from owner where id = " + str(ownerid), True).fetchone()
+	cellnumber = content['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
+
+	currentPassword = content['currentPassword']
+	newPassword = content['newPassword']
+	confirmPassword = content['confirmPassword']
+
+	if check_password_hash(owner["password"], currentPassword):
+		if newPassword != "" and confirmPassword != "":
+			if newPassword != "" and confirmPassword != "":
+				if len(newPassword) >= 6:
+					if newPassword == confirmPassword:
+						password = generate_password_hash(newPassword)
+
+						update_data = []
+						update_data.append("cellnumber = '" + cellnumber + "'")
+						update_data.append("password = '" + password + "'")
+
+						query("update owner set " + ", ".join(update_data) + " where id = " + str(ownerid))
+
+						return { "msg": "succeed" }
+					else:
+						errormsg = "Password is mismatch"
+						status = "password"
+				else:
+					errormsg = "Password needs to be atleast 6 characters long"
+					status = "password"
+			else:
+				if newPassword == "":
+					errormsg = "Please enter a password"
+					status = "password"
+				else:
+					errormsg = "Please confirm your password"
+					status = "password"
+		else:
+			if newPassword == "":
+				errormsg = "New password is blank"
+				status = "password"
+			else:
+				errormsg = "Please confirm your new password"
+				status = "password"
+	else:
+		errormsg = "Current password is incorrect"
+		status = "password"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
 @app.route("/update_owner_notification_token", methods=["POST"])
 def update_owner_notification_token():
 	content = request.get_json()

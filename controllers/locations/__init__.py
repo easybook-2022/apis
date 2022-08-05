@@ -241,8 +241,8 @@ def set_type():
 
 	return { "msg": "success" }
 
-@app.route("/set_location_hours", methods=["POST"])
-def set_location_hours():
+@app.route("/update_location_hours", methods=["POST"])
+def update_location_hours():
 	content = request.get_json()
 	
 	locationid = content['locationid']
@@ -706,6 +706,150 @@ def get_location_hours(id):
 				}
 
 		return { "hours": openDays }
+	else:
+		errormsg = "Location doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/get_income/<id>")
+def get_income(id):
+	location = query("select * from location where id = " + str(id), True).fetchone()
+	errormsg = ""
+
+	if location != None:
+		tables = query("select tableId from dining_table where locationId = " + str(id), True).fetchall()
+		tableIds = []
+
+		for table in tables:
+			tableIds.append(table["tableId"])
+
+		monthly = "concat("
+		monthly += "json_extract(time, '$.year'), "
+		monthly += "json_extract(time, '$.month')"
+		monthly += ") as monthly"
+
+		daily = "concat("
+		daily += "json_extract(time, '$.year'), "
+		daily += "json_extract(time, '$.month'), "
+		daily += "json_extract(time, '$.date')"
+		daily += ") as daily"
+
+		sql = "select orders, time, " + monthly + ", " + daily + " from dining_record where tableId in (" + json.dumps(tableIds)[1:-1] + ")"
+		sql += " order by "
+		sql += "concat("
+		sql += "json_extract(time, '$.year'), "
+		sql += "json_extract(time, '$.month'), "
+		sql += "json_extract(time, '$.date'), "
+		sql += "json_extract(time, '$.day'), "
+		sql += "json_extract(time, '$.hour'), "
+		sql += "json_extract(time, '$.minute')"
+		sql += ")"
+		datas = query(sql, True).fetchall()
+		dayTotal = 0.00
+		monthTotal = 0.00
+		daily = []
+		monthly = []
+		dayHold = ""
+		monthHold = ""
+
+		for dataindex, data in enumerate(datas):
+			orders = json.loads(data["orders"])
+			time = json.loads(data["time"])
+			day = daysArr[int(time["day"])]
+			month = monthsArr[int(time["month"])]
+			date = str(time["date"])
+			year = str(time["year"])
+
+			for order in orders:
+				if "finish" in order:
+					sizes = order["sizes"]
+					quantities = order["quantities"]
+					percents = order["percents"]
+
+					product = query("select * from product where id = " + str(order["productId"]), True).fetchone()
+
+					productOptions = json.loads(product["options"])
+					productSizes = productOptions["sizes"]
+					productQuantities = productOptions["quantities"]
+					productPercents = productOptions["percents"]
+
+					sizesInfo = {}
+					for info in productSizes:
+						if info["name"] in sizes:
+							sizesInfo[info["name"]] = float(info["price"])
+
+					quantitiesInfo = {}
+					for info in productQuantities:
+						if info["input"] in quantities:
+							quantitiesInfo[info["input"]] = float(info["price"])
+
+					percentsInfo = {}
+					for info in productPercents:
+						if info["input"] in percents:
+							percentsInfo[info["input"]] = float(info["price"])
+
+					order["name"] = product["number"] if product["number"] != "" else product["name"]
+
+					if product["price"] != "":
+						dayTotal += int(order["quantity"]) * float(product["price"])
+						monthTotal += int(order["quantity"]) * float(product["price"])
+						cost = round(int(order["quantity"]) * float(product["price"]), 2)
+					else:
+						if len(sizes) > 0:
+							for size in sizes:
+								dayTotal += int(order["quantity"]) * sizesInfo[size]
+								monthTotal += int(order["quantity"]) * sizesInfo[size]
+						else:
+							for quantity in quantities:
+								dayTotal += int(order["quantity"]) * float(quantitiesInfo[quantity])
+								monthTotal += int(order["quantity"]) * float(quantitiesInfo[quantity])
+
+					for percent in percents:
+						dayTotal += int(order["quantity"]) * float(percentsInfo[percent["input"]])
+						monthTotal += int(order["quantity"]) * float(percentsInfo[percent["input"]])
+
+			if dataindex == 0:
+				monthHold = data["monthly"]
+				dayHold = data["daily"]
+				
+				monthly.append({
+					"key": "monthly-" + str(len(monthly)),
+					"header": month + ", " + year
+				})
+				daily.append({
+					"key": "daily-" + str(len(daily)),
+					"header": day + " " + month + ", " + date
+				})
+			else:
+				if data["monthly"] != monthHold: # restart total for next month
+					monthHold = data["monthly"]
+
+					monthly[len(monthly) - 1]["total"] = monthTotal
+					monthTotal = 0.00
+
+					monthly.append({
+						"key": "monthly-" + str(len(monthly)),
+						"header": month + ", " + year
+					})
+
+				if data["daily"] != dayHold: # restart total for next day
+					dayHold = data["daily"]
+
+					daily[len(daily) - 1]["total"] = dayTotal
+					dayTotal = 0.00
+
+					daily.append({
+						"key": "daily-" + str(len(daily)),
+						"header": day + " " + month + ", " + date
+					})
+
+		if "total" not in monthly[len(monthly) - 1]:
+			monthly[len(monthly) - 1]["total"] = round(monthTotal, 2)
+
+		if "total" not in daily[len(daily) - 1]:
+			daily[len(daily) - 1]["total"] = round(dayTotal, 2)
+
+		return { "daily": daily, "monthly": monthly }
 	else:
 		errormsg = "Location doesn't exist"
 
