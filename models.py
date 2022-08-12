@@ -103,7 +103,7 @@ class DiningRecord(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	tableId = db.Column(db.String(22))
 	orders = db.Column(db.Text)
-	time = db.Column(db.String(95), unique=True)
+	time = db.Column(db.String(95))
 
 	def __init__(
 		self,

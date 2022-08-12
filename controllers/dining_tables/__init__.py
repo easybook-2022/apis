@@ -256,8 +256,14 @@ def order_meal():
 			receiver.append("owner" + str(owner))
 
 		for newOrder in newOrders:
+			key = newOrder["key"]
+			existingKey = query("select count(*) as num from dining_table where orders like '%\"key\": \"" + key + "\"%'", True).fetchone()["num"]
+
+			while existingKey == True:
+				key = getId()
+
 			orders.insert(0, {
-				"key": newOrder["key"],
+				"key": key,
 				"productId": newOrder["productId"],
 				"sizes": newOrder["sizes"],
 				"quantities": newOrder["quantities"],
@@ -267,7 +273,7 @@ def order_meal():
 				"note": newOrder["note"]
 			})
 
-		query("update dining_table set orders = '" + json.dumps(orders) + "' where tableId = '" + tableid + "'")
+		query("update dining_table set orders = '" + pymysql.converters.escape_string(json.dumps(orders)) + "' where tableId = '" + tableid + "'")
 
 		return { "msg": "succeed", "receiver": receiver }
 	else:
@@ -300,7 +306,7 @@ def finish_order():
 			for order in orders:
 				order["finish"] = True
 
-		query("update dining_table set orders = '" + json.dumps(orders) + "' where tableId = '" + str(tableid) + "'")
+		query("update dining_table set orders = '" + pymysql.converters.escape_string(json.dumps(orders)) + "' where tableId = '" + str(tableid) + "'")
 
 		return { "msg": "succeed" }
 	else:
@@ -509,7 +515,7 @@ def finish_dining():
 	table = query("select tableId, orders from dining_table where id = " + str(id), True).fetchone()
 
 	if table != None:
-		data = {"tableId": table["tableId"], "orders": table["orders"], "time": time }
+		data = {"tableId": table["tableId"], "orders": pymysql.converters.escape_string(table["orders"]), "time": time }
 		columns = []
 		insert_data = []
 

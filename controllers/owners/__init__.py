@@ -40,13 +40,13 @@ def owner_login():
 					
 					if locationhours != '{}' and ownerhours != '{}':
 						if numBusiness > 1:
-							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list", "isOwner": ownerInfo["owner"] }
+							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list", "isOwner": ownerInfo["userType"] == "owner" }
 						else:
 							return { 
 								"ownerid": ownerid, "cellnumber": cellnumber, 
 								"locationid": locationid, "locationtype": locationtype, 
 								"msg": "authoption" if locationtype == "nail" or locationtype == "hair" else "main", 
-								"isOwner": ownerInfo["owner"] 
+								"isOwner": ownerInfo["userType"] == "owner" 
 							}
 					else:
 						if locationhours == '{}': # location setup not done
@@ -56,13 +56,13 @@ def owner_login():
 								return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "register" }
 							else:
 								if numBusiness > 1:
-									return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list", "isOwner": ownerInfo["owner"] }
+									return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list", "isOwner": ownerInfo["userType"] == "owner" }
 								else:
 									return { 
 										"ownerid": ownerid, "cellnumber": cellnumber, 
 										"locationid": locationid, "locationtype": locationtype, 
 										"msg": "authoption" if locationtype == "nail" or locationtype == "hair" else "main", 
-										"isOwner": ownerInfo["owner"] 
+										"isOwner": ownerInfo["userType"] == "owner" 
 									}
 				else:
 					return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": None, "locationtype": "", "msg": "locationsetup" }
@@ -164,7 +164,7 @@ def owner_register():
 			"username": "",
 			"profile": "{}",
 			"hours": "{}",
-			"info": json.dumps({ "pushToken": "", "owner": True, "signin": False, "voice": False })
+			"info": json.dumps({ "pushToken": "", "signin": False, "voice": False, "userType": "owner" })
 		}
 
 		insert_data = []
@@ -233,7 +233,7 @@ def save_user_info():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/add_owner", methods=["POST"])
+@app.route("/add_owner", methods=["POST"]) # salons only
 def add_owner():
 	id = request.form['id']
 	cellnumber = request.form['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
@@ -311,7 +311,7 @@ def add_owner():
 				"username": username,
 				"profile": profileData,
 				"hours": hours,
-				"info": json.dumps({"pushToken": "", "owner": False, "signin": False, "voice": False})
+				"info": json.dumps({"pushToken": "", "userType": "stylist", "signin": False, "voice": False})
 			}
 			
 			insert_data = []
@@ -475,32 +475,108 @@ def set_owner_hours():
 
 	return { "errormsg": errormsg, "status": status }
 
-@app.route("/update_login_info", methods=["POST"])
-def update_login_info():
+@app.route("/update_logins", methods=["POST"])
+def update_logins():
 	content = request.get_json()
 	errormsg = ""
 	status = ""
 
-	ownerid = content['ownerid']
-	owner = query("select password from owner where id = " + str(ownerid), True).fetchone()
-	cellnumber = content['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
+	type = content['type']
+	id = content['id']
 
-	currentPassword = content['currentPassword']
-	newPassword = content['newPassword']
-	confirmPassword = content['confirmPassword']
+	if type == "usertype":
+		userType = content['userType']
 
-	if check_password_hash(owner["password"], currentPassword):
+		owner = query("select info from owner where id = " + str(id), True).fetchone()
+		info = json.loads(owner["info"])
+		info["userType"] = userType
+
+		query("update owner set info = '" + json.dumps(info) + "' where id = " + str(id))
+
+		return { "msg": "succeed" }
+	elif type == "cellnumber":
+		cellnumber = content['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
+
+		query("update owner set cellnumber = '" + cellnumber + "' where id = " + str(id))
+
+		return { "msg": "succeed" }
+	elif type == "password":
+		currentPassword = content['currentPassword']
+		newPassword = content['newPassword']
+		confirmPassword = content['confirmPassword']
+
+		owner = query("select password from owner where id = " + str(id), True).fetchone()
+
+		if check_password_hash(owner["password"], currentPassword):
+			if newPassword != "" and confirmPassword != "":
+				if newPassword != "" and confirmPassword != "":
+					if len(newPassword) >= 6:
+						if newPassword == confirmPassword:
+							password = generate_password_hash(newPassword)
+
+							query("update owner set password = '" + password + "' where id = " + str(id))
+
+							return { "msg": "succeed" }
+						else:
+							errormsg = "Password is mismatch"
+							status = "password"
+					else:
+						errormsg = "Password needs to be atleast 6 characters long"
+						status = "password"
+				else:
+					if newPassword == "":
+						errormsg = "Please enter a password"
+						status = "password"
+					else:
+						errormsg = "Please confirm your password"
+						status = "password"
+			else:
+				if newPassword == "":
+					errormsg = "New password is blank"
+					status = "password"
+				else:
+					errormsg = "Please confirm your new password"
+					status = "password"
+		else:
+			errormsg = "Current password is incorrect"
+			status = "password"
+	elif type == "all":
+		locationid = content['locationid']
+		cellnumber = content['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
+
+		newPassword = content['newPassword']
+		confirmPassword = content['confirmPassword']
+		userType = content['userType']
+
 		if newPassword != "" and confirmPassword != "":
 			if newPassword != "" and confirmPassword != "":
 				if len(newPassword) >= 6:
 					if newPassword == confirmPassword:
 						password = generate_password_hash(newPassword)
 
-						update_data = []
-						update_data.append("cellnumber = '" + cellnumber + "'")
-						update_data.append("password = '" + password + "'")
+						data = {
+							"cellnumber": cellnumber,
+							"password": password,
+							"username": "",
+							"profile": "{}",
+							"hours": "{}",
+							"info": json.dumps({ "pushToken": "", "signin": False, "voice": False, "userType": userType })
+						}
 
-						query("update owner set " + ", ".join(update_data) + " where id = " + str(ownerid))
+						insert_data = []
+						columns = []
+						for key in data:
+							columns.append(key)
+							insert_data.append("'" + data[key] + "'")
+
+						location = query("select owners from location where id = " + str(locationid), True).fetchone()
+
+						ownerId = query("insert into owner (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
+						
+						owners = json.loads(location["owners"])
+						owners.append(str(ownerId))
+
+						query("update location set owners = '" + json.dumps(owners) + "' where id = " + str(locationid))
 
 						return { "msg": "succeed" }
 					else:
@@ -523,9 +599,6 @@ def update_login_info():
 			else:
 				errormsg = "Please confirm your new password"
 				status = "password"
-	else:
-		errormsg = "Current password is incorrect"
-		status = "password"
 
 	return { "errormsg": errormsg, "status": status }, 400
 
@@ -1053,7 +1126,7 @@ def get_owner_info(id):
 	if owner != None:
 		ownerInfo = json.loads(owner["info"])
 
-		return { "id": id, "isOwner": ownerInfo["owner"], "useVoice": ownerInfo["voice"] }
+		return { "id": id, "userType": ownerInfo["userType"], "useVoice": ownerInfo["voice"] }
 	else:
 		errormsg = "Owner doesn't exist"
 

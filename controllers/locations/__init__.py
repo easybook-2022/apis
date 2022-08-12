@@ -543,6 +543,32 @@ def get_more_locations():
 
 	return { "newlocations": locations, "index": len(datas), "max": maxdatas }
 	
+@app.route("/get_logins/<id>") # restaurant only
+def get_logins(id):
+	errormsg = ""
+	status = ""
+
+	location = query("select owners from location where id = " + str(id), True).fetchone()
+
+	if location != None:
+		owners = query("select id, cellnumber, info from owner where id in (" + location["owners"][1:-1] + ")", True).fetchall()
+
+		for index, owner in enumerate(owners):
+			info = json.loads(owner["info"])
+
+			owner["key"] = "owner-" + str(index)
+			owner["id"] = owner["id"]
+			owner["userType"] = info["userType"]
+
+			del owner["info"]
+
+		return { "owners": owners }
+	else:
+		errormsg = "Location doesn't exist"
+		status = "nonExist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
 @app.route("/get_all_locations/<id>")
 def get_all_locations(id):
 	datas = query("select * from location where owners like '%\"" + str(id) + "\"%'", True).fetchall()
@@ -734,7 +760,9 @@ def get_income(id):
 		daily += "json_extract(time, '$.date')"
 		daily += ") as daily"
 
-		sql = "select orders, time, " + monthly + ", " + daily + " from dining_record where tableId in (" + json.dumps(tableIds)[1:-1] + ")"
+		yearly = "json_extract(time, '$.year') as yearly"
+
+		sql = "select orders, time, " + monthly + ", " + daily + ", " + yearly + " from dining_record where tableId in (" + json.dumps(tableIds)[1:-1] + ")"
 		sql += " order by "
 		sql += "concat("
 		sql += "json_extract(time, '$.year'), "
@@ -747,10 +775,13 @@ def get_income(id):
 		datas = query(sql, True).fetchall()
 		dayTotal = 0.00
 		monthTotal = 0.00
+		yearTotal = 0.00
 		daily = []
 		monthly = []
+		yearly = []
 		dayHold = ""
 		monthHold = ""
+		yearHold = ""
 
 		for dataindex, data in enumerate(datas):
 			orders = json.loads(data["orders"])
@@ -793,38 +824,38 @@ def get_income(id):
 					if product["price"] != "":
 						dayTotal += int(order["quantity"]) * float(product["price"])
 						monthTotal += int(order["quantity"]) * float(product["price"])
+						yearTotal += int(order["quantity"]) * float(product["price"])
 						cost = round(int(order["quantity"]) * float(product["price"]), 2)
 					else:
 						if len(sizes) > 0:
 							for size in sizes:
 								dayTotal += int(order["quantity"]) * sizesInfo[size]
 								monthTotal += int(order["quantity"]) * sizesInfo[size]
+								yearTotal += int(order["quantity"]) * sizesInfo[size]
 						else:
 							for quantity in quantities:
 								dayTotal += int(order["quantity"]) * float(quantitiesInfo[quantity])
 								monthTotal += int(order["quantity"]) * float(quantitiesInfo[quantity])
+								yearTotal += int(order["quantity"]) * float(quantitiesInfo[quantity])
 
 					for percent in percents:
 						dayTotal += int(order["quantity"]) * float(percentsInfo[percent["input"]])
 						monthTotal += int(order["quantity"]) * float(percentsInfo[percent["input"]])
+						yearTotal += int(order["quantity"]) * float(percentsInfo[percent["input"]])
 
 			if dataindex == 0:
 				monthHold = data["monthly"]
 				dayHold = data["daily"]
+				yearHold = data["yearly"]
 				
-				monthly.append({
-					"key": "monthly-" + str(len(monthly)),
-					"header": month + ", " + year
-				})
-				daily.append({
-					"key": "daily-" + str(len(daily)),
-					"header": day + " " + month + ", " + date
-				})
+				monthly.append({ "key": "monthly-" + str(len(monthly)), "header": month + ", " + year })
+				daily.append({ "key": "daily-" + str(len(daily)), "header": day + " " + month + ", " + date })
+				yearly.append({ "key": "yearly-" + str(len(yearly)), "header": year })
 			else:
 				if data["monthly"] != monthHold: # restart total for next month
 					monthHold = data["monthly"]
 
-					monthly[len(monthly) - 1]["total"] = monthTotal
+					monthly[len(monthly) - 1]["total"] = round(monthTotal, 2)
 					monthTotal = 0.00
 
 					monthly.append({
@@ -835,12 +866,23 @@ def get_income(id):
 				if data["daily"] != dayHold: # restart total for next day
 					dayHold = data["daily"]
 
-					daily[len(daily) - 1]["total"] = dayTotal
+					daily[len(daily) - 1]["total"] = round(dayTotal, 2)
 					dayTotal = 0.00
 
 					daily.append({
 						"key": "daily-" + str(len(daily)),
-						"header": day + " " + month + ", " + date
+						"header": day + " " + month + ", " + date + " " + year
+					})
+
+				if data["yearly"] != yearHold:
+					yearHold = data["yearly"]
+
+					yearly[len(yearly) - 1]["total"] = round(yearTotal, 2)
+					yearlyTotal = 0.00
+
+					yearly.append({
+						"key": "yearly-" + str(len(yearly)),
+						"header": year
 					})
 
 		if "total" not in monthly[len(monthly) - 1]:
@@ -849,7 +891,10 @@ def get_income(id):
 		if "total" not in daily[len(daily) - 1]:
 			daily[len(daily) - 1]["total"] = round(dayTotal, 2)
 
-		return { "daily": daily, "monthly": monthly }
+		if "total" not in yearly[len(yearly) - 1]:
+			yearly[len(yearly) - 1]["total"] = round(yearTotal, 2)
+
+		return { "daily": daily, "monthly": monthly, "yearly": yearly }
 	else:
 		errormsg = "Location doesn't exist"
 

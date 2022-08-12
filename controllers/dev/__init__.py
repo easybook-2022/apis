@@ -878,15 +878,8 @@ def insert_real_into_table(locationId):
 def fill_records():
 	return { "msg": "succeed" }
 
-@app.route("/set_index")
-def set_index():
-	schedules = query("select * from schedule", True)
+@app.route("/get_password")
+def get_password():
+	password = generate_password_hash('Qqqqqq')
 
-	for info in schedules:
-		id = str(info["id"])
-		day = days[info["day"]]
-		month = months[info["month"]]
-
-		query("update schedule set day = '" + day + "', month = '" + month + "' where id = " + id)
-
-	return { "msg": "success" }
+	return { "msg": "success", "password": password }
