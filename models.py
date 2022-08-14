@@ -35,7 +35,7 @@ class Owner(db.Model):
 	username = db.Column(db.String(20))
 	profile = db.Column(db.String(70))
 	hours = db.Column(db.String(900))
-	info = db.Column(db.String(110))
+	info = db.Column(db.String(130))
 
 	def __init__(self, cellnumber, password, username, profile, hours, info):
 		self.cellnumber = cellnumber

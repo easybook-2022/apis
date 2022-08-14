@@ -878,8 +878,8 @@ def insert_real_into_table(locationId):
 def fill_records():
 	return { "msg": "succeed" }
 
-@app.route("/get_password")
-def get_password():
-	password = generate_password_hash('Qqqqqq')
+@app.route("/password")
+def password():
+	password = generate_password_hash('qqqqqq')
 
 	return { "msg": "success", "password": password }

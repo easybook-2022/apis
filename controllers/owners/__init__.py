@@ -40,13 +40,13 @@ def owner_login():
 					
 					if locationhours != '{}' and ownerhours != '{}':
 						if numBusiness > 1:
-							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list", "isOwner": ownerInfo["userType"] == "owner" }
+							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list", "userType": ownerInfo["userType"] }
 						else:
 							return { 
 								"ownerid": ownerid, "cellnumber": cellnumber, 
 								"locationid": locationid, "locationtype": locationtype, 
 								"msg": "authoption" if locationtype == "nail" or locationtype == "hair" else "main", 
-								"isOwner": ownerInfo["userType"] == "owner" 
+								"userType": ownerInfo["userType"] 
 							}
 					else:
 						if locationhours == '{}': # location setup not done
@@ -56,13 +56,13 @@ def owner_login():
 								return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "register" }
 							else:
 								if numBusiness > 1:
-									return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list", "isOwner": ownerInfo["userType"] == "owner" }
+									return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list", "userType": ownerInfo["userType"] }
 								else:
 									return { 
 										"ownerid": ownerid, "cellnumber": cellnumber, 
 										"locationid": locationid, "locationtype": locationtype, 
 										"msg": "authoption" if locationtype == "nail" or locationtype == "hair" else "main", 
-										"isOwner": ownerInfo["userType"] == "owner" 
+										"userType": ownerInfo["userType"] 
 									}
 				else:
 					return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": None, "locationtype": "", "msg": "locationsetup" }
@@ -115,11 +115,14 @@ def owner_verify(cellnumber):
 
 	if owner == None:
 		if send_text == True:
-			message = client.messages.create(
-				body='Verify code: ' + str(verifycode),
-				messaging_service_sid=mss,
-				to='+1' + str(cellnumber)
-			)
+			try:
+				message = client.messages.create(
+					body='Verify code: ' + str(verifycode),
+					messaging_service_sid=mss,
+					to='+1' + str(cellnumber)
+				)
+			except:
+				print("send error")
 
 		return { "verifycode": verifycode }
 	else:
@@ -853,6 +856,57 @@ def set_use_voice():
 
 	return { "errormsg": errormsg, "status": status }, 400
 
+@app.route("/switch_account", methods=["POST"])
+def switch_account():
+	content = request.get_json()
+	errormsg = ""
+	status = ""
+
+	locationid = str(content['locationid'])
+	type = content['type']
+
+	location = query("select owners from location where id = " + str(locationid), True).fetchone()
+
+	if location != None:
+		owner = query("select id, info from owner where id in (" + location["owners"][1:-1] + ") and json_extract(info, '$.userType') = '" + type + "'", True).fetchone()
+
+		if owner != None:
+			return { "id": str(owner["id"]) }
+		else:
+			status = "nonExist"
+	else:
+		status = "nonExist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/verify_switch_account", methods=["POST"])
+def verify_switch_account():
+	content = request.get_json()
+	errormsg = ""
+	status = ""
+
+	locationid = str(content['locationid'])
+	type = content['type']
+	password = content['password']
+
+	location = query("select owners from location where id = " + str(locationid), True).fetchone()
+
+	if location != None:
+		owners = query("select id, password, info from owner where id in (" + location["owners"][1:-1] + ") and json_extract(info, '$.userType') = '" + type + "'", True).fetchall()
+
+		if len(owners) > 0:
+			status = "passwordMismatch"
+			
+			for owner in owners:
+				if check_password_hash(owner["password"], password):
+					return { "id": str(owner["id"]) }
+		else:
+			status = "nonExist"
+	else:
+		status = "nonExist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
 @app.route("/get_workers/<id>")
 def get_workers(id):
 	location = query("select * from location where id = " + str(id), True).fetchone()
@@ -1126,7 +1180,7 @@ def get_owner_info(id):
 	if owner != None:
 		ownerInfo = json.loads(owner["info"])
 
-		return { "id": id, "userType": ownerInfo["userType"], "useVoice": ownerInfo["voice"] }
+		return { "id": id, "useVoice": ownerInfo["voice"] }
 	else:
 		errormsg = "Owner doesn't exist"
 
@@ -1243,11 +1297,14 @@ def get_owner_reset_code(cellnumber):
 		code = getId()
 
 		if send_text == True:
-			message = client.messages.create(
-				body="Your EasyBook reset code is " + code,
-				messaging_service_sid=mss,
-				to='+1' + str(owner["cellnumber"])
-			)
+			try:
+				message = client.messages.create(
+					body="Your EasyBook reset code is " + code,
+					messaging_service_sid=mss,
+					to='+1' + str(owner["cellnumber"])
+				)
+			except:
+				print("send error")
 
 		return { "msg": "Reset code sent", "code": code }
 	else:
