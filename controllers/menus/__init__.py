@@ -32,6 +32,7 @@ def get_menus(id):
 					sizes = options["sizes"]
 					quantities = options["quantities"]
 					percents = options["percents"]
+					extras = options["extras"]
 
 					for index, size in enumerate(sizes):
 						size["key"] = "size-" + str(index)
@@ -41,6 +42,9 @@ def get_menus(id):
 
 					for index, percent in enumerate(percents):
 						percent["key"] = "percent-" + str(index)
+
+					for index, extra in enumerate(extras):
+						extra["key"] = "extra-" + str(index)
 					
 					image = json.loads(data["image"])
 
@@ -54,7 +58,7 @@ def get_menus(id):
 
 					items.append({
 						"key": "product-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "number": data["number"], "name": data["name"], "description": data["description"], 
-						"price": price, "sizes": sizes, "quantities": quantities, "percents": percents, 
+						"price": price, "sizes": sizes, "quantities": quantities, "percents": percents, "extras": extras,
 						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "product",
 						"show": False
 					})
@@ -77,7 +81,7 @@ def get_menus(id):
 						"show": False
 					})
 
-			for index, data in enumerate(menuDatas):				
+			for index, data in enumerate(menuDatas):
 				image = json.loads(data["image"])
 				items.append({
 					"key": "menu-" + str(index), "parentId": parentMenuid, "id": data["id"], "name": data["name"], 
@@ -143,6 +147,7 @@ def get_menus(id):
 					sizes = options["sizes"]
 					quantities = options["quantities"]
 					percents = options["percents"]
+					extras = options["extras"] if "extras" in options else []
 
 					for index, size in enumerate(sizes):
 						size["key"] = "size-" + str(index)
@@ -152,6 +157,9 @@ def get_menus(id):
 
 					for index, percent in enumerate(percents):
 						percent["key"] = "percent-" + str(index)
+
+					for index, extra in enumerate(extras):
+						extra["key"] = "extra-" + str(index)
 					
 					image = json.loads(data["image"])
 
@@ -165,7 +173,7 @@ def get_menus(id):
 
 					items.append({
 						"key": "product-" + str(data["id"]), "parentId": parentMenuid, "id": data["id"], "number": data["number"], "name": data["name"], "description": data["description"], 
-						"price": price, "sizes": sizes, "quantities": quantities, "percents": percents, 
+						"price": price, "sizes": sizes, "quantities": quantities, "percents": percents, "extras": extras,
 						"image": image if image["name"] != "" else {"width": 300, "height": 300}, "listType": "product",
 						"show": False
 					})

@@ -30,9 +30,9 @@ def get_product_info(id):
 		sizes = []
 
 		for k, data in enumerate(datas):
-			price = float(data["price"])
+			price = data["price"]
 
-			if len(str(price).split(".")[1]) < 2:
+			if len(price.split(".")[1]) < 2:
 				price = str(price) + "0"
 
 			sizes.append({
@@ -46,9 +46,9 @@ def get_product_info(id):
 		quantities = []
 
 		for k, data in enumerate(datas):
-			price = float(data["price"])
+			price = data["price"]
 
-			if len(str(price).split(".")[1]) < 2:
+			if len(price.split(".")[1]) < 2:
 				price = str(price) + "0"
 
 			quantities.append({
@@ -62,13 +62,32 @@ def get_product_info(id):
 		percents = []
 
 		for k, data in enumerate(datas):
-			price = float(data["price"])
+			price = data["price"]
 
-			if len(str(price).split(".")[1]) < 2:
+			if len(price.split(".")[1]) < 2:
 				price = str(price) + "0"
 
 			percents.append({
 				"key": "percent-" + str(k),
+				"input": data["input"],
+				"price": price,
+				"selected": False
+			})
+
+		datas = options["extras"] if "extras" in options else []
+		extras = []
+
+		for k, data in enumerate(datas):
+			price = None
+
+			if "price" in data:
+				price = data["price"]
+
+				if len(price.split(".")[1]) < 2:
+					price = str(price) + "0"
+
+			extras.append({
+				"key": "otheroption-" + str(k),
 				"input": data["input"],
 				"price": price,
 				"selected": False
@@ -88,9 +107,9 @@ def get_product_info(id):
 			price = ""
 
 		info = {
-			"name": product["name"],
+			"name": product["name"], "info": product["description"], 
 			"productImage": image if image["name"] != "" else {"width": 300, "height": 300},
-			"sizes": sizes, "quantities": quantities, "percents": percents,
+			"sizes": sizes, "quantities": quantities, "percents": percents, "extras": extras,
 			"price": price,
 			"cost": cost,
 			"quantity": 1
@@ -174,15 +193,15 @@ def add_product():
 
 		if errormsg == "":
 			data = {
-				"locationId": locationid, "menuId": menuid, "name": name, "image": imageData,
-				"options": options, "price": price
+				"locationId": str(locationid), "menuId": str(menuid), "name": name, "image": imageData,
+				"options": pymysql.converters.escape_string(options), "price": price
 			}
 			columns = []
 			insert_data = []
 
 			for key in data:
 				columns.append(key)
-				insert_data.append("'" + str(data[key]) + "'")
+				insert_data.append("'" + data[key] + "'")
 
 			id = query("insert into product (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
 
@@ -249,7 +268,7 @@ def update_product():
 		elif type == "price":
 			new_data["price"] = request.form['price']
 		elif type == "options":
-			new_data["options"] = request.form['options']
+			new_data["options"] = pymysql.converters.escape_string(request.form['options'])
 	else:
 		errormsg = "Product doesn't exist"
 

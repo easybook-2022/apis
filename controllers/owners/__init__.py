@@ -500,9 +500,12 @@ def update_logins():
 	elif type == "cellnumber":
 		cellnumber = content['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 
-		query("update owner set cellnumber = '" + cellnumber + "' where id = " + str(id))
+		if cellnumber != '':
+			query("update owner set cellnumber = '" + cellnumber + "' where id = " + str(id))
 
-		return { "msg": "succeed" }
+			return { "msg": "succeed" }
+		else:
+			errormsg = "Please enter a cell phone number"
 	elif type == "password":
 		currentPassword = content['currentPassword']
 		newPassword = content['newPassword']
@@ -555,33 +558,40 @@ def update_logins():
 			if newPassword != "" and confirmPassword != "":
 				if len(newPassword) >= 6:
 					if newPassword == confirmPassword:
-						password = generate_password_hash(newPassword)
+						if cellnumber != "" and userType != None:
+							password = generate_password_hash(newPassword)
 
-						data = {
-							"cellnumber": cellnumber,
-							"password": password,
-							"username": "",
-							"profile": "{}",
-							"hours": "{}",
-							"info": json.dumps({ "pushToken": "", "signin": False, "voice": False, "userType": userType })
-						}
+							data = {
+								"cellnumber": cellnumber,
+								"password": password,
+								"username": "",
+								"profile": "{}",
+								"hours": "{}",
+								"info": json.dumps({ "pushToken": "", "signin": False, "voice": False, "userType": userType })
+							}
 
-						insert_data = []
-						columns = []
-						for key in data:
-							columns.append(key)
-							insert_data.append("'" + data[key] + "'")
+							insert_data = []
+							columns = []
+							for key in data:
+								columns.append(key)
+								insert_data.append("'" + data[key] + "'")
 
-						location = query("select owners from location where id = " + str(locationid), True).fetchone()
+							location = query("select owners from location where id = " + str(locationid), True).fetchone()
 
-						ownerId = query("insert into owner (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
-						
-						owners = json.loads(location["owners"])
-						owners.append(str(ownerId))
+							ownerId = query("insert into owner (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")", True).lastrowid
+							
+							owners = json.loads(location["owners"])
+							owners.append(str(ownerId))
 
-						query("update location set owners = '" + json.dumps(owners) + "' where id = " + str(locationid))
+							query("update location set owners = '" + json.dumps(owners) + "' where id = " + str(locationid))
 
-						return { "msg": "succeed" }
+							return { "msg": "succeed" }
+						else:
+							if userType == None:
+								errormsg = "Please select a user type"
+
+							if cellnumber == "":
+								errormsg = "Cell phone number is blank"
 					else:
 						errormsg = "Password is mismatch"
 						status = "password"

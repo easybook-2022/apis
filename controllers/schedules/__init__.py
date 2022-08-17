@@ -234,7 +234,6 @@ def get_appointment_info(id):
 			"locationId": int(locationId), 
 			"serviceId": int(serviceId) if serviceId > -1 else None, 
 			"time": { "day": day, "month": month, "date": date, "year": year, "hour": hour, "minute": minute }, 
-			#"unix": int(schedule["time"]),
 			"note": schedule["note"],
 			"worker": worker,
 			"blocked": blockedSchedules
@@ -500,7 +499,6 @@ def book_walk_in():
 	type = content['type']
 	client = content['client']
 	serviceid = content['serviceid'] if 'serviceid' in content else -1
-	#unix = int(content["unix"])
 
 	# get now or the next available time for client
 	# check if current time is valid
@@ -919,7 +917,6 @@ def push_appointments():
 		info["year"] = int(newInfo["year"])
 		info["hour"] = int(newInfo["hour"])
 		info["minute"] = int(newInfo["minute"])
-		#info["time"] = str(newInfo["unix"])
 
 		if info["userId"] > -1:
 			receiver.append("user" + str(info["userId"]))
@@ -1126,7 +1123,7 @@ def get_appointments():
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
 
 	ownerInfo = json.loads(owner["info"])
-	isOwner = ownerInfo["owner"]
+	isOwner = ownerInfo["userType"] == "owner"
 
 	locationInfo = json.loads(location["info"])
 	receiveType = locationInfo["type"]

@@ -738,13 +738,13 @@ def get_income(id):
 
 		monthly = "concat("
 		monthly += "json_extract(time, '$.year'), "
-		monthly += "json_extract(time, '$.month')"
+		monthly += "(if(json_extract(time, '$.month') < 10, concat('0', json_extract(time, '$.month')), json_extract(time, '$.month')))"
 		monthly += ") as monthly"
 
 		daily = "concat("
 		daily += "json_extract(time, '$.year'), "
-		daily += "json_extract(time, '$.month'), "
-		daily += "json_extract(time, '$.date')"
+		daily += "(if(json_extract(time, '$.month') < 10, concat('0', json_extract(time, '$.month')), json_extract(time, '$.month'))), "
+		daily += "(if(json_extract(time, '$.date') < 10, concat('0', json_extract(time, '$.date')), json_extract(time, '$.date')))"
 		daily += ") as daily"
 
 		yearly = "json_extract(time, '$.year') as yearly"
@@ -753,13 +753,13 @@ def get_income(id):
 		sql += " order by "
 		sql += "concat("
 		sql += "json_extract(time, '$.year'), "
-		sql += "json_extract(time, '$.month'), "
-		sql += "json_extract(time, '$.date'), "
-		sql += "json_extract(time, '$.day'), "
-		sql += "json_extract(time, '$.hour'), "
-		sql += "json_extract(time, '$.minute')"
-		sql += ")"
+		sql += "(if(json_extract(time, '$.month') < 10, concat('0', json_extract(time, '$.month')), json_extract(time, '$.month'))), "
+		sql += "(if(json_extract(time, '$.date') < 10, concat('0', json_extract(time, '$.date')), json_extract(time, '$.date'))), "
+		sql += "(if(json_extract(time, '$.hour') < 10, concat('0', json_extract(time, '$.hour')), json_extract(time, '$.hour'))), "
+		sql += "(if(json_extract(time, '$.minute') < 10, concat('0', json_extract(time, '$.minute')), json_extract(time, '$.minute')))"
+		sql += ") asc"
 		datas = query(sql, True).fetchall()
+
 		dayTotal = 0.00
 		monthTotal = 0.00
 		yearTotal = 0.00
@@ -836,7 +836,7 @@ def get_income(id):
 				yearHold = data["yearly"]
 				
 				monthly.append({ "key": "monthly-" + str(len(monthly)), "header": month + ", " + year })
-				daily.append({ "key": "daily-" + str(len(daily)), "header": day + " " + month + ", " + date })
+				daily.append({ "key": "daily-" + str(len(daily)), "header": day + " ," + month + " " + date + ", " + year })
 				yearly.append({ "key": "yearly-" + str(len(yearly)), "header": year })
 			else:
 				if data["monthly"] != monthHold: # restart total for next month
@@ -858,7 +858,7 @@ def get_income(id):
 
 					daily.append({
 						"key": "daily-" + str(len(daily)),
-						"header": day + " " + month + ", " + date + " " + year
+						"header": day + ", " + month + " " + date + ", " + year
 					})
 
 				if data["yearly"] != yearHold:
