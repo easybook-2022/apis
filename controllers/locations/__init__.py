@@ -62,7 +62,7 @@ def setup_location():
 				logoname = json.dumps({"name": "", "width": 0, "height": 0})
 
 		if errormsg == "":
-			locationInfo = json.dumps({"listed":False, "menuPhotos": [], "type": "everyone"})
+			locationInfo = json.dumps({"listed":False, "type": "everyone"})
 
 			data = {
 				"name": storeName, "phonenumber": phonenumber, "logo": logoname,
@@ -724,18 +724,12 @@ def get_location_hours(id):
 
 	return { "errormsg": errormsg, "status": status }, 400
 
-@app.route("/get_income/<id>")
-def get_income(id):
+@app.route("/get_restaurant_income/<id>")
+def get_restaurant_income(id):
 	location = query("select * from location where id = " + str(id), True).fetchone()
 	errormsg = ""
 
 	if location != None:
-		tables = query("select tableId from dining_table where locationId = " + str(id), True).fetchall()
-		tableIds = []
-
-		for table in tables:
-			tableIds.append(table["tableId"])
-
 		monthly = "concat("
 		monthly += "json_extract(time, '$.year'), "
 		monthly += "(if(json_extract(time, '$.month') < 10, concat('0', json_extract(time, '$.month')), json_extract(time, '$.month')))"
@@ -749,7 +743,7 @@ def get_income(id):
 
 		yearly = "json_extract(time, '$.year') as yearly"
 
-		sql = "select orders, time, " + monthly + ", " + daily + ", " + yearly + " from dining_record where tableId in (" + json.dumps(tableIds)[1:-1] + ")"
+		sql = "select orders, time, " + monthly + ", " + daily + ", " + yearly + " from income_record where locationId = " + str(id)
 		sql += " order by "
 		sql += "concat("
 		sql += "json_extract(time, '$.year'), "
@@ -773,8 +767,8 @@ def get_income(id):
 		for dataindex, data in enumerate(datas):
 			orders = json.loads(data["orders"])
 			time = json.loads(data["time"])
-			day = daysArr[int(time["day"])]
-			month = monthsArr[int(time["month"])]
+			day = indexToDay[int(time["day"])]
+			month = indexToMonth[int(time["month"])]
 			date = str(time["date"])
 			year = str(time["year"])
 
@@ -786,10 +780,10 @@ def get_income(id):
 
 					product = query("select * from product where id = " + str(order["productId"]), True).fetchone()
 
-					productOptions = json.loads(product["options"])
 					productSizes = productOptions["sizes"]
 					productQuantities = productOptions["quantities"]
 					productPercents = productOptions["percents"]
+					productExtras = productOptions["extras"]
 
 					sizesInfo = {}
 					for info in productSizes:
@@ -882,6 +876,44 @@ def get_income(id):
 			yearly[len(yearly) - 1]["total"] = round(yearTotal, 2)
 
 		return { "daily": daily, "monthly": monthly, "yearly": yearly }
+	else:
+		errormsg = "Location doesn't exist"
+
+	return { "errormsg": errormsg, "status": status }, 400
+
+@app.route("/get_salon_income/<id>")
+def get_salon_income(id):
+	location = query("select owners from location where id = " + str(id), True).fetchone()
+	errormsg = ""
+
+	if location != None:
+		owners = "(" + location["owners"][1:-1] + ")"
+
+		monthly = "concat("
+		monthly += "json_extract(time, '$.year'), "
+		monthly += "(if(json_extract(time, '$.month') < 10, concat('0', json_extract(time, '$.month')), json_extract(time, '$.month')))"
+		monthly += ") as monthly"
+
+		daily = "concat("
+		daily += "json_extract(time, '$.year'), "
+		daily += "(if(json_extract(time, '$.month') < 10, concat('0', json_extract(time, '$.month')), json_extract(time, '$.month'))), "
+		daily += "(if(json_extract(time, '$.date') < 10, concat('0', json_extract(time, '$.date')), json_extract(time, '$.date')))"
+		daily += ") as daily"
+
+		yearly = "json_extract(time, '$.year') as yearly"
+
+		sql = "select service, time, " + monthly + ", " + daily + ", " + yearly + " from income_record where locationId = " + str(id)
+		sql += " order by "
+		sql += "concat("
+		sql += "json_extract(time, '$.year'), "
+		sql += "(if(json_extract(time, '$.month') < 10, concat('0', json_extract(time, '$.month')), json_extract(time, '$.month'))), "
+		sql += "(if(json_extract(time, '$.date') < 10, concat('0', json_extract(time, '$.date')), json_extract(time, '$.date'))), "
+		sql += "(if(json_extract(time, '$.hour') < 10, concat('0', json_extract(time, '$.hour')), json_extract(time, '$.hour'))), "
+		sql += "(if(json_extract(time, '$.minute') < 10, concat('0', json_extract(time, '$.minute')), json_extract(time, '$.minute')))"
+		sql += ") asc"
+		datas = query(sql, True).fetchall()
+
+		return { "datas": datas }
 	else:
 		errormsg = "Location doesn't exist"
 

@@ -765,11 +765,13 @@ def get_workers_hour():
 			owners = {}
 
 			for data in datas:
-				scheduledDatas = query("select id, status, day, month, date, year, hour, minute from schedule where workerId = " + str(data["id"]) + " and (status = 'confirmed' or status = 'w_confirmed' or status = 'cancel' or status = 'blocked')", True).fetchall()
+				scheduledDatas = query("select id, status, time from schedule where workerId = " + str(data["id"]) + " and (status = 'confirmed' or status = 'w_confirmed' or status = 'cancel' or status = 'blocked')", True).fetchall()
 				scheduled = {}
 
 				for scheduledData in scheduledDatas:
-					time = json.dumps({ "day": daysArr[int(scheduledData["day"])], "month": monthsArr[int(scheduledData["month"])], "date": scheduledData["date"], "year": scheduledData["year"], "hour": scheduledData["hour"], "minute": scheduledData["minute"] })
+					time = json.loads(scheduledData["time"])
+
+					time = json.dumps({ "day": indexToDay[int(time["day"])], "month": indexToMonth[int(time["month"])], "date": time["date"], "year": time["year"], "hour": time["hour"], "minute": time["minute"] })
 					scheduled[time + "-" + (scheduledData["status"][:2])] = scheduledData["id"]
 
 				hours = json.loads(data['hours'])
@@ -808,11 +810,11 @@ def get_workers_hour():
 			data = query("select * from owner where id = " + str(ownerid), True).fetchone()
 
 			if data != None:
-				scheduledDatas = query("select id, day, month, date, year, hour, minute from schedule where workerId = " + str(ownerid) + " and (status = 'confirmed' or status = 'w_confirmed' or status = 'cancel' or status = 'blocked')", True).fetchall()
+				scheduledDatas = query("select id, time from schedule where workerId = " + str(ownerid) + " and (status = 'confirmed' or status = 'w_confirmed' or status = 'cancel' or status = 'blocked')", True).fetchall()
 				scheduled = {}
 
 				for scheduledData in scheduledDatas:
-					time = json.dumps({ "day": daysArr[int(scheduledData["day"])], "month": monthsArr[int(scheduledData["month"])], "date": scheduledData["date"], "year": scheduledData["year"], "hour": scheduledData["hour"], "minute": scheduledData["minute"] })
+					time = json.dumps({ "day": indexToDay[int(scheduledData["day"])], "month": indexToMonth[int(scheduledData["month"])], "date": scheduledData["date"], "year": scheduledData["year"], "hour": scheduledData["hour"], "minute": scheduledData["minute"] })
 					scheduled[time + "-" + (scheduledData["status"][:1])] = scheduledData["id"]
 
 				hours = json.loads(data['hours'])
@@ -840,29 +842,6 @@ def get_workers_hour():
 				errormsg = "Worker doesn't exist"
 	else:
 		errormsg = "Location doesn't exist"
-
-	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/set_use_voice", methods=["POST"])
-def set_use_voice():
-	content = request.get_json()
-	errormsg = ""
-	status = ""
-
-	ownerid = content['ownerid']
-	option = content['option']
-
-	owner = query("select id, info from owner where id = " + str(ownerid), True).fetchone()
-
-	if owner != None:
-		info = json.loads(owner["info"])
-		info["voice"] = option
-
-		query("update owner set info = '" + json.dumps(info) + "' where id = " + str(owner["id"]))
-
-		return { "msg": "success" }
-	else:
-		errormsg = "Owner doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
 

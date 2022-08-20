@@ -29,10 +29,17 @@ auth_token = "b7f9e3b46ac445302a4a0710e95f44c1" if send_text == True else "24437
 mss = "MG376dcb41368d7deca0bda395f36bf2a7"
 client = Client(account_sid, auth_token)
 
-monthsObj = {'January': 0, 'February': 1, 'March': 2, 'April': 3, 'May': 4, 'June': 5, 'July': 6, 'August': 7, 'September': 8, 'October': 9, 'November': 10, 'December': 11}
-daysObj = {'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6}
-monthsArr = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-daysArr = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+monthToIndex = {'January': 0, 'February': 1, 'March': 2, 'April': 3, 'May': 4, 'June': 5, 'July': 6, 'August': 7, 'September': 8, 'October': 9, 'November': 10, 'December': 11}
+dayToIndex = {'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6}
+indexToMonth = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+indexToDay = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+#monthsObj
+#daysObj
+#monthsArr
+#daysArr
+
+
 
 # ssh_host = '159.203.13.53'
 # ssh_username = 'root'
@@ -121,6 +128,3 @@ def writeToFile(uri, name):
 	fd = open(os.path.join("static", name), 'wb')
 	fd.write(binary_data)
 	fd.close()
-
-def insert_into_table(table, datas):
-	return { "msg": "" }

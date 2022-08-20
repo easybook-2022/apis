@@ -99,22 +99,26 @@ class DiningTable(db.Model):
 	def __repr__(self):
 		return '<Table %r>' % self.name
 
-class DiningRecord(db.Model):
+class IncomeRecord(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	tableId = db.Column(db.String(22))
 	orders = db.Column(db.Text)
+	service = db.Column(db.String(60))
 	time = db.Column(db.String(95))
+	locationId = db.Column(db.Integer)
 
 	def __init__(
 		self,
-		tableId, orders, time
+		tableId, orders, service, time, locationId
 	):
 		self.tableId = tableId
 		self.orders = orders
+		self.service = service
 		self.time = time
+		self.locationId = locationId
 
 	def __repr__(self):
-		return '<DiningPaymentRecords %r>' % self.name
+		return '<IncomeRecord %r>' % self.tableId
 
 class Menu(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -161,13 +165,7 @@ class Schedule(db.Model):
 	locationId = db.Column(db.Integer)
 	menuId = db.Column(db.String(10))
 	serviceId = db.Column(db.Integer)
-	userInput = db.Column(db.String(70))
-	day = db.Column(db.Integer)
-	month = db.Column(db.Integer)
-	date = db.Column(db.Integer)
-	year = db.Column(db.Integer)
-	hour = db.Column(db.Integer)
-	minute = db.Column(db.Integer)
+	time = db.Column(db.String(80))
 	status = db.Column(db.String(15))
 	cancelReason = db.Column(db.String(200))
 	locationType = db.Column(db.String(15))
@@ -176,17 +174,13 @@ class Schedule(db.Model):
 	orders = db.Column(db.Text)
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, userInput, day, month, date, year, hour, minute, status, cancelReason, locationType, customers, note, orders, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, time, status, cancelReason, locationType, customers, note, orders, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
 		self.menuId = menuId
 		self.serviceId = serviceId
-		self.userInput = userInput
-		self.day = day
-		self.month = month
-		self.date = date
-		self.year = year
+		self.time = time
 		self.status = status
 		self.cancelReason = cancelReason
 		self.locationType = locationType
@@ -225,7 +219,6 @@ class Cart(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
 	locationId = db.Column(db.Integer)
 	productId = db.Column(db.Integer)
-	userInput = db.Column(db.String(70))
 	quantity = db.Column(db.Integer)
 	adder = db.Column(db.Integer)
 	options = db.Column(db.Text)
@@ -234,10 +227,9 @@ class Cart(db.Model):
 	orderNumber = db.Column(db.String(20))
 	waitTime = db.Column(db.String(50))
 
-	def __init__(self, locationId, productId, userInput, quantity, adder, options, note, status, orderNumber, waitTime):
+	def __init__(self, locationId, productId, quantity, adder, options, note, status, orderNumber, waitTime):
 		self.locationId = locationId
 		self.productId = productId
-		self.userInput = userInput
 		self.quantity = quantity
 		self.adder = adder
 		self.options = options

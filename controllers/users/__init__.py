@@ -31,15 +31,6 @@ def user_login():
 			if check_password_hash(user["password"], password):
 				userid = user["id"]
 
-				user["password"] = generate_password_hash(password)
-
-				update_data = []
-				for key in user:
-					if key != "table":
-						update_data.append(key + " = '" + str(user[key]) + "'")
-
-				query("update user set " + ", ".join(update_data) + " where id = " + str(userid))
-
 				if user["username"] == '':
 					return { "id": userid, "msg": "setup" }
 				else:
@@ -83,6 +74,7 @@ def user_verify(cellnumber):
 def user_register():
 	content = request.get_json()
 
+	username = content['username']
 	cellnumber = content['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 	password = content['password']
 	confirmPassword = content['confirmPassword']
@@ -97,12 +89,11 @@ def user_register():
 				if user == None:
 					password = generate_password_hash(password)
 
-					userInfo = json.dumps({"pushToken": ""})
-
 					data = {
+						"username": username,
 						"cellnumber": cellnumber,
 						"password": password,
-						"info": userInfo
+						"info": json.dumps({"pushToken": ""})
 					}
 					insert_data = []
 					columns = []
@@ -293,8 +284,7 @@ def get_notifications(id):
 		for data in datas:
 			cartitem = query("select * from cart where orderNumber = '" + str(data["orderNumber"]) + "'", True).fetchone()
 			numCartitems = query("select count(*) as num from cart where orderNumber = '" + str(data["orderNumber"]) + "'", True).fetchone()["num"]
-
-			userInput = json.loads(cartitem["userInput"])
+			location = query("select * from location where id = " + str(cartitem["locationId"]), True).fetchone()
 
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
@@ -303,38 +293,32 @@ def get_notifications(id):
 				"numOrders": numCartitems,
 				"status": cartitem["status"],
 				"waitTime": cartitem["waitTime"],
-				"locationType": userInput["type"]
+				"locationType": location["type"]
 			})
 
 		# get schedules
 		sql = "select * from schedule where "
-		sql += "(userId = " + str(id) + " and (status = 'cancel' or status = 'confirmed')) order by concat(year, month, date, hour, minute)"
+		sql += "(userId = " + str(id) + " and (status = 'cancel' or status = 'confirmed')) order by concat("
+		sql += "json_extract(time, '$.year'), "
+		sql += "json_extract(time, '$.month'), "
+		sql += "json_extract(time, '$.date'), "
+		sql += "json_extract(time, '$.hour'), "
+		sql += "json_extract(time, '$.minute')"
+		sql += ")"
 		datas = query(sql, True).fetchall()
 
 		for data in datas:
-			location = None
-			service = None
-
-			if data['locationId'] != "":
-				location = query("select * from location where id = " + str(data["locationId"]), True).fetchone()
-
-			if data['serviceId'] != -1:
-				service = query("select * from service where id = " + str(data["serviceId"]), True).fetchone()
-
+			time = json.loads(data["time"])
+			location = query("select * from location where id = " + str(data["locationId"]), True).fetchone()
+			service = query("select * from service where id = " + str(data["serviceId"]), True).fetchone()
 			booker = query("select * from user where id = " + str(data["userId"]), True).fetchone()
 			confirm = False
 			info = json.loads(data['info'])
 				
-			if data["workerId"] > -1:
-				owner = query("select * from owner where id = " + str(data["workerId"]), True).fetchone()
-
-				worker = { "id": data["workerId"], "username": owner["username"] }
-			else:
-				worker = None
-
-			userInput = json.loads(data['userInput'])
+			owner = query("select * from owner where id = " + str(data["workerId"]), True).fetchone()
+			worker = { "id": data["workerId"], "username": owner["username"] }
 			
-			time = {"day": daysArr[data["day"]], "month": monthsArr[data["month"]], "date": data["date"], "year": data["year"], "hour": data["hour"], "minute": data["minute"]}
+			time = {"day": indexToDay[time["day"]], "month": indexToMonth[time["month"]], "date": time["date"], "year": time["year"], "hour": time["hour"], "minute": time["minute"]}
 
 			locationLogo = json.loads(location["logo"])
 			serviceImage = json.loads(service["image"])

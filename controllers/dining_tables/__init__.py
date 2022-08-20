@@ -554,10 +554,13 @@ def finish_dining():
 	id = content['id']
 	time = json.dumps(content['time'])
 
-	table = query("select tableId, orders from dining_table where id = " + str(id), True).fetchone()
+	table = query("select locationId, tableId, orders from dining_table where id = " + str(id), True).fetchone()
 
 	if table != None:
-		data = {"tableId": table["tableId"], "orders": pymysql.converters.escape_string(table["orders"]), "time": time }
+		data = {
+			"tableId": table["tableId"], "orders": pymysql.converters.escape_string(table["orders"]), 
+			"time": time, "service": "{}", "locationId": locationId
+		}
 		columns = []
 		insert_data = []
 
@@ -565,7 +568,7 @@ def finish_dining():
 			columns.append(key)
 			insert_data.append("'" + str(data[key]) + "'")
 
-		query("insert into dining_record (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")")
+		query("insert into income_record (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")")
 		query("update dining_table set orders = '[]', status = 'finish' where id = " + str(id))
 
 		return { "msg": "succeed" }

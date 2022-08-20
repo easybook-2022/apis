@@ -204,32 +204,9 @@ def get_menus(id):
 
 	if location != None:
 		list = getOtherMenu(id, "") # list
-		menuPhotos = []
 		info = json.loads(location["info"])
 
-		if len(info["menuPhotos"]) > 0:
-			photos = info["menuPhotos"]
-			row = []
-			rownum = 0
-			
-			for photo in photos:
-				row.append({ "key": "row-" + str(rownum), "photo": { "name": photo["image"], "width": photo["width"], "height": photo["height"] } })
-				rownum += 1
-
-				if len(row) == 3:
-					menuPhotos.append({ "key": "menu-" + str(len(menuPhotos)), "row": row })
-					row = []
-
-			if len(row) > 0:
-				leftover = 3 - len(row)
-
-				for k in range(leftover):
-					row.append({ "key": "row-" + str(rownum) })
-					rownum += 1
-
-				menuPhotos.append({ "key": "menu-" + str(len(menuPhotos)), "row": row })
-
-		return { "list": list, "photos": menuPhotos }
+		return { "list": list }
 	else:
 		errormsg = "Location doesn't exist"
 
@@ -259,7 +236,6 @@ def remove_menu(id):
 	numMenus = query("select count(*) as num from menu where locationId = " + str(location["id"]), True).fetchone()["num"]
 	numMenus += query("select count(*) as num from product where locationId = " + str(location["id"]), True).fetchone()["num"]
 	numMenus += query("select count(*) as num from service where locationId = " + str(location["id"]), True).fetchone()["num"]
-	numMenus += len(info["menuPhotos"])
 
 	info["listed"] = True if numMenus > 0 else False
 	location["info"] = json.dumps(info)
@@ -433,10 +409,7 @@ def upload_menu():
 		photo = { "image": imagename, "width": size['width'], "height": size['height'] }
 
 	info = json.loads(location["info"])
-	menuPhotos = info["menuPhotos"]
-	menuPhotos.append(photo)
 
-	info["menuPhotos"] = menuPhotos
 	info["listed"] = True
 	
 	query("update location set info = '" + json.dumps(info) + "' where id = " + str(locationid))
@@ -455,18 +428,10 @@ def delete_menu():
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
 
 	info = json.loads(location["info"])
-	photos = info["menuPhotos"]
-
-	for index, photoInfo in enumerate(photos):
-		if photoInfo["image"] == photo:
-			photos.pop(index)
-
-	info["menuPhotos"] = photos
 
 	numMenus = query("select count(*) as num from menu where locationId = " + str(location["id"]), True).fetchone()["num"]
 	numMenus += query("select count(*) as num from product where locationId = " + str(location["id"]), True).fetchone()["num"]
 	numMenus += query("select count(*) as num from service where locationId = " + str(location["id"]), True).fetchone()["num"]
-	numMenus += len(photos)
 
 	info["listed"] = True if numMenus > 0 else False
 
