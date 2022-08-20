@@ -559,7 +559,7 @@ def finish_dining():
 	if table != None:
 		data = {
 			"tableId": table["tableId"], "orders": pymysql.converters.escape_string(table["orders"]), 
-			"time": time, "service": "{}", "locationId": locationId
+			"time": time, "service": "{}", "locationId": table["locationId"]
 		}
 		columns = []
 		insert_data = []

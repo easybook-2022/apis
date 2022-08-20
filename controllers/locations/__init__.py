@@ -780,6 +780,7 @@ def get_restaurant_income(id):
 
 					product = query("select * from product where id = " + str(order["productId"]), True).fetchone()
 
+					productOptions = json.loads(product["options"])
 					productSizes = productOptions["sizes"]
 					productQuantities = productOptions["quantities"]
 					productPercents = productOptions["percents"]
