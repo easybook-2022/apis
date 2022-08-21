@@ -15,6 +15,7 @@ def owner_login():
 
 	cellnumber = content['cellnumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 	password = content['password']
+	worker = True if 'worker' in content else False
 	errormsg = ""
 	status = ""
 
@@ -23,49 +24,61 @@ def owner_login():
 
 		if owner != None:
 			if check_password_hash(owner['password'], password):
-				ownerid = owner['id']
-				ownerhours = owner['hours']
 				ownerInfo = json.loads(owner['info'])
-				ownerInfo["signin"] = True
+				allowLogin = False
 
-				numBusiness = query("select count(*) as num from location where owners like '%\"" + str(ownerid) + "\"%'", True).fetchone()["num"]
+				if worker == True: # is worker
+					if ownerInfo["userType"] != "owner":
+						allowLogin = True
+				else: # is owner
+					if ownerInfo["userType"] == "owner":
+						allowLogin = True
 
-				if numBusiness > 0:
-					location = query("select * from location where owners like '%\"" + str(ownerid) + "\"%'", True).fetchone()
-					locationid = location['id']
-					locationtype = location['type']
-					locationhours = location['hours']
-
-					query("update owner set info = '" + str(json.dumps(ownerInfo)) + "' where id = " + str(owner['id']))
+				if allowLogin == True:
+					ownerid = owner['id']
+					ownerhours = owner['hours']
+					ownerInfo["signin"] = True
 					
-					if locationhours != '{}' and ownerhours != '{}':
-						if numBusiness > 1:
-							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list", "userType": ownerInfo["userType"] }
-						else:
-							return { 
-								"ownerid": ownerid, "cellnumber": cellnumber, 
-								"locationid": locationid, "locationtype": locationtype, 
-								"msg": "authoption" if locationtype == "nail" or locationtype == "hair" else "main", 
-								"userType": ownerInfo["userType"] 
-							}
-					else:
-						if locationhours == '{}': # location setup not done
-							return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": "", "msg": "locationsetup" }
-						else:
-							if locationtype == 'hair' or locationtype == 'nail':
-								return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "register" }
+					numBusiness = query("select count(*) as num from location where owners like '%\"" + str(ownerid) + "\"%'", True).fetchone()["num"]
+
+					if numBusiness > 0:
+						location = query("select * from location where owners like '%\"" + str(ownerid) + "\"%'", True).fetchone()
+						locationid = location['id']
+						locationtype = location['type']
+						locationhours = location['hours']
+
+						query("update owner set info = '" + str(json.dumps(ownerInfo)) + "' where id = " + str(owner['id']))
+						
+						if locationhours != '{}' and ownerhours != '{}':
+							if numBusiness > 1:
+								return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list", "userType": ownerInfo["userType"] }
 							else:
-								if numBusiness > 1:
-									return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list", "userType": ownerInfo["userType"] }
+								return { 
+									"ownerid": ownerid, "cellnumber": cellnumber, 
+									"locationid": locationid, "locationtype": locationtype, 
+									"msg": "authoption" if locationtype == "nail" or locationtype == "hair" else "main", 
+									"userType": ownerInfo["userType"] 
+								}
+						else:
+							if locationhours == '{}': # location setup not done
+								return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": "", "msg": "locationsetup" }
+							else:
+								if locationtype == 'hair' or locationtype == 'nail':
+									return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "register" }
 								else:
-									return { 
-										"ownerid": ownerid, "cellnumber": cellnumber, 
-										"locationid": locationid, "locationtype": locationtype, 
-										"msg": "authoption" if locationtype == "nail" or locationtype == "hair" else "main", 
-										"userType": ownerInfo["userType"] 
-									}
+									if numBusiness > 1:
+										return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": locationid, "locationtype": locationtype, "msg": "list", "userType": ownerInfo["userType"] }
+									else:
+										return { 
+											"ownerid": ownerid, "cellnumber": cellnumber, 
+											"locationid": locationid, "locationtype": locationtype, 
+											"msg": "authoption" if locationtype == "nail" or locationtype == "hair" else "main", 
+											"userType": ownerInfo["userType"] 
+										}
+					else:
+						return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": None, "locationtype": "", "msg": "locationsetup" }
 				else:
-					return { "ownerid": ownerid, "cellnumber": cellnumber, "locationid": None, "locationtype": "", "msg": "locationsetup" }
+					errormsg = "Account non-accessible"
 			else:
 				errormsg = "Password is incorrect"
 		else:
