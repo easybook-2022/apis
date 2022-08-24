@@ -27,12 +27,11 @@ def owner_login():
 				ownerInfo = json.loads(owner['info'])
 				allowLogin = False
 
-				if worker == True: # is worker
-					if ownerInfo["userType"] != "owner":
-						allowLogin = True
-				else: # is owner
-					if ownerInfo["userType"] == "owner":
-						allowLogin = True
+				if ownerInfo["userType"] == "owner": # account is owner
+					allowLogin = True
+				else:
+					if worker == True:
+						allowLogin = True						
 
 				if allowLogin == True:
 					ownerid = owner['id']
@@ -180,7 +179,7 @@ def owner_register():
 			"username": "",
 			"profile": "{}",
 			"hours": "{}",
-			"info": json.dumps({ "pushToken": "", "signin": False, "voice": False, "userType": "owner" })
+			"info": json.dumps({ "pushToken": "", "signin": False, "userType": "owner" })
 		}
 
 		insert_data = []
@@ -327,7 +326,7 @@ def add_owner():
 				"username": username,
 				"profile": profileData,
 				"hours": hours,
-				"info": json.dumps({"pushToken": "", "userType": "stylist", "signin": False, "voice": False})
+				"info": json.dumps({"pushToken": "", "userType": "stylist", "signin": False})
 			}
 			
 			insert_data = []
@@ -580,7 +579,7 @@ def update_logins():
 								"username": "",
 								"profile": "{}",
 								"hours": "{}",
-								"info": json.dumps({ "pushToken": "", "signin": False, "voice": False, "userType": userType })
+								"info": json.dumps({ "pushToken": "", "signin": False, "userType": userType })
 							}
 
 							insert_data = []
@@ -1182,7 +1181,7 @@ def get_owner_info(id):
 	if owner != None:
 		ownerInfo = json.loads(owner["info"])
 
-		return { "id": id, "useVoice": ownerInfo["voice"] }
+		return { "id": id }
 	else:
 		errormsg = "Owner doesn't exist"
 

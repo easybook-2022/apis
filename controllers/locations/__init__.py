@@ -831,7 +831,7 @@ def get_restaurant_income(id):
 				yearHold = data["yearly"]
 				
 				monthly.append({ "key": "monthly-" + str(len(monthly)), "header": month + ", " + year })
-				daily.append({ "key": "daily-" + str(len(daily)), "header": day + " ," + month + " " + date + ", " + year })
+				daily.append({ "key": "daily-" + str(len(daily)), "header": day + ", " + month + " " + date + ", " + year })
 				yearly.append({ "key": "yearly-" + str(len(yearly)), "header": year })
 			else:
 				if data["monthly"] != monthHold: # restart total for next month
@@ -888,8 +888,6 @@ def get_salon_income(id):
 	errormsg = ""
 
 	if location != None:
-		owners = "(" + location["owners"][1:-1] + ")"
-
 		monthly = "concat("
 		monthly += "json_extract(time, '$.year'), "
 		monthly += "(if(json_extract(time, '$.month') < 10, concat('0', json_extract(time, '$.month')), json_extract(time, '$.month')))"
@@ -914,7 +912,80 @@ def get_salon_income(id):
 		sql += ") asc"
 		datas = query(sql, True).fetchall()
 
-		return { "datas": datas }
+		dayTotal = 0.00
+		monthTotal = 0.00
+		yearTotal = 0.00
+		daily = []
+		monthly = []
+		yearly = []
+		dayHold = ""
+		monthHold = ""
+		yearHold = ""
+
+		for dataindex, data in enumerate(datas):
+			service = json.loads(data["service"])
+
+			userId = service["userId"]
+			workerId = service["workerId"]
+			serviceId = service["serviceId"]
+			time = json.loads(data["time"])
+			day = indexToDay[int(time["day"])]
+			month = indexToMonth[int(time["month"])]
+			date = str(time["date"])
+			year = str(time["year"])
+
+			if dataindex == 0:
+				monthHold = data["monthly"]
+				dayHold = data["daily"]
+				yearHold = data["yearly"]
+				
+				monthly.append({ "key": "monthly-" + str(len(monthly)), "header": month + ", " + year })
+				daily.append({ "key": "daily-" + str(len(daily)), "header": day + ", " + month + " " + date + ", " + year })
+				yearly.append({ "key": "yearly-" + str(len(yearly)), "header": year })
+			else:
+				if data["monthly"] != monthHold: # restart total for next month
+					monthHold = data["monthly"]
+
+					monthly[len(monthly) - 1]["total"] = round(monthTotal, 2)
+					monthTotal = 0.00
+
+					monthly.append({
+						"key": "monthly-" + str(len(monthly)),
+						"header": month + ", " + year
+					})
+
+				if data["daily"] != dayHold: # restart total for next day
+					dayHold = data["daily"]
+
+					daily[len(daily) - 1]["total"] = round(dayTotal, 2)
+					dayTotal = 0.00
+
+					daily.append({
+						"key": "daily-" + str(len(daily)),
+						"header": day + ", " + month + " " + date + ", " + year
+					})
+
+				if data["yearly"] != yearHold:
+					yearHold = data["yearly"]
+
+					yearly[len(yearly) - 1]["total"] = round(yearTotal, 2)
+					yearlyTotal = 0.00
+
+					yearly.append({
+						"key": "yearly-" + str(len(yearly)),
+						"header": year
+					})
+
+		if "total" not in monthly[len(monthly) - 1]:
+			monthly[len(monthly) - 1]["total"] = round(monthTotal, 2)
+
+		if "total" not in daily[len(daily) - 1]:
+			daily[len(daily) - 1]["total"] = round(dayTotal, 2)
+
+		if "total" not in yearly[len(yearly) - 1]:
+			yearly[len(yearly) - 1]["total"] = round(yearTotal, 2)
+
+		return { "daily": daily, "monthly": monthly, "yearly": yearly }
 	else:
 		errormsg = "Location doesn't exist"
 

@@ -122,7 +122,7 @@ def get_ordering_tables(id):
 						extrasInfo = {}
 						for info in productExtras:
 							if info["input"] in extras:
-								extrasInfo[info["input"]] = float(info["price"])
+								extrasInfo[info["input"]] = float(info["price"]) if "price" in info else 0
 
 						order["name"] = product["number"] if product["number"] != "" else product["name"]
 
@@ -154,7 +154,7 @@ def get_ordering_tables(id):
 						tableOrders.append(order)
 
 				if numDone < len(orders) and len(tableOrders) > 0:
-					tables.append({ "id": data["name"], "orders": tableOrders }) 
+					tables.append({ "id": data["name"], "key": "table-" + str(len(tables)), "orders": tableOrders }) 
 
 		return { "tables": tables }
 	else:
@@ -274,7 +274,7 @@ def order_meal():
 			while existingKey == True:
 				key = getId()
 
-			orders.insert(0, {
+			orders.append({
 				"key": key,
 				"productId": newOrder["productId"],
 				"sizes": newOrder["sizes"],
@@ -372,7 +372,7 @@ def view_payment(id):
 				extrasInfo = {}
 				for info in productExtras:
 					if info["input"] in extras:
-						extrasInfo[info["input"]] = float(info["price"])
+						extrasInfo[info["input"]] = float(info["price"]) if "price" in info else 0
 
 				data["name"] = product["number"] if product["number"] != "" else product["name"]
 				cost = 0.00
@@ -489,7 +489,7 @@ def view_table_orders(tableId):
 			extrasInfo = {}
 			for info in productExtras:
 				if info["input"] in extras:
-					extrasInfo[info["input"]] = float(info["price"])
+					extrasInfo[info["input"]] = float(info["price"]) if "price" in info else 0
 
 			data["name"] = product["name"]
 			cost = 0.00

@@ -81,7 +81,7 @@ def get_product_info(id):
 			price = None
 
 			if "price" in data:
-				price = data["price"]
+				price = data["price"] if "price" in data else 0
 
 				if len(price.split(".")[1]) < 2:
 					price = str(price) + "0"

@@ -252,8 +252,6 @@ def get_num_notifications(userid):
 		numCartorderers = query(sql, True).fetchone()
 		numCartorderers = numCartorderers["num"] if numCartorderers != None else 0
 
-		return { "numCartorderers": numCartorderers }
-
 		num += numCartorderers
 
 		# get schedules
