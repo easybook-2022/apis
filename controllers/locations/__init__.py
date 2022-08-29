@@ -6,16 +6,6 @@ from models import *
 
 cors = CORS(app)
 
-@app.route("/welcome_locations")
-def welcome_locations():
-	datas = query("select id from location limit 5", True).fetchall()
-	locations = []
-
-	for data in datas:
-		locations.append(data["id"])
-
-	return { "msg": "welcome to locations of EasyBook", "locations": locations }
-
 @app.route("/setup_location", methods=["POST"])
 def setup_location():
 	storeName = request.form['storeName']
@@ -94,7 +84,7 @@ def update_information():
 	errormsg = ""
 	status = ""
 
-	id = content['id']
+	id = content['locationid']
 	storeName = content['storeName']
 	phonenumber = content['phonenumber'].replace("(", "").replace(")", "").replace(" ", "").replace("-", "")
 
@@ -199,20 +189,6 @@ def update_logo():
 		errormsg = "Location doesn't exist"
 
 	return { "errormsg": errormsg, "status": status }, 400
-
-@app.route("/fetch_num_appointments/<ownerid>")
-def fetch_num_appointments(ownerid):
-	numAppointments = query("select count(*) as num from schedule where status = 'confirmed' and workerId = " + str(ownerid), True).fetchone()
-	numAppointments = numAppointments["num"] if numAppointments != None else 0
-
-	return { "numAppointments": numAppointments }
-
-@app.route("/fetch_num_cartorderers/<id>")
-def fetch_num_cartorderers(id):
-	numCartorderers = query("select count(*) as num from cart where locationId = " + str(id) + " and (status = 'checkout' or status = 'ready' or status = 'requestedOrder') group by adder, orderNumber", True).fetchone()
-	numCartorderers = numCartorderers["num"] if numCartorderers != None else 0
-
-	return { "numCartorderers": numCartorderers }
 
 @app.route("/set_type", methods=["POST"])
 def set_type():
@@ -679,6 +655,13 @@ def get_location_profile():
 			"receiveType": locationInfo["type"]
 		}
 
+		if "ownerid" in content:
+			numBusinesses = query("select count(*) as num from location where owners like '%\"" + str(content['ownerid']) + "\"%'", True).fetchone()["num"]
+
+			info["numBusinesses"] = numBusinesses
+		else:
+			info["numBusinesses"] = 0
+
 		return { "info": info }
 	else:
 		errormsg = "Location doesn't exist"
@@ -868,13 +851,28 @@ def get_restaurant_income(id):
 					})
 
 		if "total" not in monthly[len(monthly) - 1]:
-			monthly[len(monthly) - 1]["total"] = round(monthTotal, 2)
+			monthTotal = round(monthTotal, 2)
+
+			if len(str(monthTotal).split(".")[1]) == 1:
+				monthTotal = str(monthTotal) + "0"
+
+			monthly[len(monthly) - 1]["total"] = monthTotal
 
 		if "total" not in daily[len(daily) - 1]:
-			daily[len(daily) - 1]["total"] = round(dayTotal, 2)
+			dayTotal = round(dayTotal, 2)
+
+			if len(str(dayTotal).split(".")[1]) == 1:
+				dayTotal = str(dayTotal) + "0"
+
+			daily[len(daily) - 1]["total"] = dayTotal
 
 		if "total" not in yearly[len(yearly) - 1]:
-			yearly[len(yearly) - 1]["total"] = round(yearTotal, 2)
+			yearTotal = round(yearTotal, 2)
+
+			if len(str(yearTotal).split(".")[1]) == 1:
+				yearTotal = str(yearTotal) + "0"
+
+			yearly[len(yearly) - 1]["total"] = yearTotal
 
 		return { "daily": daily, "monthly": monthly, "yearly": yearly }
 	else:
@@ -977,13 +975,28 @@ def get_salon_income(id):
 					})
 
 		if "total" not in monthly[len(monthly) - 1]:
-			monthly[len(monthly) - 1]["total"] = round(monthTotal, 2)
+			monthTotal = round(monthTotal, 2)
+
+			if len(str(monthTotal).split(".")[1]) == 1:
+				monthTotal = str(monthTotal) + "0"
+
+			monthly[len(monthly) - 1]["total"] = monthTotal
 
 		if "total" not in daily[len(daily) - 1]:
-			daily[len(daily) - 1]["total"] = round(dayTotal, 2)
+			dayTotal = round(dayTotal, 2)
+
+			if len(str(dayTotal).split(".")[1]) == 1:
+				dayTotal = str(dayTotal) + "0"
+
+			daily[len(daily) - 1]["total"] = dayTotal
 
 		if "total" not in yearly[len(yearly) - 1]:
-			yearly[len(yearly) - 1]["total"] = round(yearTotal, 2)
+			yearTotal = round(yearTotal, 2)
+
+			if len(str(yearTotal).split(".")[1]) == 1:
+				yearTotal = str(yearTotal) + "0"
+
+			yearly[len(yearly) - 1]["total"] = yearTotal
 
 		return { "daily": daily, "monthly": monthly, "yearly": yearly }
 	else:

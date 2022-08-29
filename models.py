@@ -171,10 +171,9 @@ class Schedule(db.Model):
 	locationType = db.Column(db.String(15))
 	customers = db.Column(db.Text)
 	note = db.Column(db.String(225))
-	orders = db.Column(db.Text)
 	info = db.Column(db.String(100))
 
-	def __init__(self, userId, workerId, locationId, menuId, serviceId, time, status, cancelReason, locationType, customers, note, orders, info):
+	def __init__(self, userId, workerId, locationId, menuId, serviceId, time, status, cancelReason, locationType, customers, note, info):
 		self.userId = userId
 		self.workerId = workerId
 		self.locationId = locationId
@@ -186,7 +185,6 @@ class Schedule(db.Model):
 		self.locationType = locationType
 		self.customers = customers
 		self.note = note
-		self.orders = orders
 		self.info = info
 
 	def __repr__(self):

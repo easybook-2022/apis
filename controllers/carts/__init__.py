@@ -5,16 +5,6 @@ from models import *
 
 cors = CORS(app)
 
-@app.route("/welcome_carts", methods=["GET"])
-def welcome_carts():
-	datas = query("select * from cart", True).fetchall()
-	carts = []
-
-	for data in datas:
-		carts.append(data["id"])
-
-	return { "msg": "welcome to carts of EasyBook", "carts": carts }
-
 @app.route("/get_num_items/<id>")
 def get_num_items(id):
 	numCartItems = query("select count(*) as num from cart where adder = " + str(id) + " and status = 'unlisted'", True).fetchone()["num"]

@@ -5,16 +5,6 @@ from models import *
 
 cors = CORS(app)
 
-@app.route("/welcome_menus", methods=["GET"])
-def welcome_menus():
-	datas = Menu.query.all()
-	menus = []
-
-	for data in datas:
-		menus.append(data["id"])
-
-	return { "msg": "welcome to menus of EasyBook", "menus": menus }
-
 @app.route("/get_menus/<id>")
 def get_menus(id):
 	def getOtherMenu(locationId, parentMenuid):

@@ -6,16 +6,6 @@ from models import *
 
 cors = CORS(app)
 
-@app.route("/welcome_dining_tables")
-def welcome_dining_tables():
-	datas = query("select id from dining_table limit 5", True).fetchall()
-	diningTables = []
-
-	for data in datas:
-		diningTables.append(data["id"])
-
-	return { "msg": "welcome to dining tables of EasyBook", "diningTables": diningTables }
-
 @app.route("/get_tables/<id>")
 def get_tables(id):
 	errormsg = ""
@@ -301,7 +291,7 @@ def finish_order():
 	status = ""
 
 	orderid = content['orderid']
-	tableid = content['id']
+	tableid = content['tableid']
 
 	table = query("select orders from dining_table where tableId = '" + str(tableid) + "'", True).fetchone()
 
@@ -551,10 +541,10 @@ def finish_dining():
 	errormsg = ""
 	status = ""
 
-	id = content['id']
+	tableid = content['tableid']
 	time = json.dumps(content['time'])
 
-	table = query("select locationId, tableId, orders from dining_table where id = " + str(id), True).fetchone()
+	table = query("select locationId, tableId, orders from dining_table where id = " + str(tableid), True).fetchone()
 
 	if table != None:
 		data = {
@@ -569,7 +559,7 @@ def finish_dining():
 			insert_data.append("'" + str(data[key]) + "'")
 
 		query("insert into income_record (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")")
-		query("update dining_table set orders = '[]', status = 'finish' where id = " + str(id))
+		query("update dining_table set orders = '[]', status = 'finish' where id = " + str(tableid))
 
 		return { "msg": "succeed" }
 	else:

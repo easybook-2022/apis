@@ -7,136 +7,147 @@ import os, shutil, json
 
 cors = CORS(app)
 
-@app.route("/welcome_dev")
-def welcome_dev():
-	return { "msg": "welcome to dev of EasyBook" }
+@app.route("/reset/<type>")
+def reset(type):
+	if type == "user" or type == "all":
+		delete = False
+		users = query("select * from user", True).fetchall()
+		
+		for user in users:
+			delete = True
 
-@app.route("/reset")
-def reset():
-	delete = False
-	users = query("select * from user", True).fetchall()
-	
-	for user in users:
-		delete = True
+			query("delete from user where id = " + str(user['id']))
 
-		query("delete from user where id = " + str(user['id']))
+		if delete == True:
+			query("ALTER table user auto_increment = 1")
 
-	if delete == True:
-		query("ALTER table user auto_increment = 1")
+	if type == "owner" or type == "all":
+		delete = False
+		owners = query("select * from owner", True).fetchall()
+		for owner in owners:
+			delete = True
 
-	delete = False
-	owners = query("select * from owner", True).fetchall()
-	for owner in owners:
-		delete = True
-		query("delete from owner where id = " + str(owner['id']))
+			profile = json.loads(owner["profile"])
 
-	if delete == True:
-		query("ALTER table owner auto_increment = 1")
+			if profile["name"] != "" and profile["name"] != None and os.path.exists("static/" + profile["name"]):
+				os.remove("static/" + profile["name"])
 
-	delete = False
-	locations = query("select * from location", True).fetchall()
-	for location in locations:
-		delete = True
-		logo = location['logo']
+			query("delete from owner where id = " + str(owner['id']))
 
-		locationInfo = json.loads(location['info'])
+		if delete == True:
+			query("ALTER table owner auto_increment = 1")
 
-		if logo != "" and logo != None and os.path.exists("static/" + logo):
-			os.remove("static/" + logo)
+	if type == "location" or type == "all":
+		delete = False
+		locations = query("select * from location", True).fetchall()
+		for location in locations:
+			delete = True
+			logo = json.loads(location['logo'])
 
-		query("delete from location where id = " + str(location['id']))
+			if logo["name"] != "" and logo["name"] != None and os.path.exists("static/" + logo["name"]):
+				os.remove("static/" + logo["name"])
 
-	if delete == True:
-		query("ALTER table location auto_increment = 1")
+			query("delete from location where id = " + str(location['id']))
 
-	delete = False
-	menus = query("select * from menu", True).fetchall()
-	for menu in menus:
-		delete = True
-		image = menu['image']
+		if delete == True:
+			query("ALTER table location auto_increment = 1")
 
-		if image != "" and image != None and os.path.exists("static/" + image):
-			os.remove("static/" + image)
+	if type == "menu" or type == "all":
+		delete = False
+		menus = query("select * from menu", True).fetchall()
+		for menu in menus:
+			delete = True
+			image = json.loads(menu['image'])
 
-		query("delete from menu where id = " + str(menu['id']))
+			if image["name"] != "" and image["name"] != None and os.path.exists("static/" + image["name"]):
+				os.remove("static/" + image["name"])
 
-	if delete == True:
-		query("ALTER table menu auto_increment = 1")
+			query("delete from menu where id = " + str(menu['id']))
 
-	delete = False
-	services = query("select * from service", True).fetchall()
-	for service in services:
-		delete = True
-		image = service['image']
+		if delete == True:
+			query("ALTER table menu auto_increment = 1")
 
-		if image != "" and image != None and os.path.exists("static/" + image):
-			os.remove("static/" + image)
+	if type == "service" or type == "all":
+		delete = False
+		services = query("select * from service", True).fetchall()
+		for service in services:
+			delete = True
+			image = json.loads(service['image'])
 
-		query("delete from service where id = " + str(service['id']))
+			if image["name"] != "" and image["name"] != None and os.path.exists("static/" + image["name"]):
+				os.remove("static/" + image["name"])
 
-	if delete == True:
-		query("ALTER table service auto_increment = 1")
+			query("delete from service where id = " + str(service['id']))
 
-	delete = False
-	schedules = query("select * from schedule", True).fetchall()
-	for schedule in schedules:
-		delete = True
+		if delete == True:
+			query("ALTER table service auto_increment = 1")
 
-		query("delete from schedule where id = " + str(schedule['id']))
+	if type == "schedule" or type == "all":
+		delete = False
+		schedules = query("select * from schedule", True).fetchall()
+		for schedule in schedules:
+			delete = True
 
-	if delete == True:
-		query("ALTER table schedule auto_increment = 1")
+			query("delete from schedule where id = " + str(schedule['id']))
 
-	delete = False
-	products = query("select * from product", True).fetchall()
-	for product in products:
-		delete = True
-		image = product['image']
+		if delete == True:
+			query("ALTER table schedule auto_increment = 1")
 
-		if image != "" and image != None and os.path.exists("static/" + image):
-			os.remove("static/" + image)
+	if type == "product" or type == "all":
+		delete = False
+		products = query("select * from product", True).fetchall()
+		for product in products:
+			delete = True
+			image = json.loads(product['image'])
 
-		query("delete from product where id = " + str(product['id']))
+			if image["name"] != "" and image["name"] != None and os.path.exists("static/" + image["name"]):
+				os.remove("static/" + image["name"])
 
-	if delete == True:
-		query("ALTER table product auto_increment = 1")
+			query("delete from product where id = " + str(product['id']))
 
-	delete = False
-	carts = query("select * from cart", True).fetchall()
-	for cart in carts:
-		delete = True
+		if delete == True:
+			query("ALTER table product auto_increment = 1")
 
-		query("delete from cart where id = " + str(cart['id']))
+	if type == "cart" or type == "all":
+		delete = False
+		carts = query("select * from cart", True).fetchall()
+		for cart in carts:
+			delete = True
 
-	if delete == True:
-		query("ALTER table cart auto_increment = 1")
+			query("delete from cart where id = " + str(cart['id']))
 
-	delete = False
-	tables = query("select * from dining_table", True).fetchall()
-	for table in tables:
-		delete = True
+		if delete == True:
+			query("ALTER table cart auto_increment = 1")
 
-		query("delete from dining_table where id = " + str(table['id']))
+	if type == "table" or type == "all":
+		delete = False
+		tables = query("select * from dining_table", True).fetchall()
+		for table in tables:
+			delete = True
 
-	if delete == True:
-		query("ALTER table dining_table auto_increment = 1")
+			query("delete from dining_table where id = " + str(table['id']))
 
-	delete = False
-	records = query("select * from income_record", True).fetchall()
-	for info in records:
-		delete = True
+		if delete == True:
+			query("ALTER table dining_table auto_increment = 1")
 
-		query("delete from income_record where id = " + str(info["id"]))
+	if type == "record" or type == "all":
+		delete = False
+		records = query("select * from income_record", True).fetchall()
+		for info in records:
+			delete = True
 
-	if delete == True:
-		query("ALTER table income_record auto_increment = 1")
+			query("delete from income_record where id = " + str(info["id"]))
 
-	files = os.listdir("static")
+		if delete == True:
+			query("ALTER table income_record auto_increment = 1")
 
-	for file in files:
-		if "." in file:
-			if file != "" and file != None and os.path.exists("static/" + file):
-				os.remove("static/" + file)
+	if type == "all":
+		files = os.listdir("static")
+
+		for file in files:
+			if "." in file:
+				if file != "" and file != None and os.path.exists("static/" + file):
+					os.remove("static/" + file)
 
 	return { "reset": True }
 
@@ -341,7 +352,7 @@ def insert_into_table():
 @app.route("/create_menus_with_details/<locationId>")
 def create_menus_with_details(locationId):
 	list = {
-		"logo": "logo.png",
+		"logo": "logo.jpeg",
 		"menus": [
 			{
 				"menuName": "Foot Care",
@@ -474,6 +485,7 @@ def create_menus_with_details(locationId):
 			}
 		]
 	}
+
 
 	products = query("select image from product where locationId = " + str(locationId), True).fetchall()
 	menus = query("select image from menu where locationId = " + str(locationId), True).fetchall()

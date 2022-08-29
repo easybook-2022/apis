@@ -5,16 +5,6 @@ from models import *
 
 cors = CORS(app)
 
-@app.route("/welcome_users", methods=["GET"])
-def welcome_users():
-	datas = User.query.all()
-	users = []
-
-	for data in datas:
-		users.append(data.id)
-
-	return { "msg": "welcome to users of EasyBook", "users": users }
-
 @app.route("/user_login", methods=["POST"])
 def user_login():
 	content = request.get_json()

@@ -5,16 +5,6 @@ from models import *
 
 cors = CORS(app)
 
-@app.route("/welcome_products", methods=["GET"])
-def welcome_products():
-	datas = query("select * from product", True).fetchall()
-	products = []
-
-	for data in datas:
-		products.append(data["id"])
-
-	return { "msg": "welcome to products of EasyBook", "products": products }
-
 @app.route("/get_product_info/<id>")
 def get_product_info(id):
 	product = query("select * from product where id = " + str(id), True).fetchone()

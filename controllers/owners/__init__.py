@@ -5,10 +5,6 @@ from models import *
 
 cors = CORS(app)
 
-@app.route("/welcome_owners")
-def welcome_owners():
-	return { "msg": "welcome to owners of EasyBook" }
-
 @app.route("/owner_login", methods=["POST"])
 def owner_login():
 	content = request.get_json()
@@ -416,6 +412,8 @@ def update_owner():
 					profile.save(os.path.join('static', imagename))
 
 					new_data["profile"] = json.dumps({"name": imagename, "width": int(size["width"]), "height": int(size["height"])})
+				else:
+					new_data["profile"] = json.dumps({"name": "", "width": 0, "height": 0})
 		elif type == "password":
 			currentPassword = request.form['currentPassword']
 			newPassword = request.form['newPassword']

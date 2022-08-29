@@ -130,16 +130,6 @@ def isOverLapped(schedules):
 
 	return overLap
 
-@app.route("/welcome_schedules", methods=["GET"])
-def welcome_schedules():
-	datas = Schedule.query.all()
-	schedules = []
-
-	for data in datas:
-		schedules.append(data.id)
-
-	return { "msg": "welcome to schedules of EasyBook", "schedules": schedules }
-
 @app.route("/get_requests", methods=["POST"])
 def get_requests():
 	content = request.get_json()
@@ -324,7 +314,6 @@ def make_appointment():
 	workerid = content['workerid']
 	locationid = content['locationid']
 	serviceid = content['serviceid']
-	serviceinfo = content['serviceinfo']
 	clientTime = content['time']
 	note = content['note']
 	timeDisplay = content['timeDisplay']
@@ -333,13 +322,9 @@ def make_appointment():
 	user = query("select * from user where id = " + str(userid), True).fetchone()
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
 
-	if serviceid != -1:
-		service = query("select * from service where id = " + str(serviceid), True).fetchone()
-		servicename = service["name"]
-		menuid = service["menuId"]
-	else:
-		servicename = serviceinfo
-		menuid = -1
+	service = query("select * from service where id = " + str(serviceid), True).fetchone()
+	servicename = service["name"]
+	menuid = service["menuId"]
 
 	if scheduleid != None:
 		schedule = query("select * from schedule where id = " + str(scheduleid), True).fetchone()
@@ -478,7 +463,7 @@ def make_appointment():
 			data = {
 				"userId": userid,"workerId": workerid,"locationId": locationid,"menuId": menuid,"serviceId": serviceid,
 				"time": time, "status": "confirmed","cancelReason": "","locationType": location["type"],
-				"customers": 1,"note": note,"orders": "[]","info": "{}"
+				"customers": 1,"note": note,"info": "{}"
 			}
 			columns = []
 			insert_data = []
@@ -638,7 +623,7 @@ def book_walk_in():
 	data = {
 		"userId": -1,"workerId": workerid,"locationId": locationid,"menuId": -1,"serviceId": serviceid if serviceid != None else -1,
 		"time": time, "status": "w_confirmed","cancelReason": "","locationType": type,
-		"customers": 1,"note": note,"orders": "[]","info": "{}"
+		"customers": 1,"note": note,"info": "{}"
 	}
 
 	columns = []
@@ -742,7 +727,7 @@ def block_time():
 			data = {
 				"userId": -1,"workerId": workerid, "locationId": location["id"], "menuId": -1, "serviceId": -1,
 				"time": time, "status": "blocked", "cancelReason": "", "locationType": location["type"],
-				"customers": 0, "note": "", "orders": "[]", "info": "{}"
+				"customers": 0, "note": "", "info": "{}"
 			}
 			columns = []
 			insert_data = []
@@ -781,7 +766,6 @@ def salon_change_appointment():
 	workerid = content['workerid']
 	locationid = content['locationid']
 	serviceid = content['serviceid']
-	serviceinfo = content['serviceinfo']
 	clientTime = content['time']
 	note = content['note']
 	timeDisplay = content['timeDisplay']
@@ -792,13 +776,9 @@ def salon_change_appointment():
 	location = query("select * from location where id = " + str(locationid), True).fetchone()
 
 	if location != None:
-		if serviceid != -1:
-			service = query("select * from service where id = " + str(serviceid), True).fetchone()
-			servicename = service["name"]
-			menuid = service["menuId"]
-		else:
-			servicename = serviceinfo
-			menuid = -1
+		service = query("select * from service where id = " + str(serviceid), True).fetchone()
+		servicename = service["name"]
+		menuid = service["menuId"]
 
 		if scheduleid != None:
 			schedule = query("select * from schedule where id = " + str(scheduleid), True).fetchone()
@@ -1078,7 +1058,7 @@ def done_service(id):
 	query("delete from schedule where id = " + str(id))
 
 	data = {
-		"tableId": "", "orders": "[]", "time": schedule["time"], 
+		"tableId": "", "time": schedule["time"], 
 		"service": str(json.dumps({"userId": schedule["userId"], "workerId": schedule["workerId"], "serviceId": schedule["serviceId"]})), 
 		"locationId": str(locationId)
 	}
