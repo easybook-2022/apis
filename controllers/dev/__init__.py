@@ -355,137 +355,27 @@ def create_menus_with_details(locationId):
 		"logo": "logo.jpeg",
 		"menus": [
 			{
-				"menuName": "Foot Care",
-				"image": "footcare.jpeg",
-				"services": [
-					{ "name": "Add On Shellac", "price": "15" },
-					{ "name": "Shellac Removal", "price": "15" },
-					{ "name": "Shellac Color Only", "price": "25.00" },
-					{ "name": "Express Pedicure (30 Mins)", "price": "30.00", "description": "Includes warm whirlpool soak, color removal,\ntrimming and shaping nails, cuticles care and regular polish." },
-					{ "name": "Spa Pedicure (35 Mins)", "price": "45.00", "description": "Includes warm whirlpool soak with Rock Sea Salt, nails, cuticles & callous care, a mini massage with oil, hot\ntowel wrap, and application of regular polish. And Paraffin." },
-					{ "name": "Deluxe Pedicure (45 Mins)", "price": "59.00", "description": "Includes warm whirlpool soak with Foaming Flower Soap; nails, cuticles & callous care, relaxing lotion\nmassage, paraffin, and mint mask, finishing with hot towel wrap and regular polish." },
-					{ "name": "The One Lavender Pedicure (55 Mins)", "price": "69.00", "description": "Enjoy the relaxing and anti-stress benefits of Lavender. This treatment starts with a gentle exfoliation\nconsisting of Lavender Salt and scrubs to remove dry skin and improve skin's texture. The feet are wrapped\nin Lavender paraffin & a mask. Regular polish is included." },
-					{ "name": "Organic Pedicure (60 Mins)", "price": "75.00", "description": "Designed to brighten & lighten skin tone for a flawless, porcelain finish without the use of dangerous\nchemicals in purely natural & organic treatment.\n\nYour choice of fresh lemon & ginger/orange & ginger" }
+				"menuName": "APPETIZER",
+				"meals": [
+					{ "number": "", "name": "HOUSE SALAD", "price": "9.00", "description": "MIXTURE OF FRESH LETTUCE AND GARDEN VEGETABLES" },
+					{ "number": "", "name": "WINGS", "price": "13.00", "description": "HONEY GARLIC, BBQ, OR JERK" },
+					{ "number": "", "name": "ACKEE AND SALTFISH", "price": "12.00", "description": "ACKEE SAUTEED WITH SALTFISH, SERVED WITH FRIED DUMPLING" },
+					{ "number": "", "name": "JERK CHICKEN SKEWERS", "price": "12.00", "description": "JERK CHICKEN, FRIED DUMPLING AND PLANTAIN STACKED ON A SKEWER" },
+					{ "number": "", "name": "JERK PORK SKEWERS", "price": "13.00", "description": "JERK PORK, FRIED DUMPLING AND PLANTAIN STACKED ON A SKEWER" },
+					{ "number": "", "name": "SHRIMP", "price": "14.50", "description": "CURRY OR JERK" },
+					{ "number": "", "name": "JAMAICAN PATTY", "price": "3.50", "description": "LIGHT, DELICATE PASTRY FILLED WITH A CHOICE OF\nSPICY BEEF, MILD BEEF, CHICKEN OR VEGGIE" },
+					{ "number": "", "name": "JERK PORK", "price": "12.50", "description": "PORK MARINATED IN OUR SCOTTHILL JERK SEASONING" }
 				]
 			},
 			{
-				"menuName": "Nail Enhancement",
-				"image": "nailenhancement.jpeg",
-				"services": [
-					{ "name": "Dip Overlay (Short Nail)", "price": "50.00" },
-					{ "name": "Dip Overlay Full Set (Short Nail)", "price": "55.00" },
-					{ "name": "Dip Overlay Fill in (Short Nail)", "price": "50.00" },
-					{ "name": "Acrylic Full Set (with Shellac)", "price": "50.00" },
-					{ "name": "Acrylic Fill in (with Shellac)", "price": "45.00" },
-					{ "name": "Solar Gel Full Set (with Shellac)", "price": "65.00" },
-					{ "name": "Solar Gel Fill in (with Shellac)", "price": "55.00" },
-					{ "name": "Bio Gel Overlay", "price": "55.00"},
-					{ "name": "Bio Gel Full Set (with Shellac)", "price": "60.00" },
-					{ "name": "Bio Gel Fill in (with Shellac)", "price": "55.00" },
-					{ "name": "Nail Removed Only", "price": "15.00" },
-					{ "name": "UV Gel Full Set (with Shellac)", "price": "55.00" },
-					{ "name": "UV Gel Fill in (with Shellac)", "price": "50.00" },
-					{ "name": "Manicure with Nails Extra", "price": "10.00" },
-					{ "name": "Long Nails Extra", "price": "10.00" }
-				]
-			},
-			{
-				"menuName": "Hand Care",
-				"image": "handcare.jpeg",
-				"services": [
-					{ "name": "Shellac Removal only", "price": "10.00" },
-					{ "name": "Shellac Color Only", "price": "20.00" },
-					{ "name": "Shellac Removal", "price": "10.00" },
-					{ "name": "Express Manicure", "price": "30.00" }
-				]
-			},
-			{
-				"menuName": "Kids Services",
-				"description": "Under 8 Years Old",
-				"image": "kidsservices.jpeg",
-				"services": [
-					{ "name": "Princess Manicure", "price": "15.00" },
-					{ "name": "Princess Pedicure", "price": "25.00" },
-					{ "name": "Princess Manicure & Pedicure", "price": "35.00" },
-					{ "name": "Fingers & Toe Polish", "price": "15.00" },
-					{ "name": "Toe Polish", "price": "8.00" },
-					{ "name": "Fingers Polish", "price": "7.00" }
-				]
-			},
-			{
-				"menuName": "Facial",
-				"image": "facial.jpeg",
-				"services": [
-					{ "name": "Basic Facial", "price": "50.00" },
-					{ "name": "Deep Cleaning", "price": "65.00" },
-					{ "name": "Teen Facial", "price": "40.00" },
-					{ "name": "Acne Facial Treatment", "price": "75.00" },
-					{ "name": "Aqua Peeling Head", "price": "20.00" },
-					{ "name": "RF Eyes Pen", "price": "10.00" },
-					{ "name": "Oxygen Spayer", "price": "15.00" }
-				]
-			},
-			{
-				"menuName": "Eyelash Extensions",
-				"image": "eyelashextensions.png",
-				"services": [
-					{ "name": "Classic Eyelash Extension Full Set", "price": "11.45" },
-					{ "name": "Classic Fill 2 Weeks (30 Mins)", "price": "11.90" },
-					{ "name": "Volume Lash Set Extensions Full Set", "price": "12.45" },
-					{ "name": "Volume Lash Fill 2 Weeks (30 Mins)", "description": "Grilled Meatballs with Vermicelli", "price": "12.45" }
-				]
-			},
-			{
-				"menuName": "Waxing",
-				"image": "waxing.jpeg",
-				"menus": [
-					{
-						"menuName": "For Her Waxing",
-						"services": [
-							{ "name": "Bikini Line", "price": "25.00" },
-							{ "name": "Brazilian", "price": "45.00" },
-							{ "name": "Eyebrow", "price": "9.00" },
-							{ "name": "Lip", "price": "6.00" },
-							{ "name": "Chin", "price": "9.00" },
-							{ "name": "Full Face", "price": "35.00" },
-							{ "name": "Sideburns", "price": "12.00" },
-							{ "name": "Half Arms", "price": "25.00" },
-							{ "name": "Full Arms", "price": "35.00" },
-							{ "name": "Half Leg", "price": "25.00" },
-							{ "name": "Full Legs", "price": "45.00" },
-							{ "name": "Under arms", "price": "20.00" },
-							{ "name": "Threading Eyebrow", "price": "10.00" }
-						]
-					},
-					{
-						"menuName": "For Him Waxing",
-						"description": "By Appointment Only",
-						"services": [
-							{ "name": "Boyzilian", "price": "75.00" },
-							{ "name": "Under arms", "price": "25.00" },
-							{ "name": "Full Legs", "price": "75.00" },
-							{ "name": "Full Chest", "price": "45.00"},
-							{ "name": "Full Back", "price": "55.00" }
-						]
-					}
-				]
-			},
-			{
-				"menuName": "Relaxing Massages",
-				"image": "relaxingmassages.png",
-				"services": [
-					{ "name": "Half Body 30 Mins", "price": "45.00" },
-					{ "name": "Full Body Massage 60 Mins", "price": "70.00" },
-					{ "name": "Hot Stone Massage 30 Mins", "price": "50.00" },
-					{ "name": "Hot Stone Massage 60 Mins", "price": "90.00" },
-					{ "name": "Leg Massage 20 Mins", "price": "30.00" },
-					{ "name": "Shoulders & Neck 30 Mins", "price": "45.00" },
-					{ "name": "Foot Massage 20 Mins", "price": "30.00" }
+				"menuName": "NOODLE SOUP",
+				"meals": [
+					{ "number": "", "name": "Veggie Soup", "price": "12.95", "description": "" },
+					{ "number": "", "name": "Chicken Soup", "price": "14.95", "description": "" }
 				]
 			}
 		]
 	}
-
 
 	products = query("select image from product where locationId = " + str(locationId), True).fetchall()
 	menus = query("select image from menu where locationId = " + str(locationId), True).fetchall()

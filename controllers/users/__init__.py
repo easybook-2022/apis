@@ -311,6 +311,15 @@ def get_notifications(id):
 			locationLogo = json.loads(location["logo"])
 			serviceImage = json.loads(service["image"])
 
+			# get points and reward information
+
+			numVisited = query("select count(*) as num from income_record where json_extract(service, '$.userId') = " + str(id) + " and locationId = " + str(data["locationId"]), True).fetchone()["num"]
+
+			if numVisited % 7 == 0:
+				leftoverPoints = 0
+			else:
+				leftoverPoints = 7 - (numVisited % 7)
+
 			notifications.append({
 				"key": "order-" + str(len(notifications)),
 				"type": "service",
@@ -331,7 +340,8 @@ def get_notifications(id):
 				"booker": userId == data['userId'],
 				"bookerName": booker["username"],
 				"confirm": confirm,
-				"workerInfo": { "id": owner["id"], "username": owner["username"] } if data["workerId"] > -1 else {}
+				"workerInfo": { "id": owner["id"], "username": owner["username"] } if data["workerId"] > -1 else {},
+				"leftoverVisits": leftoverPoints
 			})
 
 		return { "notifications": notifications }
