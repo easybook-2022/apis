@@ -505,7 +505,8 @@ def book_walk_in():
 	note = content['note']
 	type = content['type']
 	client = content['client']
-	serviceid = content['serviceid'] if 'serviceid' in content else -1
+	menuid = content['menuid']
+	serviceid = content['serviceid']
 
 	# get now or the next available time for client
 	# check if current time is valid
@@ -531,6 +532,8 @@ def book_walk_in():
 	if scheduled == 0:
 		valid = True
 		timeDisplay = "right now"
+
+	worker = query("select hours from owner where id = " + str(workerid), True).fetchone()
 
 	date_time = datetime.datetime(year, month, day, hour, minute)
 	k = 0
@@ -586,7 +589,6 @@ def book_walk_in():
 
 		if scheduled == 0:
 			# check if worker is available at computing time
-			worker = query("select hours from owner where id = " + str(workerid), True).fetchone()
 			hours = json.loads(worker["hours"])
 
 			day = clientTime["day"]
@@ -619,11 +621,11 @@ def book_walk_in():
 					timeDisplay = str(hour - 12 if hour > 12 else hour) + ":" + str("0" + str(minute) if minute < 10 else minute)
 					timeDisplay += "pm" if hour >= 12 else "am"
 
-	time = json.dumps({"day": clientTime["day"], "month": clientTime["month"], "date": clientTime["date"], "year": clientTime["year"], "hour": clientTime["hour"], "minute": clientTime["minute"]})
+	time = json.dumps({"day": dayToIndex[clientTime["day"]], "month": monthToIndex[clientTime["month"]], "date": clientTime["date"], "year": clientTime["year"], "hour": clientTime["hour"], "minute": clientTime["minute"]})
 	data = {
-		"userId": -1,"workerId": workerid,"locationId": locationid,"menuId": -1,"serviceId": serviceid if serviceid != None else -1,
+		"userId": -1,"workerId": workerid,"locationId": locationid,"menuId": menuid,"serviceId": serviceid,
 		"time": time, "status": "w_confirmed","cancelReason": "","locationType": type,
-		"customers": 1,"note": note,"info": "{}"
+		"customers": 1,"note": note,"info": "{\"client\": \"" + client + "\"}"
 	}
 
 	columns = []
@@ -634,7 +636,7 @@ def book_walk_in():
 
 	query("insert into schedule (" + ", ".join(columns) + ") values (" + ", ".join(insert_data) + ")")
 
-	location = query("select owners from location where id = " + str(locationid), True).fetchone()
+	location = query("select type, owners from location where id = " + str(locationid), True).fetchone()
 	owners = "(" + location["owners"][1:-1] + ")"
 
 	sql = "select id, info from owner where id in " + owners
@@ -647,7 +649,7 @@ def book_walk_in():
 
 		receiver.append("owner" + str(owner["id"]))
 
-	return { "msg": "success", "timeDisplay": timeDisplay, "receiver": receiver }
+	return { "msg": "success", "timeDisplay": timeDisplay, "receiver": receiver, "receiveType": location["type"] }
 
 @app.route("/remove_booking", methods=["POST"])
 def remove_booking():
@@ -1179,10 +1181,18 @@ def get_appointments():
 		worker = query("select * from owner where id = " + str(data['workerId']), True).fetchone()
 			
 		info = json.loads(data["info"])
-		client = { 
-			"id": user["id"], 
-			"username": user["username"]
-		}
+
+		if int(data["userId"]) > 0:
+			client = { 
+				"id": user["id"], 
+				"username": user["username"]
+			}
+		else:
+			client = {
+				"id": -1,
+				"username": info["client"]
+			}
+
 		worker = { "id": worker["id"], "username": worker["username"] }
 		image = json.loads(service["image"]) if service != None else {"name": ""}
 		time = json.loads(data["time"])
@@ -1191,7 +1201,7 @@ def get_appointments():
 		appointments.append({
 			"key": "appointment-" + str(data['id']),
 			"id": str(data['id']),
-			"username": user["username"],
+			"username": user["username"] if user != None else info["client"],
 			"client": client,
 			"worker": worker if selfView == False else None,
 			"time": time,

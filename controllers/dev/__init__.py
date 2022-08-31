@@ -29,7 +29,7 @@ def reset(type):
 
 			profile = json.loads(owner["profile"])
 
-			if profile["name"] != "" and profile["name"] != None and os.path.exists("static/" + profile["name"]):
+			if "name" in profile and profile["name"] != "" and os.path.exists("static/" + profile["name"]):
 				os.remove("static/" + profile["name"])
 
 			query("delete from owner where id = " + str(owner['id']))
@@ -44,7 +44,7 @@ def reset(type):
 			delete = True
 			logo = json.loads(location['logo'])
 
-			if logo["name"] != "" and logo["name"] != None and os.path.exists("static/" + logo["name"]):
+			if "name" in logo and logo["name"] != "" and os.path.exists("static/" + logo["name"]):
 				os.remove("static/" + logo["name"])
 
 			query("delete from location where id = " + str(location['id']))
@@ -59,7 +59,7 @@ def reset(type):
 			delete = True
 			image = json.loads(menu['image'])
 
-			if image["name"] != "" and image["name"] != None and os.path.exists("static/" + image["name"]):
+			if image["name"] != "" and image["name"] != "" and os.path.exists("static/" + image["name"]):
 				os.remove("static/" + image["name"])
 
 			query("delete from menu where id = " + str(menu['id']))
@@ -74,7 +74,7 @@ def reset(type):
 			delete = True
 			image = json.loads(service['image'])
 
-			if image["name"] != "" and image["name"] != None and os.path.exists("static/" + image["name"]):
+			if "name" in image and image["name"] != "" and os.path.exists("static/" + image["name"]):
 				os.remove("static/" + image["name"])
 
 			query("delete from service where id = " + str(service['id']))
@@ -100,7 +100,7 @@ def reset(type):
 			delete = True
 			image = json.loads(product['image'])
 
-			if image["name"] != "" and image["name"] != None and os.path.exists("static/" + image["name"]):
+			if "name" in image and image["name"] != "" and os.path.exists("static/" + image["name"]):
 				os.remove("static/" + image["name"])
 
 			query("delete from product where id = " + str(product['id']))
@@ -349,11 +349,148 @@ def insert_into_table():
 
 	return { "id": id }
 
-@app.route("/create_menus_with_details/<locationId>")
-def create_menus_with_details(locationId):
-	list = {
-		"logo": "logo.jpeg",
-		"menus": [
+@app.route("/create_test_info", methods=["POST"])
+def create_test_info():
+	content = request.get_json()
+
+	locationid = content["locationid"]
+	type = content["type"]
+	list = { "logo": "logo.jpeg" }
+
+	if type == "salon":
+		list["menus"] = [
+			{
+				"menuName": "Foot Care",
+				"image": "footcare.jpeg",
+				"services": [
+					{ "name": "Add On Shellac", "price": "15" },
+					{ "name": "Shellac Removal", "price": "15" },
+					{ "name": "Shellac Color Only", "price": "25.00" },
+					{ "name": "Express Pedicure (30 Mins)", "price": "30.00", "description": "Includes warm whirlpool soak, color removal,\ntrimming and shaping nails, cuticles care and regular polish." },
+					{ "name": "Spa Pedicure (35 Mins)", "price": "45.00", "description": "Includes warm whirlpool soak with Rock Sea Salt, nails, cuticles & callous care, a mini massage with oil, hot\ntowel wrap, and application of regular polish. And Paraffin." },
+					{ "name": "Deluxe Pedicure (45 Mins)", "price": "59.00", "description": "Includes warm whirlpool soak with Foaming Flower Soap; nails, cuticles & callous care, relaxing lotion\nmassage, paraffin, and mint mask, finishing with hot towel wrap and regular polish." },
+					{ "name": "The One Lavender Pedicure (55 Mins)", "price": "69.00", "description": "Enjoy the relaxing and anti-stress benefits of Lavender. This treatment starts with a gentle exfoliation\nconsisting of Lavender Salt and scrubs to remove dry skin and improve skin's texture. The feet are wrapped\nin Lavender paraffin & a mask. Regular polish is included." },
+					{ "name": "Organic Pedicure (60 Mins)", "price": "75.00", "description": "Designed to brighten & lighten skin tone for a flawless, porcelain finish without the use of dangerous\nchemicals in purely natural & organic treatment.\n\nYour choice of fresh lemon & ginger/orange & ginger" }
+				]
+			},
+			{
+				"menuName": "Nail Enhancement",
+				"image": "nailenhancement.jpeg",
+				"services": [
+					{ "name": "Dip Overlay (Short Nail)", "price": "50.00" },
+					{ "name": "Dip Overlay Full Set (Short Nail)", "price": "55.00" },
+					{ "name": "Dip Overlay Fill in (Short Nail)", "price": "50.00" },
+					{ "name": "Acrylic Full Set (with Shellac)", "price": "50.00" },
+					{ "name": "Acrylic Fill in (with Shellac)", "price": "45.00" },
+					{ "name": "Solar Gel Full Set (with Shellac)", "price": "65.00" },
+					{ "name": "Solar Gel Fill in (with Shellac)", "price": "55.00" },
+					{ "name": "Bio Gel Overlay", "price": "55.00"},
+					{ "name": "Bio Gel Full Set (with Shellac)", "price": "60.00" },
+					{ "name": "Bio Gel Fill in (with Shellac)", "price": "55.00" },
+					{ "name": "Nail Removed Only", "price": "15.00" },
+					{ "name": "UV Gel Full Set (with Shellac)", "price": "55.00" },
+					{ "name": "UV Gel Fill in (with Shellac)", "price": "50.00" },
+					{ "name": "Manicure with Nails Extra", "price": "10.00" },
+					{ "name": "Long Nails Extra", "price": "10.00" }
+				]
+			},
+			{
+				"menuName": "Hand Care",
+				"image": "handcare.jpeg",
+				"services": [
+					{ "name": "Shellac Removal only", "price": "10.00" },
+					{ "name": "Shellac Color Only", "price": "20.00" },
+					{ "name": "Shellac Removal", "price": "10.00" },
+					{ "name": "Express Manicure", "price": "30.00" }
+				]
+			},
+			{
+				"menuName": "Kids Services",
+				"description": "Under 8 Years Old",
+				"image": "kidsservices.jpeg",
+				"services": [
+					{ "name": "Princess Manicure", "price": "15.00" },
+					{ "name": "Princess Pedicure", "price": "25.00" },
+					{ "name": "Princess Manicure & Pedicure", "price": "35.00" },
+					{ "name": "Fingers & Toe Polish", "price": "15.00" },
+					{ "name": "Toe Polish", "price": "8.00" },
+					{ "name": "Fingers Polish", "price": "7.00" }
+				]
+			},
+			{
+				"menuName": "Facial",
+				"image": "facial.jpeg",
+				"services": [
+					{ "name": "Basic Facial", "price": "50.00" },
+					{ "name": "Deep Cleaning", "price": "65.00" },
+					{ "name": "Teen Facial", "price": "40.00" },
+					{ "name": "Acne Facial Treatment", "price": "75.00" },
+					{ "name": "Aqua Peeling Head", "price": "20.00" },
+					{ "name": "RF Eyes Pen", "price": "10.00" },
+					{ "name": "Oxygen Spayer", "price": "15.00" }
+				]
+			},
+			{
+				"menuName": "Eyelash Extensions",
+				"image": "eyelashextensions.png",
+				"services": [
+					{ "name": "Classic Eyelash Extension Full Set", "price": "11.45" },
+					{ "name": "Classic Fill 2 Weeks (30 Mins)", "price": "11.90" },
+					{ "name": "Volume Lash Set Extensions Full Set", "price": "12.45" },
+					{ "name": "Volume Lash Fill 2 Weeks (30 Mins)", "description": "Grilled Meatballs with Vermicelli", "price": "12.45" }
+				]
+			},
+			{
+				"menuName": "Waxing",
+				"image": "waxing.jpeg",
+				"menus": [
+					{
+						"menuName": "For Her Waxing",
+						"services": [
+							{ "name": "Bikini Line", "price": "25.00" },
+							{ "name": "Brazilian", "price": "45.00" },
+							{ "name": "Eyebrow", "price": "9.00" },
+							{ "name": "Lip", "price": "6.00" },
+							{ "name": "Chin", "price": "9.00" },
+							{ "name": "Full Face", "price": "35.00" },
+							{ "name": "Sideburns", "price": "12.00" },
+							{ "name": "Half Arms", "price": "25.00" },
+							{ "name": "Full Arms", "price": "35.00" },
+							{ "name": "Half Leg", "price": "25.00" },
+							{ "name": "Full Legs", "price": "45.00" },
+							{ "name": "Under arms", "price": "20.00" },
+							{ "name": "Threading Eyebrow", "price": "10.00" }
+						]
+					},
+					{
+						"menuName": "For Him Waxing",
+						"description": "By Appointment Only",
+						"services": [
+							{ "name": "Boyzilian", "price": "75.00" },
+							{ "name": "Under arms", "price": "25.00" },
+							{ "name": "Full Legs", "price": "75.00" },
+							{ "name": "Full Chest", "price": "45.00"},
+							{ "name": "Full Back", "price": "55.00" }
+						]
+					}
+				]
+			},
+			{
+				"menuName": "Relaxing Massages",
+				"image": "relaxingmassages.png",
+				"services": [
+					{ "name": "Half Body 30 Mins", "price": "45.00" },
+					{ "name": "Full Body Massage 60 Mins", "price": "70.00" },
+					{ "name": "Hot Stone Massage 30 Mins", "price": "50.00" },
+					{ "name": "Hot Stone Massage 60 Mins", "price": "90.00" },
+					{ "name": "Leg Massage 20 Mins", "price": "30.00" },
+					{ "name": "Shoulders & Neck 30 Mins", "price": "45.00" },
+					{ "name": "Foot Massage 20 Mins", "price": "30.00" }
+				]
+			}
+		]
+	else:
+		list["menus"] = [
 			{
 				"menuName": "APPETIZER",
 				"meals": [
@@ -375,10 +512,9 @@ def create_menus_with_details(locationId):
 				]
 			}
 		]
-	}
 
-	products = query("select image from product where locationId = " + str(locationId), True).fetchall()
-	menus = query("select image from menu where locationId = " + str(locationId), True).fetchall()
+	products = query("select image from product where locationId = " + str(locationid), True).fetchall()
+	menus = query("select image from menu where locationId = " + str(locationid), True).fetchall()
 
 	for info in products:
 		image = json.loads(info["image"])
@@ -394,8 +530,8 @@ def create_menus_with_details(locationId):
 		if imageName != "":
 			os.unlink("static/" + imageName)
 
-	query("delete from product where locationId = " + str(locationId))
-	query("delete from menu where locationId = " + str(locationId))
+	query("delete from product where locationId = " + str(locationid))
+	query("delete from menu where locationId = " + str(locationid))
 
 	def iterateList(list, pIndex, pId):
 		for index, info in enumerate(list):
@@ -408,7 +544,7 @@ def create_menus_with_details(locationId):
 			sql += "(locationId, parentMenuId, name, description, image)"
 			sql += " values "
 			sql += "("
-			sql += str(locationId) + ", '" + str(pId) + "', "
+			sql += str(locationid) + ", '" + str(pId) + "', "
 			sql += "'" + info["menuName"] + "', "
 			sql += "'" + description + "', "
 
@@ -466,7 +602,7 @@ def create_menus_with_details(locationId):
 						sql += "(locationId, menuId, number, name, description, image, options, price)"
 						sql += " values "
 						sql += "("
-						sql += str(locationId) + ", "
+						sql += str(locationid) + ", "
 						sql += "'" + str(id) + "', "
 						sql += "'" + number + "', "
 						sql += "'" + pymysql.converters.escape_string(eachInfo["name"]) + "', "
@@ -493,7 +629,7 @@ def create_menus_with_details(locationId):
 						sql += "(locationId, menuId, name, description, image, price)"
 						sql += " values "
 						sql += "("
-						sql += str(locationId) + ", "
+						sql += str(locationid) + ", "
 						sql += "'" + str(id) + "', "
 						sql += "'" + pymysql.converters.escape_string(eachInfo["name"]) + "', "
 						sql += "'" + description + "', "
@@ -518,7 +654,32 @@ def create_menus_with_details(locationId):
 
 	iterateList(list["menus"], 0, "")
 
-	location = query("select info from location where id = " + str(locationId), True).fetchone()
+	location = query("select owners, info from location where id = " + str(locationid), True).fetchone()
+
+	# salons only
+	if type == "salon":
+		workers = "(" + location["owners"][1:-1] + ")"
+
+		workers = query("select id, profile from owner where id in " + workers, True).fetchall()
+
+		for index, info in enumerate(workers):
+			profile = json.loads(info["profile"])
+			imSize = Image.open("static/profile" + str(index + 1) + ".jpg")
+			profileName = profile["name"]
+
+			if profile["name"] != "": # profile exist
+				shutil.copyfile("static/profile" + str(index + 1) + ".jpg", "static/" + profile["name"])
+			else:
+				profileName = getId() + ".jpeg"
+				shutil.copyfile("static/profile" + str(index + 1) + ".jpg", "static/" + profileName)
+				profile["name"] = profileName
+				profile["width"] = str(imSize.width)
+				profile["height"] = str(imSize.height)
+
+			os.unlink("static/profile" + str(index + 1) + ".jpg")
+
+			query("update owner set profile = '" + json.dumps(profile) + "' where id = " + str(info["id"]))
+
 	imSize = Image.open('static/' + list["logo"])
 
 	info = json.loads(location["info"])
@@ -527,7 +688,7 @@ def create_menus_with_details(locationId):
 	logoName = getId() + ".png"
 	logo = json.dumps({"name": logoName, "width": str(imSize.width), "height": str(imSize.height)})
 
-	query("update location set logo = '" + logo + "', info = '" + json.dumps(info) + "' where id = " + str(locationId))
+	query("update location set logo = '" + logo + "', info = '" + json.dumps(info) + "' where id = " + str(locationid))
 
 	shutil.copyfile("static/" + list["logo"], "static/" + logoName)
 	os.unlink("static/" + list["logo"])

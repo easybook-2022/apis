@@ -51,7 +51,7 @@ def owner_login():
 								return { 
 									"ownerid": ownerid, "cellnumber": cellnumber, 
 									"locationid": locationid, "locationtype": locationtype, 
-									"msg": "authoption" if locationtype == "nail" or locationtype == "hair" else "main", 
+									"msg": "authoption" if (locationtype == "nail" or locationtype == "hair") and ownerInfo["userType"] != "owner" else "main", 
 									"userType": ownerInfo["userType"] 
 								}
 						else:
