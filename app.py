@@ -47,4 +47,4 @@ app.wsgi_app = SharedDataMiddleware(app.wsgi_app, {
 })
 
 if __name__ == "__main__":
-	run_simple(apphost, 5001, app, use_reloader=True, use_debugger=True, use_evalex=True)
+	run_simple(apphost, 5003, app, use_reloader=True, use_debugger=True, use_evalex=True)

@@ -850,7 +850,7 @@ def get_restaurant_income(id):
 						"header": year
 					})
 
-		if "total" not in monthly[len(monthly) - 1]:
+		if len(monthly) > 0 and "total" not in monthly[len(monthly) - 1]:
 			monthTotal = round(monthTotal, 2)
 
 			if len(str(monthTotal).split(".")[1]) == 1:
@@ -858,7 +858,7 @@ def get_restaurant_income(id):
 
 			monthly[len(monthly) - 1]["total"] = monthTotal
 
-		if "total" not in daily[len(daily) - 1]:
+		if len(daily) > 0 and "total" not in daily[len(daily) - 1]:
 			dayTotal = round(dayTotal, 2)
 
 			if len(str(dayTotal).split(".")[1]) == 1:
@@ -866,7 +866,7 @@ def get_restaurant_income(id):
 
 			daily[len(daily) - 1]["total"] = dayTotal
 
-		if "total" not in yearly[len(yearly) - 1]:
+		if len(yearly) > 0 and "total" not in yearly[len(yearly) - 1]:
 			yearTotal = round(yearTotal, 2)
 
 			if len(str(yearTotal).split(".")[1]) == 1:
